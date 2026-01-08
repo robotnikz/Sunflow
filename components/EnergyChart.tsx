@@ -64,9 +64,11 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
           itemStyle={{ color: '#e2e8f0' }}
         />
         <Legend />
-        <Area type="monotone" dataKey="Production" stroke="#EAB308" fillOpacity={1} fill="url(#colorProd)" />
-        <Area type="monotone" dataKey="Consumption" stroke="#3B82F6" fillOpacity={1} fill="url(#colorCons)" />
-        <Area yAxisId="right" type="monotone" dataKey="SOC" stroke="#a855f7" fill="none" strokeWidth={2} dot={false} />
+        {/* Enable dots (r:0 to hide by default, but we use explicit true or r:3 to show them if needed. 
+            However, area usually hides them. We'll enable small dots so single points are seen.) */}
+        <Area type="monotone" dataKey="Production" stroke="#EAB308" fillOpacity={1} fill="url(#colorProd)" dot={{ r: 2 }} activeDot={{ r: 6 }} />
+        <Area type="monotone" dataKey="Consumption" stroke="#3B82F6" fillOpacity={1} fill="url(#colorCons)" dot={{ r: 2 }} activeDot={{ r: 6 }} />
+        <Area yAxisId="right" type="monotone" dataKey="SOC" stroke="#a855f7" fill="none" strokeWidth={2} dot={false} activeDot={{ r: 6 }} />
       </AreaChart>
     </ResponsiveContainer>
   );

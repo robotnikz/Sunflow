@@ -101,7 +101,17 @@ const fetchFroniusData = async (ip) => {
     }
 };
 
-// Polling Job - INCREASED FREQUENCY TO 1 MINUTE
+// Helper: Get Local SQLite-compatible Timestamp (YYYY-MM-DD HH:MM:SS)
+const getLocalTimestamp = () => {
+    const now = new Date();
+    // Adjust to local time by subtracting the timezone offset
+    const offsetMs = now.getTimezoneOffset() * 60 * 1000;
+    const local = new Date(now.getTime() - offsetMs);
+    // Slice ISO string to get YYYY-MM-DDTHH:MM:SS and replace T with space
+    return local.toISOString().slice(0, 19).replace('T', ' ');
+};
+
+// Polling Job - 1 Minute Interval
 setInterval(async () => {
     const config = getConfig();
     if (!config.inverterIp) return;
@@ -135,11 +145,13 @@ setInterval(async () => {
         statusCode = 0; // Offline / Network Error
     }
 
-    const stmt = db.prepare(`INSERT INTO energy_log (power_pv, power_load, power_grid, power_battery, soc, energy_day_prod, status_code) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-    stmt.run(p_pv, p_load, p_grid, p_batt, soc, e_day, statusCode);
+    // Insert with Explicit LOCAL TIMESTAMP
+    const timestamp = getLocalTimestamp();
+    const stmt = db.prepare(`INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, energy_day_prod, status_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+    stmt.run(timestamp, p_pv, p_load, p_grid, p_batt, soc, e_day, statusCode);
     stmt.finalize();
 
-}, 60 * 1000); // 1 Minute Interval for continuous updates
+}, 60 * 1000); // 1 Minute
 
 // --- API ---
 
@@ -229,34 +241,33 @@ app.get('/api/history', (req, res) => {
     const range = req.query.range || 'day'; 
     
     let queryTimeClause;
-    let groupBy = 1; // Default no grouping (every point)
+    let groupBy = 1; 
 
-    // Using 'Localtime' logic:
-    // Hour: Start of the current hour e.g. 14:00 to Now
-    // Day: Start of today (00:00) to Now
+    // Query Logic uses 'localtime' because we now store Local Timestamps
     switch(range) {
         case 'hour': 
-            // Calculate start of current hour: YYYY-MM-DD HH:00:00
-            queryTimeClause = "timestamp >= datetime('now', 'start of day', '+' || strftime('%H', 'now') || ' hours')"; 
+            // From start of current Local Hour
+            queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of day', '+' || strftime('%H', 'now', 'localtime') || ' hours')"; 
             break;
         case 'day': 
-            queryTimeClause = "timestamp >= datetime('now', 'start of day')"; 
+            // From start of today (Local)
+            queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of day')"; 
             break;
         case 'week': 
-            // Last 7 days rolling
-            queryTimeClause = "timestamp >= datetime('now', '-6 days')"; 
-            groupBy = 12; // 1 hour steps approx
+            // Last 7 days
+            queryTimeClause = "timestamp >= datetime('now', 'localtime', '-6 days')"; 
+            groupBy = 12; 
             break;
         case 'month': 
-            queryTimeClause = "timestamp >= datetime('now', 'start of month')"; 
-            groupBy = 24; // 2 hour steps approx
+            queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of month')"; 
+            groupBy = 24; 
             break;
         case 'year': 
-            queryTimeClause = "timestamp >= datetime('now', 'start of year')"; 
-            groupBy = 288; // ~1 day steps
+            queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of year')"; 
+            groupBy = 288; 
             break;
         default: 
-            queryTimeClause = "timestamp >= datetime('now', '-24 hours')";
+            queryTimeClause = "timestamp >= datetime('now', 'localtime', '-24 hours')";
     }
 
     db.all("SELECT * FROM tariffs ORDER BY valid_from ASC", [], (err, tariffRows) => {
@@ -280,7 +291,6 @@ app.get('/api/history', (req, res) => {
         db.all(query, [], (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
 
-            // 1 Minute samples = 1/60 hours
             const sampleDurationHours = 1 / 60; 
 
             let stats = {
@@ -317,7 +327,6 @@ app.get('/api/history', (req, res) => {
             stats.selfConsumption = stats.production > 0 ? (totalSelfPowered / stats.production) * 100 : 0;
 
             const chartData = [];
-            // Basic downsampling if groupBy > 1
             for (let i = 0; i < rows.length; i++) {
                 if (i % groupBy === 0 || i === rows.length - 1) {
                     chartData.push({
