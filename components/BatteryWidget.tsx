@@ -24,7 +24,7 @@ const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, state }) => {
   const isCharging = state === 'charging';
 
   return (
-    <div className={`relative overflow-hidden bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-xl transition-all duration-500 flex flex-col items-center justify-center min-h-[220px]`}>
+    <div className={`relative overflow-hidden bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-xl transition-all duration-500 flex flex-col items-center justify-center min-h-[200px] h-full`}>
         
         {/* Background Glow Effect */}
         <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${getColor()} opacity-10 blur-[50px] rounded-full pointer-events-none`}></div>
@@ -37,7 +37,7 @@ const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, state }) => {
         <div className="flex flex-col items-center justify-center gap-2 relative z-10 mt-4">
             
             {/* The Visual Battery Container */}
-            <div className="relative transform scale-110">
+            <div className="relative transform scale-105">
                 {/* Battery Cap */}
                 <div className="w-12 h-4 bg-slate-600 mx-auto rounded-t-sm mb-[1px]"></div>
                 

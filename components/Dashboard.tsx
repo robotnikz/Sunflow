@@ -103,7 +103,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
       {/* --- ROW 1: Realtime Power Flow & Status --- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Power Flow Diagram (Takes 2/3 width) */}
-        <div className="lg:col-span-2 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl relative overflow-hidden flex flex-col h-[460px]">
+        <div className="lg:col-span-2 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl relative overflow-hidden flex flex-col h-[520px]">
           <div className="absolute top-6 left-6 flex items-center gap-2 text-slate-300 font-semibold z-10">
              <div className="p-1.5 bg-slate-700/50 rounded-lg backdrop-blur">
                 <Zap className="text-yellow-500" size={18} />
@@ -117,8 +117,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
         </div>
 
         {/* Right: Widgets Column (Takes 1/3 width) */}
-        <div className="flex flex-col gap-6 h-[460px]">
-          {/* Battery Widget (Takes approx half height) */}
+        <div className="flex flex-col gap-6 h-[520px]">
+          {/* Battery Widget */}
           <div className="flex-1 min-h-0">
              <BatteryWidget 
                 soc={data.battery.soc}
@@ -127,7 +127,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
              />
           </div>
           
-          {/* Weather Widget (Takes remaining height) */}
+          {/* Weather Widget */}
           <div className="flex-1 min-h-0">
              <WeatherWidget config={config} />
           </div>
@@ -226,10 +226,10 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
                         </div>
                     </div>
 
-                    {/* ROI Widget */}
+                    {/* ROI Widget (Auto height) */}
                     <AmortizationWidget roiData={roiData} currency={config.currency} />
 
-                    {/* Efficiency Donuts (Moved here) */}
+                    {/* Efficiency Donuts */}
                     <div className="grid grid-cols-2 gap-4">
                         <div className="bg-slate-800 rounded-2xl p-2 border border-slate-700 shadow-lg h-36">
                             <EnergyDonut 

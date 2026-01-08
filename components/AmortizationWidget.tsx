@@ -32,7 +32,7 @@ const AmortizationWidget: React.FC<AmortizationWidgetProps> = ({ roiData, curren
   const isPaidOff = roiData.netValue >= 0;
 
   return (
-    <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg relative overflow-hidden flex flex-col justify-between h-full">
+    <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg relative overflow-hidden flex flex-col justify-between w-full">
         {/* Background Gradient for success */}
         {isPaidOff && (
             <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/10 blur-[60px] rounded-full pointer-events-none"></div>
