@@ -61,13 +61,6 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
             <filter id="glow-load"><feGaussianBlur stdDeviation="4" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
             <filter id="glow-grid"><feGaussianBlur stdDeviation="4" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
             <filter id="glow-bat"><feGaussianBlur stdDeviation="4" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-
-            {/* Gradient Masks for Lines */}
-            <linearGradient id="grad-line" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="white" stopOpacity="0.1" />
-                <stop offset="50%" stopColor="white" stopOpacity="0.5" />
-                <stop offset="100%" stopColor="white" stopOpacity="0.1" />
-            </linearGradient>
         </defs>
 
         {/* --- CONNECTING LINES (Background Tracks) --- */}
@@ -83,14 +76,14 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
 
         {/* --- ANIMATED FLOW PARTICLES --- */}
         
-        {/* PV Flow (Always Source -> Center) */}
+        {/* PV Flow */}
         {power.pv > 10 && (
             <circle r="4" fill={cPV} filter="url(#glow-pv)">
                 <animateMotion dur={`${pvSpeed}s`} repeatCount="indefinite" path={`M${cx},65 L${cx},${cy}`} keyPoints="0;1" keyTimes="0;1" />
             </circle>
         )}
 
-        {/* Load Flow (Always Center -> Sink) */}
+        {/* Load Flow */}
         {power.load > 10 && (
             <circle r="4" fill={cLoad} filter="url(#glow-load)">
                 <animateMotion dur={`${loadSpeed}s`} repeatCount="indefinite" path={`M${cx},${cy} L${cx},335`} keyPoints="0;1" keyTimes="0;1" />
@@ -101,10 +94,8 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
         {batPowerAbs > 10 && (
             <circle r="4" fill={cBat} filter="url(#glow-bat)">
                 {isCharging ? (
-                     // Center -> Battery
                      <animateMotion dur={`${batSpeed}s`} repeatCount="indefinite" path={`M${cx},${cy} L85,${cy}`} keyPoints="0;1" keyTimes="0;1" />
                 ) : (
-                     // Battery -> Center
                      <animateMotion dur={`${batSpeed}s`} repeatCount="indefinite" path={`M85,${cy} L${cx},${cy}`} keyPoints="0;1" keyTimes="0;1" />
                 )}
             </circle>
@@ -114,10 +105,8 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
         {gridPowerAbs > 10 && (
             <circle r="4" fill={cGrid} filter="url(#glow-grid)">
                 {isImporting ? (
-                    // Grid -> Center
                     <animateMotion dur={`${gridSpeed}s`} repeatCount="indefinite" path={`M515,${cy} L${cx},${cy}`} keyPoints="0;1" keyTimes="0;1" />
                 ) : (
-                    // Center -> Grid
                     <animateMotion dur={`${gridSpeed}s`} repeatCount="indefinite" path={`M${cx},${cy} L515,${cy}`} keyPoints="0;1" keyTimes="0;1" />
                 )}
             </circle>
@@ -131,13 +120,13 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
 
       </svg>
 
-      {/* --- HTML OVERLAYS FOR ICONS & TEXT (Better Accessibility & sharp text) --- */}
+      {/* --- HTML OVERLAYS FOR ICONS & TEXT (Unified Styling) --- */}
       
       {/* PV NODE (Top) */}
-      <div className="absolute top-[8%] left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
-        <div className="text-center mb-1 flex flex-col items-center">
-             <span className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-0.5">SOLAR</span>
-             <span className="block text-xl font-bold text-yellow-400 drop-shadow-md leading-none">{Math.round(power.pv)} W</span>
+      <div className="absolute top-[8%] left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
+        <div className="flex flex-col items-center gap-0.5">
+             <span className="text-xs text-slate-500 font-medium">SOLAR</span>
+             <span className="text-xl font-bold text-yellow-400 drop-shadow-md leading-none">{Math.round(power.pv)} W</span>
         </div>
         <div className={`p-4 rounded-full bg-slate-800/80 backdrop-blur border border-slate-600 shadow-[0_0_20px_rgba(234,179,8,0.2)] transition-transform duration-300 hover:scale-110`}>
              <Sun className="text-yellow-500" size={36} fill={power.pv > 0 ? "currentColor" : "none"} fillOpacity={0.2} />
@@ -145,26 +134,26 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
       </div>
 
       {/* LOAD NODE (Bottom) */}
-      <div className="absolute bottom-[2%] left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
+      <div className="absolute bottom-[2%] left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
         <div className={`p-4 rounded-full bg-slate-800/80 backdrop-blur border border-slate-600 shadow-[0_0_20px_rgba(59,130,246,0.2)] transition-transform duration-300 hover:scale-110`}>
              <Home className="text-blue-500" size={36} />
         </div>
-        <div className="text-center mt-1">
-             <span className="block text-xl font-bold text-blue-400 drop-shadow-md">{Math.round(power.load)} W</span>
-             <span className="text-xs text-slate-500 font-medium uppercase tracking-wider mt-0.5">HOME LOAD</span>
+        <div className="flex flex-col items-center gap-0.5">
+             <span className="text-xl font-bold text-blue-400 drop-shadow-md leading-none">{Math.round(power.load)} W</span>
+             <span className="text-xs text-slate-500 font-medium">HOME LOAD</span>
         </div>
       </div>
 
       {/* BATTERY NODE (Left) */}
-      <div className="absolute left-[2%] top-1/2 -translate-y-1/2 flex flex-col items-center gap-2 w-[100px]">
+      <div className="absolute left-[2%] top-1/2 -translate-y-1/2 flex flex-col items-center gap-3 w-[120px]">
         <div className={`relative p-4 rounded-full bg-slate-800/80 backdrop-blur border ${isDischarging ? 'border-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.3)]' : 'border-slate-600'} transition-all duration-300 hover:scale-110`}>
              <Battery className="text-purple-500" size={36} />
              <div className="absolute -right-1 -top-1 bg-slate-900 text-white text-[10px] font-bold px-1.5 py-0.5 rounded border border-slate-600">
                 {Math.round(soc)}%
              </div>
         </div>
-        <div className="text-center">
-             <span className="block text-xl font-bold text-purple-400 drop-shadow-md">{Math.round(batPowerAbs)} W</span>
+        <div className="flex flex-col items-center gap-0.5">
+             <span className="text-xl font-bold text-purple-400 drop-shadow-md leading-none">{Math.round(batPowerAbs)} W</span>
              <span className="text-xs text-slate-500 font-medium flex justify-center items-center gap-1">
                 {isCharging ? 'CHARGING' : isDischarging ? 'DRAINING' : 'IDLE'}
              </span>
@@ -172,12 +161,12 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
       </div>
 
       {/* GRID NODE (Right) */}
-      <div className="absolute right-[2%] top-1/2 -translate-y-1/2 flex flex-col items-center gap-2 w-[100px]">
+      <div className="absolute right-[2%] top-1/2 -translate-y-1/2 flex flex-col items-center gap-3 w-[120px]">
         <div className={`p-4 rounded-full bg-slate-800/80 backdrop-blur border ${isImporting ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)]' : isExporting ? 'border-green-500 shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'border-slate-600'} transition-all duration-300 hover:scale-110`}>
              <Zap className={isImporting ? 'text-red-500' : isExporting ? 'text-green-500' : 'text-slate-500'} size={36} fill={power.grid !== 0 ? "currentColor" : "none"} fillOpacity={0.2} />
         </div>
-        <div className="text-center">
-             <span className={`block text-xl font-bold drop-shadow-md ${isImporting ? 'text-red-400' : isExporting ? 'text-green-400' : 'text-slate-500'}`}>
+        <div className="flex flex-col items-center gap-0.5">
+             <span className={`text-xl font-bold drop-shadow-md leading-none ${isImporting ? 'text-red-400' : isExporting ? 'text-green-400' : 'text-slate-500'}`}>
                 {Math.round(gridPowerAbs)} W
              </span>
              <span className={`text-xs font-medium flex justify-center items-center gap-1 ${isImporting ? 'text-red-500' : isExporting ? 'text-green-500' : 'text-slate-500'}`}>
