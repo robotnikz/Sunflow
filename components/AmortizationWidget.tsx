@@ -99,7 +99,7 @@ const AmortizationWidget: React.FC<AmortizationWidgetProps> = ({ roiData, curren
                             {breakEvenDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
                         </div>
                         <div className="text-[10px] text-slate-500">
-                            Based on last 90 days performance
+                            Based on historical average & future tariffs
                         </div>
                     </div>
                 </div>
