@@ -306,9 +306,13 @@ app.post('/api/expenses', (req, res) => {
 });
 
 app.delete('/api/expenses/:id', (req, res) => {
-    const stmt = db.prepare("DELETE FROM expenses WHERE id = ?");
-    stmt.run(req.params.id, (err) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+
+    // Using db.run directly for consistency and reliability with sqlite3 serialization
+    db.run("DELETE FROM expenses WHERE id = ?", id, function(err) {
         if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ error: "Expense not found" });
         res.json({ success: true });
     });
 });

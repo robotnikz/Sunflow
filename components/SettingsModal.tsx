@@ -80,7 +80,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
 
   const handleConfigSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
+    // Ensure numbers are numbers before saving
+    const cleanedConfig = {
+        ...formData,
+        initialValues: {
+            production: Number(formData.initialValues?.production || 0),
+            import: Number(formData.initialValues?.import || 0),
+            export: Number(formData.initialValues?.export || 0),
+            financialReturn: Number(formData.initialValues?.financialReturn || 0),
+        }
+    };
+    onSave(cleanedConfig);
   };
 
   // Auto-Calculate History Estimation
@@ -94,8 +104,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
     // Use most recent tariff or default
     const latestTariff = tariffs.length > 0 ? tariffs[tariffs.length - 1] : { costPerKwh: 0.30, feedInTariff: 0.08 };
     
-    const totalProd = vals.production || 0;
-    const totalExport = vals.export || 0;
+    // Parse values in case they are strings in local state
+    const totalProd = Number(vals.production || 0);
+    const totalExport = Number(vals.export || 0);
     
     if (totalProd === 0 && totalExport === 0) {
         alert("Please enter at least Production and Export values from your inverter history.");
@@ -386,6 +397,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                                     <td className="px-4 py-3 text-green-300">{t.feedInTariff.toFixed(3)}</td>
                                     <td className="px-4 py-3 text-right">
                                         <button 
+                                            type="button"
                                             onClick={() => t.id && handleDeleteTariff(t.id)}
                                             className="text-slate-500 hover:text-red-400 transition"
                                         >
@@ -526,6 +538,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                                     </td>
                                     <td className="px-4 py-3 text-right">
                                         <button 
+                                            type="button"
                                             onClick={() => e.id && handleDeleteExpense(e.id)}
                                             className="text-slate-500 hover:text-red-400 transition"
                                         >
@@ -606,7 +619,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                     </div>
                 </div>
 
-                <div className="space-y-6 pt-4 border-t border-slate-700">
+                <div className="space-y-6 pt-4 border-t border-slate-700 mt-6">
                     <h3 className="text-slate-300 font-bold flex items-center gap-2">
                         <History size={18}/> Pre-App History (Legacy Data)
                     </h3>
@@ -635,7 +648,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                                     value={formData.initialValues?.financialReturn ?? ''}
                                     onChange={(e) => setFormData({
                                         ...formData, 
-                                        initialValues: { ...formData.initialValues || {}, financialReturn: e.target.value === '' ? undefined : parseFloat(e.target.value) }
+                                        initialValues: { ...formData.initialValues || {}, financialReturn: e.target.value as any }
                                     })}
                                     className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     placeholder="0.00"
@@ -666,7 +679,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                                     value={formData.initialValues?.production ?? ''}
                                     onChange={(e) => setFormData({
                                         ...formData, 
-                                        initialValues: { ...formData.initialValues || {}, production: e.target.value === '' ? undefined : parseFloat(e.target.value) }
+                                        initialValues: { ...formData.initialValues || {}, production: e.target.value as any }
                                     })}
                                     className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     placeholder="0"
@@ -691,7 +704,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                                     value={formData.initialValues?.export ?? ''}
                                     onChange={(e) => setFormData({
                                         ...formData, 
-                                        initialValues: { ...formData.initialValues || {}, export: e.target.value === '' ? undefined : parseFloat(e.target.value) }
+                                        initialValues: { ...formData.initialValues || {}, export: e.target.value as any }
                                     })}
                                     className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     placeholder="0"
@@ -716,7 +729,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                                     value={formData.initialValues?.import ?? ''}
                                     onChange={(e) => setFormData({
                                         ...formData, 
-                                        initialValues: { ...formData.initialValues || {}, import: e.target.value === '' ? undefined : parseFloat(e.target.value) }
+                                        initialValues: { ...formData.initialValues || {}, import: e.target.value as any }
                                     })}
                                     className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     placeholder="0"
