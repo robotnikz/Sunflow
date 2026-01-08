@@ -262,7 +262,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                       value={formData.systemCapacity || ''}
                       onChange={(e) => setFormData({...formData, systemCapacity: parseFloat(e.target.value)})}
                       placeholder="e.g. 10.5"
-                      className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
+                      className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     <p className="text-xs text-slate-500 mt-1">Required for estimating solar yield forecasts based on weather.</p>
                  </div>
@@ -311,7 +311,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                             type="number" step="0.001" required
                             value={newTariff.costPerKwh}
                             onChange={e => setNewTariff({...newTariff, costPerKwh: parseFloat(e.target.value)})}
-                            className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white"
+                            className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                     </div>
                     <div>
@@ -320,7 +320,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                             type="number" step="0.001" required
                             value={newTariff.feedInTariff}
                             onChange={e => setNewTariff({...newTariff, feedInTariff: parseFloat(e.target.value)})}
-                            className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white"
+                            className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                     </div>
                 </div>
@@ -398,7 +398,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                                 type="number" step="0.01" required
                                 value={newExpense.amount}
                                 onChange={e => setNewExpense({...newExpense, amount: parseFloat(e.target.value)})}
-                                className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white"
+                                className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                         </div>
                         <div>
@@ -500,12 +500,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                                 </div>
                                 <input 
                                     type="number" step="0.01"
-                                    value={formData.initialValues?.financialReturn || 0}
+                                    value={formData.initialValues?.financialReturn ?? ''}
                                     onChange={(e) => setFormData({
                                         ...formData, 
-                                        initialValues: { ...formData.initialValues, financialReturn: parseFloat(e.target.value) }
+                                        initialValues: { ...formData.initialValues || {}, financialReturn: e.target.value === '' ? undefined : parseFloat(e.target.value) }
                                     })}
-                                    className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0"
+                                    className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     placeholder="0.00"
                                 />
                             </div>
@@ -531,12 +531,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                             <div className="flex items-center bg-slate-800 border border-slate-600 rounded-lg overflow-hidden focus-within:border-yellow-500 transition-colors">
                                 <input 
                                     type="number" step="0.1"
-                                    value={formData.initialValues?.production || 0}
+                                    value={formData.initialValues?.production ?? ''}
                                     onChange={(e) => setFormData({
                                         ...formData, 
-                                        initialValues: { ...formData.initialValues, production: parseFloat(e.target.value) }
+                                        initialValues: { ...formData.initialValues || {}, production: e.target.value === '' ? undefined : parseFloat(e.target.value) }
                                     })}
-                                    className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0"
+                                    className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     placeholder="0"
                                 />
                                 <div className="shrink-0 px-3 py-2 bg-slate-700 text-slate-200 text-xs font-bold border-l border-slate-600">
@@ -556,12 +556,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                             <div className="flex items-center bg-slate-800 border border-slate-600 rounded-lg overflow-hidden focus-within:border-green-500 transition-colors">
                                 <input 
                                     type="number" step="0.1"
-                                    value={formData.initialValues?.export || 0}
+                                    value={formData.initialValues?.export ?? ''}
                                     onChange={(e) => setFormData({
                                         ...formData, 
-                                        initialValues: { ...formData.initialValues, export: parseFloat(e.target.value) }
+                                        initialValues: { ...formData.initialValues || {}, export: e.target.value === '' ? undefined : parseFloat(e.target.value) }
                                     })}
-                                    className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0"
+                                    className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     placeholder="0"
                                 />
                                 <div className="shrink-0 px-3 py-2 bg-slate-700 text-slate-200 text-xs font-bold border-l border-slate-600">
@@ -581,12 +581,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                             <div className="flex items-center bg-slate-800 border border-slate-600 rounded-lg overflow-hidden focus-within:border-red-500 transition-colors">
                                 <input 
                                     type="number" step="0.1"
-                                    value={formData.initialValues?.import || 0}
+                                    value={formData.initialValues?.import ?? ''}
                                     onChange={(e) => setFormData({
                                         ...formData, 
-                                        initialValues: { ...formData.initialValues, import: parseFloat(e.target.value) }
+                                        initialValues: { ...formData.initialValues || {}, import: e.target.value === '' ? undefined : parseFloat(e.target.value) }
                                     })}
-                                    className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0"
+                                    className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     placeholder="0"
                                 />
                                 <div className="shrink-0 px-3 py-2 bg-slate-700 text-slate-200 text-xs font-bold border-l border-slate-600">
