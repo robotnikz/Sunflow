@@ -12,6 +12,9 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  
+  // Trigger to force dashboard refresh after settings change
+  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
   const fetchData = useCallback(async () => {
     try {
@@ -64,9 +67,11 @@ const App: React.FC = () => {
       await saveConfig(newConfig);
       setConfig(newConfig);
       setIsSettingsOpen(false);
-      // Force immediate refresh
+      // Force immediate refresh of realtime data
       setLoading(true);
       setTimeout(fetchData, 1000); 
+      // Force refresh of expensive calculations (ROI/History) in Dashboard
+      setRefreshTrigger(prev => prev + 1);
     } catch (e) {
       console.error(e);
       alert("Failed to save settings");
@@ -137,7 +142,12 @@ const App: React.FC = () => {
             </button>
           </div>
         ) : (
-          <Dashboard data={data} config={config} error={error} />
+          <Dashboard 
+            data={data} 
+            config={config} 
+            error={error} 
+            refreshTrigger={refreshTrigger}
+          />
         )}
       </main>
 

@@ -17,9 +17,10 @@ interface DashboardProps {
   data: InverterData | null;
   config: SystemConfig;
   error: string | null;
+  refreshTrigger: number; // Increment this to force reload of historical/ROI data
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
+const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigger }) => {
   const [timeRange, setTimeRange] = useState<TimeRange>('day');
   const [history, setHistory] = useState<HistoryData | null>(null);
   const [roiData, setRoiData] = useState<RoiData | null>(null);
@@ -29,14 +30,16 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
   const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
+  // Fetch History (Charts, Stats)
   useEffect(() => {
     fetchHistory();
-    // Refresh history every 60s
+    // Refresh history every 60s (Standard monitoring interval)
     const interval = setInterval(fetchHistory, 60000); 
     return () => clearInterval(interval);
-  }, [timeRange, startDate, endDate]); 
+  }, [timeRange, startDate, endDate, refreshTrigger]); // Added refreshTrigger to dependency
 
-  // Fetch ROI data separately - refreshed every 60 seconds
+  // Fetch ROI Data (Expensive calculation)
+  // Refreshes every 10 minutes OR when refreshTrigger changes (Settings Saved)
   useEffect(() => {
     const fetchRoi = async () => {
         try {
@@ -46,9 +49,11 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
     };
     
     fetchRoi(); // Initial fetch
-    const interval = setInterval(fetchRoi, 60000); // Poll every minute
+    
+    // Poll every 10 minutes
+    const interval = setInterval(fetchRoi, 10 * 60 * 1000); 
     return () => clearInterval(interval);
-  }, []);
+  }, [refreshTrigger]); // Added refreshTrigger to dependency
 
   const fetchHistory = async () => {
     if (timeRange === 'custom' && (!startDate || !endDate)) return;
