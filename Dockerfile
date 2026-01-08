@@ -1,45 +1,43 @@
-# Stage 1: Build the React Frontend
+# Stage 1: Build (Erstellt das React Frontend)
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package definition
+# Abhängigkeiten installieren
 COPY package*.json ./
+RUN npm ci
 
-# Install all dependencies (including devDependencies for building)
-RUN npm install
-
-# Copy the rest of the source code
+# Quellcode kopieren
 COPY . .
 
-# Build the Vite application to /app/dist
+# Frontend bauen (erstellt den Ordner /dist)
 RUN npm run build
 
-# Stage 2: Production Server
+# Stage 2: Production (Der eigentliche Server)
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Install build tools for native modules (like sqlite3) on Alpine
-RUN apk add --no-cache python3 make g++
+# Umgebungsvariablen setzen
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV DATA_DIR=/app/data
 
-# Copy package definition
+# Nur Produktions-Abhängigkeiten installieren (spart Platz)
 COPY package*.json ./
+RUN npm ci --only=production
 
-# Install only production dependencies
-RUN npm install --omit=dev
+# Backend-Script kopieren
+COPY server.js ./
 
-# Copy the built frontend from the builder stage
+# Das fertig gebaute Frontend aus Stage 1 kopieren
 COPY --from=builder /app/dist ./dist
 
-# Copy the backend server file
-COPY server.js .
+# Datenverzeichnis anlegen (für das Docker Volume)
+RUN mkdir -p /app/data
 
-# Create the data directory
-RUN mkdir -p data
-
-# Expose the application port
+# Port freigeben
 EXPOSE 3000
 
-# Start the server
+# Startbefehl
 CMD ["node", "server.js"]
