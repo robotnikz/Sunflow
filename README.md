@@ -2,6 +2,9 @@
 
 A comprehensive monitoring solution for Fronius Gen24 inverters featuring real-time power flow, historical analysis, and financial tracking.
 
+![Sunflow Dashboard](public/dashboard1.png)
+![Sunflow Dashboard](public/dashboard2.png)
+
 ## Prerequisites
 
 1. **Docker Desktop** (Windows/Mac) or Docker Engine (Linux).
