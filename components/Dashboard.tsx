@@ -36,7 +36,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
     return () => clearInterval(interval);
   }, [timeRange, startDate, endDate]); 
 
-  // Fetch ROI data separately
+  // Fetch ROI data separately - refreshed every 60 seconds
   useEffect(() => {
     const fetchRoi = async () => {
         try {
@@ -44,7 +44,10 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
             setRoiData(rData);
         } catch(e) { console.error("ROI Fetch Error", e); }
     };
-    fetchRoi();
+    
+    fetchRoi(); // Initial fetch
+    const interval = setInterval(fetchRoi, 60000); // Poll every minute
+    return () => clearInterval(interval);
   }, []);
 
   const fetchHistory = async () => {
