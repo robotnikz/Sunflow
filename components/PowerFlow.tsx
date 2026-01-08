@@ -42,12 +42,15 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
   const cBat = "#A855F7"; // Purple-500
 
   // SVG Coordinates (Center 300,200)
-  // Top: 300,50
-  // Bottom: 300,350
-  // Left: 50,200
-  // Right: 550,200
+  // Canvas Size: 600x400
   const cx = 300;
   const cy = 200;
+  
+  // Endpoint Coordinates (Where the icons sit)
+  const topY = 80;    // PV
+  const bottomY = 320; // Load
+  const leftX = 100;  // Battery
+  const rightX = 500; // Grid
 
   return (
     <div className="relative w-full h-full flex items-center justify-center select-none">
@@ -65,13 +68,13 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
 
         {/* --- CONNECTING LINES (Background Tracks) --- */}
         {/* PV to Center */}
-        <path d={`M${cx},65 L${cx},${cy}`} stroke={cPV} strokeWidth="2" strokeOpacity="0.2" fill="none" />
+        <path d={`M${cx},${topY} L${cx},${cy}`} stroke={cPV} strokeWidth="2" strokeOpacity="0.2" fill="none" />
         {/* Center to Load */}
-        <path d={`M${cx},${cy} L${cx},335`} stroke={cLoad} strokeWidth="2" strokeOpacity="0.2" fill="none" />
+        <path d={`M${cx},${cy} L${cx},${bottomY}`} stroke={cLoad} strokeWidth="2" strokeOpacity="0.2" fill="none" />
         {/* Bat to Center */}
-        <path d={`M85,${cy} L${cx},${cy}`} stroke={cBat} strokeWidth="2" strokeOpacity="0.2" fill="none" />
+        <path d={`M${leftX},${cy} L${cx},${cy}`} stroke={cBat} strokeWidth="2" strokeOpacity="0.2" fill="none" />
         {/* Center to Grid */}
-        <path d={`M${cx},${cy} L515,${cy}`} stroke={cGrid} strokeWidth="2" strokeOpacity="0.2" fill="none" />
+        <path d={`M${cx},${cy} L${rightX},${cy}`} stroke={cGrid} strokeWidth="2" strokeOpacity="0.2" fill="none" />
 
 
         {/* --- ANIMATED FLOW PARTICLES --- */}
@@ -79,14 +82,14 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
         {/* PV Flow */}
         {power.pv > 10 && (
             <circle r="4" fill={cPV} filter="url(#glow-pv)">
-                <animateMotion dur={`${pvSpeed}s`} repeatCount="indefinite" path={`M${cx},65 L${cx},${cy}`} keyPoints="0;1" keyTimes="0;1" />
+                <animateMotion dur={`${pvSpeed}s`} repeatCount="indefinite" path={`M${cx},${topY} L${cx},${cy}`} keyPoints="0;1" keyTimes="0;1" />
             </circle>
         )}
 
         {/* Load Flow */}
         {power.load > 10 && (
             <circle r="4" fill={cLoad} filter="url(#glow-load)">
-                <animateMotion dur={`${loadSpeed}s`} repeatCount="indefinite" path={`M${cx},${cy} L${cx},335`} keyPoints="0;1" keyTimes="0;1" />
+                <animateMotion dur={`${loadSpeed}s`} repeatCount="indefinite" path={`M${cx},${cy} L${cx},${bottomY}`} keyPoints="0;1" keyTimes="0;1" />
             </circle>
         )}
 
@@ -94,9 +97,9 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
         {batPowerAbs > 10 && (
             <circle r="4" fill={cBat} filter="url(#glow-bat)">
                 {isCharging ? (
-                     <animateMotion dur={`${batSpeed}s`} repeatCount="indefinite" path={`M${cx},${cy} L85,${cy}`} keyPoints="0;1" keyTimes="0;1" />
+                     <animateMotion dur={`${batSpeed}s`} repeatCount="indefinite" path={`M${cx},${cy} L${leftX},${cy}`} keyPoints="0;1" keyTimes="0;1" />
                 ) : (
-                     <animateMotion dur={`${batSpeed}s`} repeatCount="indefinite" path={`M85,${cy} L${cx},${cy}`} keyPoints="0;1" keyTimes="0;1" />
+                     <animateMotion dur={`${batSpeed}s`} repeatCount="indefinite" path={`M${leftX},${cy} L${cx},${cy}`} keyPoints="0;1" keyTimes="0;1" />
                 )}
             </circle>
         )}
@@ -105,9 +108,9 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
         {gridPowerAbs > 10 && (
             <circle r="4" fill={cGrid} filter="url(#glow-grid)">
                 {isImporting ? (
-                    <animateMotion dur={`${gridSpeed}s`} repeatCount="indefinite" path={`M515,${cy} L${cx},${cy}`} keyPoints="0;1" keyTimes="0;1" />
+                    <animateMotion dur={`${gridSpeed}s`} repeatCount="indefinite" path={`M${rightX},${cy} L${cx},${cy}`} keyPoints="0;1" keyTimes="0;1" />
                 ) : (
-                    <animateMotion dur={`${gridSpeed}s`} repeatCount="indefinite" path={`M${cx},${cy} L515,${cy}`} keyPoints="0;1" keyTimes="0;1" />
+                    <animateMotion dur={`${gridSpeed}s`} repeatCount="indefinite" path={`M${cx},${cy} L${rightX},${cy}`} keyPoints="0;1" keyTimes="0;1" />
                 )}
             </circle>
         )}
@@ -120,37 +123,54 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
 
       </svg>
 
-      {/* --- HTML OVERLAYS FOR ICONS & TEXT (Unified Styling) --- */}
+      {/* --- HTML OVERLAYS FOR ICONS & TEXT --- 
+          Using percentages to match SVG coordinates:
+          Canvas 600x400.
+          CX (300) = 50% left
+          CY (200) = 50% top
+          TopY (80) = 20% top
+          BottomY (320) = 80% top
+          LeftX (100) = 16.66% left
+          RightX (500) = 83.33% left
+      */}
       
       {/* PV NODE (Top) */}
-      <div className="absolute top-[8%] left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
-        <div className="flex flex-col items-center gap-0.5">
+      <div 
+        className="absolute flex flex-col items-center gap-3"
+        style={{ top: '20%', left: '50%', transform: 'translate(-50%, -50%)' }}
+      >
+        <div className="flex flex-col items-center gap-0.5 mb-24">
              <span className="text-xs text-slate-500 font-medium">SOLAR</span>
              <span className="text-xl font-bold text-yellow-400 drop-shadow-md leading-none">{Math.round(power.pv)} W</span>
         </div>
-        <div className={`p-4 rounded-full bg-slate-800/80 backdrop-blur border border-slate-600 shadow-[0_0_20px_rgba(234,179,8,0.2)] transition-transform duration-300 hover:scale-110`}>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 p-4 rounded-full bg-slate-800/80 backdrop-blur border border-slate-600 shadow-[0_0_20px_rgba(234,179,8,0.2)] transition-transform duration-300 hover:scale-110 z-10">
              <Sun className="text-yellow-500" size={36} fill={power.pv > 0 ? "currentColor" : "none"} fillOpacity={0.2} />
         </div>
       </div>
 
       {/* LOAD NODE (Bottom) */}
-      <div className="absolute bottom-[2%] left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
-        <div className={`p-4 rounded-full bg-slate-800/80 backdrop-blur border border-slate-600 shadow-[0_0_20px_rgba(59,130,246,0.2)] transition-transform duration-300 hover:scale-110`}>
+      <div 
+        className="absolute flex flex-col items-center gap-3"
+        style={{ top: '80%', left: '50%', transform: 'translate(-50%, -50%)' }}
+      >
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 p-4 rounded-full bg-slate-800/80 backdrop-blur border border-slate-600 shadow-[0_0_20px_rgba(59,130,246,0.2)] transition-transform duration-300 hover:scale-110 z-10">
              <Home className="text-blue-500" size={36} />
         </div>
-        <div className="flex flex-col items-center gap-0.5">
+        <div className="flex flex-col items-center gap-0.5 mt-24">
              <span className="text-xl font-bold text-blue-400 drop-shadow-md leading-none">{Math.round(power.load)} W</span>
              <span className="text-xs text-slate-500 font-medium">HOME LOAD</span>
         </div>
       </div>
 
       {/* BATTERY NODE (Left) */}
-      <div className="absolute left-[2%] top-1/2 -translate-y-1/2 flex flex-col items-center gap-3 w-[120px]">
-        {/* REMOVED SOC BADGE HERE - CLEANER LOOK */}
-        <div className={`p-4 rounded-full bg-slate-800/80 backdrop-blur border ${isDischarging ? 'border-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.3)]' : 'border-slate-600'} transition-all duration-300 hover:scale-110`}>
+      <div 
+        className="absolute flex flex-col items-center gap-3 w-[120px]"
+        style={{ top: '50%', left: '16.666%', transform: 'translate(-50%, -50%)' }}
+      >
+        <div className="p-4 rounded-full bg-slate-800/80 backdrop-blur border border-slate-600 shadow-[0_0_20px_rgba(168,85,247,0.3)] transition-all duration-300 hover:scale-110 z-10">
              <Battery className="text-purple-500" size={36} />
         </div>
-        <div className="flex flex-col items-center gap-0.5">
+        <div className="absolute top-20 flex flex-col items-center gap-0.5 w-full">
              <span className="text-xl font-bold text-purple-400 drop-shadow-md leading-none">{Math.round(batPowerAbs)} W</span>
              <span className="text-xs text-slate-500 font-medium flex justify-center items-center gap-1">
                 {isCharging ? 'CHARGING' : isDischarging ? 'DRAINING' : 'IDLE'}
@@ -159,11 +179,14 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
       </div>
 
       {/* GRID NODE (Right) */}
-      <div className="absolute right-[2%] top-1/2 -translate-y-1/2 flex flex-col items-center gap-3 w-[120px]">
-        <div className={`p-4 rounded-full bg-slate-800/80 backdrop-blur border ${isImporting ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)]' : isExporting ? 'border-green-500 shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'border-slate-600'} transition-all duration-300 hover:scale-110`}>
+      <div 
+        className="absolute flex flex-col items-center gap-3 w-[120px]"
+        style={{ top: '50%', left: '83.333%', transform: 'translate(-50%, -50%)' }}
+      >
+        <div className={`p-4 rounded-full bg-slate-800/80 backdrop-blur border ${isImporting ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)]' : isExporting ? 'border-green-500 shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'border-slate-600'} transition-all duration-300 hover:scale-110 z-10`}>
              <Zap className={isImporting ? 'text-red-500' : isExporting ? 'text-green-500' : 'text-slate-500'} size={36} fill={power.grid !== 0 ? "currentColor" : "none"} fillOpacity={0.2} />
         </div>
-        <div className="flex flex-col items-center gap-0.5">
+        <div className="absolute top-20 flex flex-col items-center gap-0.5 w-full">
              <span className={`text-xl font-bold drop-shadow-md leading-none ${isImporting ? 'text-red-400' : isExporting ? 'text-green-400' : 'text-slate-500'}`}>
                 {Math.round(gridPowerAbs)} W
              </span>
