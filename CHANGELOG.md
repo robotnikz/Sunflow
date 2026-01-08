@@ -1,3 +1,10 @@
+## [1.0.3](https://github.com/robotnikz/Sunflow/compare/v1.0.2...v1.0.3) (2026-01-08)
+
+
+### Bug Fixes
+
+* delete buttons not working in settings ([c9887bf](https://github.com/robotnikz/Sunflow/commit/c9887bfd5dc1665f243dabf343472130b52ffc7b))
+
 ## [1.0.2](https://github.com/robotnikz/Sunflow/compare/v1.0.1...v1.0.2) (2026-01-08)
 
 
