@@ -467,7 +467,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                            <DollarSign size={16} className="text-green-400"/> Previous Financial Return
                         </label>
                         <div className="flex items-center bg-slate-900 border border-slate-600 rounded-lg overflow-hidden focus-within:border-yellow-500 transition-colors">
-                            <div className="pl-3 pr-2 text-slate-500 font-medium">
+                            <div className="shrink-0 pl-3 pr-2 text-slate-400 font-bold border-r border-slate-700/50">
                                 {formData.currency === 'EUR' ? '€' : '$'}
                             </div>
                             <input 
@@ -477,7 +477,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                                     ...formData, 
                                     initialValues: { ...formData.initialValues, financialReturn: parseFloat(e.target.value) }
                                 })}
-                                className="flex-1 bg-transparent border-none py-2 focus:outline-none text-white placeholder-slate-600"
+                                className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0"
                                 placeholder="0.00"
                             />
                         </div>
@@ -499,10 +499,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                                         ...formData, 
                                         initialValues: { ...formData.initialValues, production: parseFloat(e.target.value) }
                                     })}
-                                    className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600"
+                                    className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0"
                                     placeholder="0"
                                 />
-                                <div className="px-3 py-2 bg-slate-700/30 border-l border-slate-600 text-slate-400 text-xs font-medium">
+                                <div className="shrink-0 px-3 py-2 bg-slate-700 text-slate-200 text-xs font-bold border-l border-slate-600">
                                     kWh
                                 </div>
                             </div>
@@ -524,10 +524,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                                         ...formData, 
                                         initialValues: { ...formData.initialValues, export: parseFloat(e.target.value) }
                                     })}
-                                    className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600"
+                                    className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0"
                                     placeholder="0"
                                 />
-                                <div className="px-3 py-2 bg-slate-700/30 border-l border-slate-600 text-slate-400 text-xs font-medium">
+                                <div className="shrink-0 px-3 py-2 bg-slate-700 text-slate-200 text-xs font-bold border-l border-slate-600">
                                     kWh
                                 </div>
                             </div>
@@ -549,10 +549,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                                         ...formData, 
                                         initialValues: { ...formData.initialValues, import: parseFloat(e.target.value) }
                                     })}
-                                    className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600"
+                                    className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0"
                                     placeholder="0"
                                 />
-                                <div className="px-3 py-2 bg-slate-700/30 border-l border-slate-600 text-slate-400 text-xs font-medium">
+                                <div className="shrink-0 px-3 py-2 bg-slate-700 text-slate-200 text-xs font-bold border-l border-slate-600">
                                     kWh
                                 </div>
                             </div>
