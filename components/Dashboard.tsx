@@ -100,7 +100,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
         </div>
       )}
 
-      {/* --- ROW 1: Realtime Power Flow & Status --- */}
+      {/* --- SECTION 1: LIVE MONITORING --- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Power Flow Diagram (Takes 2/3 width) */}
         <div className="lg:col-span-2 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl relative overflow-hidden flex flex-col h-[520px]">
@@ -134,12 +134,45 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
         </div>
       </div>
 
-      {/* --- ROW 2: STATUS TIMELINE --- */}
+      {/* --- SECTION 2: SYSTEM HEALTH & LONG TERM METRICS --- */}
+      {/* These are separated from the time-range selector to indicate they are global/current states */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in">
+          {/* ROI Widget */}
+          <AmortizationWidget roiData={roiData} currency={config.currency} />
+
+          {/* Realtime Efficiency Donuts */}
+          <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg flex items-center justify-center relative">
+               <div className="absolute top-4 left-4 text-slate-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-blue-500"></span> Live Autonomy
+               </div>
+               <div className="h-40 w-full mt-4">
+                <EnergyDonut 
+                    percentage={data.autonomy} 
+                    label="" 
+                    color="#3b82f6" 
+                />
+               </div>
+          </div>
+          <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg flex items-center justify-center relative">
+               <div className="absolute top-4 left-4 text-slate-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-green-500"></span> Live Self Cons.
+               </div>
+               <div className="h-40 w-full mt-4">
+                <EnergyDonut 
+                    percentage={data.selfConsumption} 
+                    label="" 
+                    color="#22c55e" 
+                />
+               </div>
+          </div>
+      </div>
+
+      {/* --- SECTION 3: TIMELINE --- */}
       <div className="animate-fade-in">
         <StatusTimeline history={history?.chart || []} />
       </div>
 
-      {/* --- ROW 3: Controls for Statistics --- */}
+      {/* --- SECTION 4: HISTORICAL ANALYSIS CONTROLS --- */}
       <div className="flex flex-col bg-slate-800/60 backdrop-blur p-2 rounded-xl border border-slate-700/50 mt-4 gap-4 sticky top-[70px] z-20 shadow-lg">
         
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -191,7 +224,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
         )}
       </div>
 
-      {/* --- ROW 4: Historical Data & Analysis --- */}
+      {/* --- SECTION 5: HISTORICAL DATA GRIDS --- */}
       {history && !loadingHist ? (
         <div className="animate-fade-in space-y-6">
             
@@ -223,29 +256,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
                                     <div className="text-lg font-semibold text-slate-200">{currencySymbol} {history.stats.earnings.toFixed(2)}</div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-
-                    {/* ROI Widget (Auto height) */}
-                    <AmortizationWidget roiData={roiData} currency={config.currency} />
-
-                    {/* Efficiency Donuts */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-slate-800 rounded-2xl p-2 border border-slate-700 shadow-lg h-36">
-                            <EnergyDonut 
-                                percentage={data.autonomy} 
-                                label="Autonomy" 
-                                color="#3b82f6" 
-                                small
-                            />
-                        </div>
-                        <div className="bg-slate-800 rounded-2xl p-2 border border-slate-700 shadow-lg h-36">
-                            <EnergyDonut 
-                                percentage={data.selfConsumption} 
-                                label="Self Cons." 
-                                color="#22c55e" 
-                                small
-                            />
                         </div>
                     </div>
 
@@ -324,7 +334,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
                     {/* Efficiency Chart */}
                     <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[250px] flex flex-col">
                         <h3 className="text-slate-400 text-sm font-medium mb-6 flex items-center gap-2 shrink-0">
-                            <BarChart3 size={16}/> Efficiency (Autonomy & Self-Consumption)
+                            <BarChart3 size={16}/> Efficiency History
                         </h3>
                         <div className="flex-1 min-h-0 w-full">
                             <EfficiencyChart history={history.chart} />
@@ -336,7 +346,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
         </div>
       ) : (
         // SKELETON LOADING STATE
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-pulse">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-pulse mt-6">
             <div className="lg:col-span-1 space-y-6">
                 <SkeletonCard height="h-64" />
                 <div className="grid grid-cols-2 gap-4">
