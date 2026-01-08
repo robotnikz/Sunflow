@@ -63,7 +63,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Power Flow Diagram */}
         <div className="lg:col-span-2 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl relative overflow-hidden flex flex-col h-full min-h-[450px]">
-          <div className="absolute top-4 left-6 flex items-center gap-2 text-slate-300 font-semibold z-10">
+          <div className="absolute top-6 left-6 flex items-center gap-2 text-slate-300 font-semibold z-10">
              <Zap className="text-yellow-500" size={20} />
              Live Power Flow
           </div>
@@ -176,7 +176,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
                 {/* Left Column: Financials & Meters */}
                 <div className="lg:col-span-1 space-y-6">
                     <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
-                        <h3 className="text-slate-400 text-sm font-medium mb-4 flex items-center gap-2">
+                        <h3 className="text-slate-400 text-sm font-medium mb-6 flex items-center gap-2">
                             <PiggyBank size={16} /> Estimated Savings ({timeRange})
                         </h3>
                         <div className="flex flex-col gap-6">
@@ -201,7 +201,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
                     </div>
 
                     <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
-                        <h3 className="text-slate-400 text-sm font-medium mb-4">Energy Meters</h3>
+                        <h3 className="text-slate-400 text-sm font-medium mb-6">Energy Meters</h3>
                         <div className="grid grid-cols-2 gap-y-6 gap-x-4">
                             <div>
                                 <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Sun size={12}/> Solar Yield</div>
@@ -227,27 +227,33 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
                 <div className="lg:col-span-2 flex flex-col gap-6">
                     
                     {/* Main Power Chart */}
-                    <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[400px]">
-                        <h3 className="text-slate-400 text-sm font-medium mb-4 flex items-center gap-2">
+                    <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[400px] flex flex-col">
+                        <h3 className="text-slate-400 text-sm font-medium mb-6 flex items-center gap-2 shrink-0">
                              <Zap size={16}/> Power History
                         </h3>
-                        <EnergyChart history={history.chart} />
+                        <div className="flex-1 min-h-0 w-full">
+                            <EnergyChart history={history.chart} />
+                        </div>
                     </div>
 
                     {/* Battery SOC Chart */}
-                    <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[250px]">
-                        <h3 className="text-slate-400 text-sm font-medium mb-4 flex items-center gap-2">
+                    <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[250px] flex flex-col">
+                        <h3 className="text-slate-400 text-sm font-medium mb-6 flex items-center gap-2 shrink-0">
                             <Battery size={16}/> Battery State of Charge
                         </h3>
-                        <BatteryChart history={history.chart} />
+                        <div className="flex-1 min-h-0 w-full">
+                            <BatteryChart history={history.chart} />
+                        </div>
                     </div>
 
                     {/* Efficiency Chart */}
-                    <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[250px]">
-                        <h3 className="text-slate-400 text-sm font-medium mb-4 flex items-center gap-2">
+                    <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[250px] flex flex-col">
+                        <h3 className="text-slate-400 text-sm font-medium mb-6 flex items-center gap-2 shrink-0">
                             <BarChart3 size={16}/> Efficiency (Autonomy & Self-Consumption)
                         </h3>
-                        <EfficiencyChart history={history.chart} />
+                        <div className="flex-1 min-h-0 w-full">
+                            <EfficiencyChart history={history.chart} />
+                        </div>
                     </div>
                 </div>
             </div>

@@ -134,13 +134,13 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
       {/* --- HTML OVERLAYS FOR ICONS & TEXT (Better Accessibility & sharp text) --- */}
       
       {/* PV NODE (Top) */}
-      <div className="absolute top-[8%] left-1/2 -translate-x-1/2 flex flex-col-reverse items-center gap-2">
+      <div className="absolute top-[8%] left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
+        <div className="text-center mb-1 flex flex-col items-center">
+             <span className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-0.5">SOLAR</span>
+             <span className="block text-xl font-bold text-yellow-400 drop-shadow-md leading-none">{Math.round(power.pv)} W</span>
+        </div>
         <div className={`p-4 rounded-full bg-slate-800/80 backdrop-blur border border-slate-600 shadow-[0_0_20px_rgba(234,179,8,0.2)] transition-transform duration-300 hover:scale-110`}>
              <Sun className="text-yellow-500" size={36} fill={power.pv > 0 ? "currentColor" : "none"} fillOpacity={0.2} />
-        </div>
-        <div className="text-center mb-1 flex flex-col">
-             <span className="block text-xl font-bold text-yellow-400 drop-shadow-md leading-none">{Math.round(power.pv)} W</span>
-             <span className="text-xs text-slate-500 font-medium uppercase tracking-wider mt-0.5">SOLAR</span>
         </div>
       </div>
 
@@ -151,7 +151,7 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
         </div>
         <div className="text-center mt-1">
              <span className="block text-xl font-bold text-blue-400 drop-shadow-md">{Math.round(power.load)} W</span>
-             <span className="text-xs text-slate-500 font-medium">HOME LOAD</span>
+             <span className="text-xs text-slate-500 font-medium uppercase tracking-wider mt-0.5">HOME LOAD</span>
         </div>
       </div>
 
