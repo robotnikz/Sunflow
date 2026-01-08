@@ -319,7 +319,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                     {/* Main Power Chart */}
                     <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[400px] flex flex-col relative overflow-hidden group">
                         <div className="absolute top-0 right-0 p-6 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <span className="text-xs text-slate-600 font-mono">Max Load: {(peaks.maxLoad).toFixed(0)}W</span>
+                            <span className="text-xs text-slate-600">Max Load: {(peaks.maxLoad).toFixed(0)}W</span>
                         </div>
                         <h3 className="text-slate-400 text-sm font-medium mb-6 flex items-center gap-2 shrink-0">
                              <Zap size={16}/> Power History

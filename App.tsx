@@ -79,7 +79,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans selection:bg-yellow-500 selection:text-slate-900">
+    <div className="min-h-screen bg-slate-900 text-slate-100 selection:bg-yellow-500 selection:text-slate-900">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-md border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -100,7 +100,7 @@ const App: React.FC = () => {
             <div className="flex items-center gap-4">
               <div className="hidden md:flex flex-col items-end text-xs text-slate-400">
                 <span>Last Updated</span>
-                <span className="font-mono text-slate-300">{lastUpdated.toLocaleTimeString()}</span>
+                <span className="text-slate-300">{lastUpdated.toLocaleTimeString()}</span>
               </div>
               
               <button 
@@ -154,7 +154,7 @@ const App: React.FC = () => {
       {/* Modals */}
       {isSettingsOpen && (
         <SettingsModal 
-          currentConfig={config || { inverterIp: '', costPerKwh: 0.30, feedInTariff: 0.08, currency: 'EUR' }} 
+          currentConfig={config || { inverterIp: '', currency: 'EUR', systemStartDate: new Date().toISOString().split('T')[0] }} 
           onSave={handleSaveConfig} 
           onClose={() => setIsSettingsOpen(false)} 
         />

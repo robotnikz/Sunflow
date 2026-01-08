@@ -47,10 +47,11 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
   const cy = 200;
   
   // Endpoint Coordinates (Where the icons sit visually)
-  const topY = 80;    // PV
-  const bottomY = 320; // Load
-  const leftX = 100;  // Battery
-  const rightX = 500; // Grid
+  // Adjusted to match new % positions (15% / 85%)
+  const topY = 60;    // 15% of 400
+  const bottomY = 340; // 85% of 400
+  const leftX = 90;   // 15% of 600
+  const rightX = 510; // 85% of 600
 
   return (
     <div className="relative w-full h-full flex items-center justify-center select-none p-4">
@@ -128,55 +129,51 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
           Canvas 600x400.
           CX (300) = 50% left
           CY (200) = 50% top
-          TopY (80) = 20% top
-          BottomY (320) = 80% top
-          LeftX (100) = 16.66% left
-          RightX (500) = 83.33% left
       */}
       
       {/* PV NODE (Top) 
-          Centered at 20% Top. We use flex-col-reverse to push text upwards AWAY from the icon.
+          Centered at 15% Top. Flex-col-reverse pushes text upwards.
       */}
       <div 
-        className="absolute flex flex-col-reverse items-center gap-3"
-        style={{ top: '20%', left: '50%', transform: 'translate(-50%, -50%)' }}
+        className="absolute flex flex-col-reverse items-center gap-4"
+        style={{ top: '15%', left: '50%', transform: 'translate(-50%, -50%)' }}
       >
         <div className="p-4 rounded-full bg-slate-800/80 backdrop-blur border border-slate-600 shadow-[0_0_20px_rgba(234,179,8,0.2)] transition-transform duration-300 hover:scale-110 z-10 relative">
              <Sun className="text-yellow-500" size={36} fill={power.pv > 0 ? "currentColor" : "none"} fillOpacity={0.2} />
         </div>
-        <div className="flex flex-col items-center gap-0.5 mb-2">
+        <div className="flex flex-col items-center gap-1 mb-1">
              <span className="text-xs text-slate-500 font-medium tracking-wide">SOLAR</span>
              <span className="text-xl font-bold text-yellow-400 drop-shadow-md leading-none whitespace-nowrap">{Math.round(power.pv)} W</span>
         </div>
       </div>
 
       {/* LOAD NODE (Bottom) 
-          Centered at 80% Top. Flex-col pushes text downwards.
+          Centered at 85% Top. Flex-col pushes text downwards.
       */}
       <div 
-        className="absolute flex flex-col items-center gap-3"
-        style={{ top: '80%', left: '50%', transform: 'translate(-50%, -50%)' }}
+        className="absolute flex flex-col items-center gap-4"
+        style={{ top: '85%', left: '50%', transform: 'translate(-50%, -50%)' }}
       >
         <div className="p-4 rounded-full bg-slate-800/80 backdrop-blur border border-slate-600 shadow-[0_0_20px_rgba(59,130,246,0.2)] transition-transform duration-300 hover:scale-110 z-10 relative">
              <Home className="text-blue-500" size={36} />
         </div>
-        <div className="flex flex-col items-center gap-0.5 mt-2">
+        <div className="flex flex-col items-center gap-1 mt-1">
              <span className="text-xl font-bold text-blue-400 drop-shadow-md leading-none whitespace-nowrap">{Math.round(power.load)} W</span>
              <span className="text-xs text-slate-500 font-medium tracking-wide">HOME LOAD</span>
         </div>
       </div>
 
       {/* BATTERY NODE (Left) 
-          Centered at 16.66%. 
+          Centered at 15% Left.
       */}
       <div 
-        className="absolute flex flex-col items-center gap-3 w-[140px]"
-        style={{ top: '50%', left: '16.666%', transform: 'translate(-50%, -50%)' }}
+        className="absolute flex flex-col items-center gap-4 w-[140px]"
+        style={{ top: '50%', left: '15%', transform: 'translate(-50%, -50%)' }}
       >
         <div className="p-4 rounded-full bg-slate-800/80 backdrop-blur border border-slate-600 shadow-[0_0_20px_rgba(168,85,247,0.3)] transition-all duration-300 hover:scale-110 z-10 relative">
              <Battery className="text-purple-500" size={36} />
         </div>
-        <div className="flex flex-col items-center gap-0.5 w-full mt-2">
+        <div className="flex flex-col items-center gap-1 w-full mt-1">
              <span className="text-xl font-bold text-purple-400 drop-shadow-md leading-none whitespace-nowrap">{Math.round(batPowerAbs)} W</span>
              <span className="text-xs text-slate-500 font-medium flex justify-center items-center gap-1">
                 {isCharging ? 'CHARGING' : isDischarging ? 'DRAINING' : 'IDLE'}
@@ -185,16 +182,16 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
       </div>
 
       {/* GRID NODE (Right) 
-          Centered at 83.33%.
+          Centered at 85% Left.
       */}
       <div 
-        className="absolute flex flex-col items-center gap-3 w-[140px]"
-        style={{ top: '50%', left: '83.333%', transform: 'translate(-50%, -50%)' }}
+        className="absolute flex flex-col items-center gap-4 w-[140px]"
+        style={{ top: '50%', left: '85%', transform: 'translate(-50%, -50%)' }}
       >
         <div className={`p-4 rounded-full bg-slate-800/80 backdrop-blur border ${isImporting ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)]' : isExporting ? 'border-green-500 shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'border-slate-600'} transition-all duration-300 hover:scale-110 z-10 relative`}>
              <Zap className={isImporting ? 'text-red-500' : isExporting ? 'text-green-500' : 'text-slate-500'} size={36} fill={power.grid !== 0 ? "currentColor" : "none"} fillOpacity={0.2} />
         </div>
-        <div className="flex flex-col items-center gap-0.5 w-full mt-2">
+        <div className="flex flex-col items-center gap-1 w-full mt-1">
              <span className={`text-xl font-bold drop-shadow-md leading-none whitespace-nowrap ${isImporting ? 'text-red-400' : isExporting ? 'text-green-400' : 'text-slate-500'}`}>
                 {Math.round(gridPowerAbs)} W
              </span>

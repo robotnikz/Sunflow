@@ -130,7 +130,7 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
 
       <div className="grid grid-cols-[80px_1fr] gap-x-4 mt-2">
          <div></div> 
-         <div className="flex justify-between text-xs text-slate-500 font-mono px-1">
+         <div className="flex justify-between text-xs text-slate-500 px-1">
             <span>{ticks[0]}</span>
             <span>{ticks[1]}</span>
             <span>{ticks[2]}</span>
