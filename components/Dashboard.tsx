@@ -4,8 +4,9 @@ import PowerFlow from './PowerFlow';
 import EnergyChart from './EnergyChart';
 import StatsCard from './StatsCard';
 import EnergyDonut from './EnergyDonut';
+import BatteryWidget from './BatteryWidget'; // Import new widget
 import { getHistory } from '../services/api';
-import { Sun, Battery, Zap, Home, DollarSign, PiggyBank, Calendar } from 'lucide-react';
+import { Sun, Zap, Home, PiggyBank, Calendar } from 'lucide-react';
 
 interface DashboardProps {
   data: InverterData | null;
@@ -36,13 +37,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
 
   if (!data) return null;
 
-  // Realtime Battery Status Text
-  const batteryStatus = data.battery.state === 'charging' 
-    ? `Charging (${Math.round(data.power.battery)}W)` 
-    : data.battery.state === 'discharging' 
-      ? `Discharging (${Math.round(Math.abs(data.power.battery))}W)`
-      : 'Idle';
-
   const currencySymbol = config.currency === 'EUR' ? '€' : '$';
 
   return (
@@ -70,13 +64,14 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
 
         {/* Right: Realtime Stats Column */}
         <div className="flex flex-col gap-4">
-          <StatsCard 
-            title="Battery SOC" 
-            value={`${data.battery.soc}%`} 
-            subValue={batteryStatus}
-            icon={<Battery className={data.battery.soc < 20 ? "text-red-400" : "text-purple-400"} />}
-            trend={data.battery.state === 'charging' ? 'up' : data.battery.state === 'discharging' ? 'down' : 'neutral'}
+          
+          {/* NEW VISUAL BATTERY WIDGET REPLACES STATS CARD */}
+          <BatteryWidget 
+            soc={data.battery.soc}
+            power={data.power.battery}
+            state={data.battery.state}
           />
+
           <StatsCard 
             title="PV Power" 
             value={`${(data.power.pv / 1000).toFixed(2)} kW`} 
