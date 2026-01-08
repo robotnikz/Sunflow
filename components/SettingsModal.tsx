@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SystemConfig, Tariff, Expense } from '../types';
-import { X, Save, Plus, Trash2, Calendar, DollarSign, PenTool, MapPin, Zap, History, HelpCircle, Calculator } from 'lucide-react';
+import { X, Save, Plus, Trash2, Calendar, DollarSign, PenTool, MapPin, Zap, History, HelpCircle, Calculator, CheckCircle2, AlertTriangle, ArrowRight } from 'lucide-react';
 import { getTariffs, addTariff, deleteTariff, getExpenses, addExpense, deleteExpense } from '../services/api';
 
 interface SettingsModalProps {
@@ -139,6 +139,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
     }
   };
 
+  // ROI Health Check Logic
+  const hasExpenses = expenses.length > 0;
+  const hasTariffs = tariffs.length > 0;
+  // Check if system start date is reasonably set (e.g. not default today if user has history, but just checking existance is enough for now)
+  const hasStartDate = !!formData.systemStartDate;
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
       <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -175,7 +181,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
             onClick={() => setActiveTab('history')}
             className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors ${activeTab === 'history' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
           >
-            Historical Data
+            Calibration
           </button>
         </div>
         
@@ -209,7 +215,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                       className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
                       required
                     />
-                    <p className="text-xs text-slate-500 mt-1">Used to calculate recurring yearly costs.</p>
+                    <p className="text-xs text-slate-500 mt-1">Used to calculate the timeline for recurring costs.</p>
                   </div>
 
                   <div>
@@ -471,27 +477,89 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
             </div>
           )}
 
-          {/* TAB: History */}
+          {/* TAB: History & Calibration */}
           {activeTab === 'history' && (
             <form onSubmit={handleConfigSubmit} className="space-y-8">
-                <div className="bg-purple-900/20 border border-purple-800 p-4 rounded-lg">
-                    <p className="text-sm text-purple-200 flex items-start gap-2">
-                        <HelpCircle size={18} className="shrink-0 mt-0.5"/>
-                        <span>
-                        If your system was running before you installed this app, enter the totals below to correct your "Lifetime" stats and ROI.
-                        <br/><strong>Note:</strong> Enter the absolute totals shown on your inverter or meter.
-                        </span>
-                    </p>
-                </div>
                 
-                <div className="space-y-6">
-                    <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2 flex items-center gap-2">
-                        <History size={18}/> Historical Totals
+                {/* ROI Health Checklist */}
+                <div className="bg-slate-900 border border-slate-700 rounded-xl p-5 shadow-inner">
+                    <h3 className="text-slate-200 text-sm font-bold mb-3 flex items-center gap-2">
+                        <Calculator size={16} className="text-blue-400"/> ROI Calibration Checklist
                     </h3>
+                    <p className="text-xs text-slate-500 mb-4">
+                        To calculate your exact Amortization Date, SunFlow needs three key data points. 
+                        Please ensure these are configured:
+                    </p>
+                    <div className="space-y-3">
+                        
+                        {/* 1. Start Date */}
+                        <div className={`flex items-center justify-between p-3 rounded-lg border ${hasStartDate ? 'bg-emerald-900/10 border-emerald-900/30' : 'bg-red-900/10 border-red-900/30'}`}>
+                            <div className="flex items-center gap-3">
+                                {hasStartDate ? <CheckCircle2 size={18} className="text-emerald-500"/> : <AlertTriangle size={18} className="text-red-500"/>}
+                                <div>
+                                    <div className={`text-sm font-medium ${hasStartDate ? 'text-emerald-200' : 'text-red-200'}`}>System Start Date</div>
+                                    <div className="text-[10px] text-slate-400">Used to calculate recurring costs over time.</div>
+                                </div>
+                            </div>
+                            {!hasStartDate && (
+                                <button type="button" onClick={() => setActiveTab('general')} className="flex items-center gap-1 text-xs text-red-300 hover:text-white hover:underline">
+                                    Set in General <ArrowRight size={12}/>
+                                </button>
+                            )}
+                        </div>
+
+                        {/* 2. Expenses */}
+                        <div className={`flex items-center justify-between p-3 rounded-lg border ${hasExpenses ? 'bg-emerald-900/10 border-emerald-900/30' : 'bg-red-900/10 border-red-900/30'}`}>
+                            <div className="flex items-center gap-3">
+                                {hasExpenses ? <CheckCircle2 size={18} className="text-emerald-500"/> : <AlertTriangle size={18} className="text-red-500"/>}
+                                <div>
+                                    <div className={`text-sm font-medium ${hasExpenses ? 'text-emerald-200' : 'text-red-200'}`}>Installation Costs (Expenses)</div>
+                                    <div className="text-[10px] text-slate-400">Your initial investment is required to calculate ROI.</div>
+                                </div>
+                            </div>
+                            {!hasExpenses && (
+                                <button type="button" onClick={() => setActiveTab('expenses')} className="flex items-center gap-1 text-xs text-red-300 hover:text-white hover:underline">
+                                    Add Expenses <ArrowRight size={12}/>
+                                </button>
+                            )}
+                        </div>
+
+                        {/* 3. Tariffs */}
+                        <div className={`flex items-center justify-between p-3 rounded-lg border ${hasTariffs ? 'bg-emerald-900/10 border-emerald-900/30' : 'bg-red-900/10 border-red-900/30'}`}>
+                            <div className="flex items-center gap-3">
+                                {hasTariffs ? <CheckCircle2 size={18} className="text-emerald-500"/> : <AlertTriangle size={18} className="text-red-500"/>}
+                                <div>
+                                    <div className={`text-sm font-medium ${hasTariffs ? 'text-emerald-200' : 'text-red-200'}`}>Electricity Tariffs</div>
+                                    <div className="text-[10px] text-slate-400">Needed to calculate how much money your solar saves you.</div>
+                                </div>
+                            </div>
+                            {!hasTariffs && (
+                                <button type="button" onClick={() => setActiveTab('tariffs')} className="flex items-center gap-1 text-xs text-red-300 hover:text-white hover:underline">
+                                    Add Tariffs <ArrowRight size={12}/>
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="space-y-6 pt-4 border-t border-slate-700">
+                    <h3 className="text-slate-300 font-bold flex items-center gap-2">
+                        <History size={18}/> Pre-App History (Legacy Data)
+                    </h3>
+                    
+                    <div className="bg-purple-900/20 border border-purple-800 p-4 rounded-lg mb-4">
+                        <p className="text-sm text-purple-200 flex items-start gap-2">
+                            <HelpCircle size={18} className="shrink-0 mt-0.5"/>
+                            <span>
+                                <strong>Was the system running before you installed SunFlow?</strong><br/>
+                                Enter the <i>Total Lifetime</i> values from your inverter/meter below. SunFlow will calculate the difference between these values and the data it has recorded to estimate your total lifetime earnings accurately.
+                            </span>
+                        </p>
+                    </div>
 
                     <div>
                         <label className="block text-sm font-medium text-white mb-2 flex items-center gap-2">
-                           <DollarSign size={16} className="text-green-400"/> Previous Financial Return
+                           <DollarSign size={16} className="text-green-400"/> Legacy Financial Return
                         </label>
                         <div className="flex gap-2">
                             <div className="flex-1 flex items-center bg-slate-900 border border-slate-600 rounded-lg overflow-hidden focus-within:border-yellow-500 transition-colors">
@@ -515,18 +583,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                                 className="px-3 bg-slate-700 hover:bg-slate-600 rounded-lg border border-slate-600 text-slate-300 transition-colors flex items-center gap-1"
                                 title="Estimate based on kWh values below"
                             >
-                                <Calculator size={16} /> <span className="text-xs font-medium hidden sm:inline">Estimate</span>
+                                <Calculator size={16} /> <span className="text-xs font-medium hidden sm:inline">Auto-Calc</span>
                             </button>
                         </div>
                         <p className="text-xs text-slate-500 mt-1">
-                            Calculated savings + feed-in revenue before app installation.
+                            The money you saved/earned <strong>before</strong> using this app. Use the Auto-Calc button to estimate this from the kWh values below.
                         </p>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
                         {/* Production */}
                         <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700/50">
-                            <label className="block text-xs font-bold text-yellow-500 uppercase mb-2">Lifetime Solar Production</label>
+                            <label className="block text-xs font-bold text-yellow-500 uppercase mb-2">Total Solar Production</label>
                             
                             <div className="flex items-center bg-slate-800 border border-slate-600 rounded-lg overflow-hidden focus-within:border-yellow-500 transition-colors">
                                 <input 
@@ -545,13 +613,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                             </div>
                             
                             <p className="text-[11px] text-slate-400 mt-2 leading-tight">
-                                Inverter "E-Total" value.
+                                Inverter "E-Total".
                             </p>
                         </div>
 
                         {/* Export */}
                         <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700/50">
-                            <label className="block text-xs font-bold text-green-500 uppercase mb-2">Lifetime Grid Export</label>
+                            <label className="block text-xs font-bold text-green-500 uppercase mb-2">Total Grid Export</label>
                             
                             <div className="flex items-center bg-slate-800 border border-slate-600 rounded-lg overflow-hidden focus-within:border-green-500 transition-colors">
                                 <input 
@@ -576,7 +644,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
 
                         {/* Import */}
                         <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700/50">
-                            <label className="block text-xs font-bold text-red-400 uppercase mb-2">Lifetime Grid Import</label>
+                            <label className="block text-xs font-bold text-red-400 uppercase mb-2">Total Grid Import</label>
                             
                             <div className="flex items-center bg-slate-800 border border-slate-600 rounded-lg overflow-hidden focus-within:border-red-500 transition-colors">
                                 <input 
@@ -607,7 +675,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                     className="flex items-center gap-2 px-6 py-2 bg-yellow-500 text-slate-900 font-bold rounded-lg hover:bg-yellow-400 transition shadow-lg shadow-yellow-500/20"
                     >
                     <Save size={18} />
-                    Save History
+                    Save Calibration
                     </button>
                 </div>
             </form>
