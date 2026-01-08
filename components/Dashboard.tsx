@@ -150,7 +150,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
 
           {/* Realtime Efficiency Donuts */}
           <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg flex items-center justify-center relative">
-               <div className="absolute top-4 left-4 text-slate-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+               <div className="absolute top-4 left-4 text-slate-400 text-sm font-medium flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-blue-500"></span> Live Autonomy
                </div>
                <div className="h-40 w-full mt-4">
@@ -162,7 +162,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                </div>
           </div>
           <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg flex items-center justify-center relative">
-               <div className="absolute top-4 left-4 text-slate-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+               <div className="absolute top-4 left-4 text-slate-400 text-sm font-medium flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-green-500"></span> Live Self Consumption
                </div>
                <div className="h-40 w-full mt-4">
