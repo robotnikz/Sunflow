@@ -361,31 +361,45 @@ app.get('/api/roi', (req, res) => {
                 // Add Initial/Historical Value to the DB calculated value
                 const totalReturned = dbReturned + initialFinancialReturn;
 
-                // Forecast
+                // Forecast Logic
                 const netValue = totalReturned - totalInvested;
                 let breakEvenDate = null;
                 const roiPercent = totalInvested > 0 ? (totalReturned / totalInvested) * 100 : 0;
 
                 if (netValue < 0) {
-                    // FIX: Calculate daily return based on actual data availability, not system age.
-                    // If we only have 1 day of data, divide by 1. If we have >90 days, divide by 90.
-                    let durationDays = 1;
+                    let dailyReturn = 0;
+                    const systemStart = config.systemStartDate ? new Date(config.systemStartDate) : null;
                     
-                    if (oldestInWindow) {
-                        const diffTime = Math.abs(now.getTime() - oldestInWindow.getTime());
-                        durationDays = diffTime / (1000 * 60 * 60 * 24);
+                    // Priority: Use Total Lifecycle Average if System Start Date is available
+                    // Formula: (Historical $ + App-Tracked $) / Days since System Commissioning
+                    if (systemStart && systemStart < now) {
+                        const lifeTimeMs = now.getTime() - systemStart.getTime();
+                        const lifeTimeDays = lifeTimeMs / (1000 * 60 * 60 * 24);
+                        
+                        // Prevent division by tiny numbers just in case
+                        if (lifeTimeDays > 1) {
+                            dailyReturn = totalReturned / lifeTimeDays;
+                        }
                     }
-                    
-                    // Clamp duration: Minimum 0.1 days (avoid div by zero), Max 90 days.
-                    const effectiveDays = Math.min(90, Math.max(0.1, durationDays));
-                    
-                    const dailyReturn = returnLast90Days / effectiveDays;
-                    
-                    if (dailyReturn > 0.01) { // Prevent massive numbers if return is basically zero
+
+                    // Fallback: If no start date or calculation failed, use DB-only short-term average
+                    if (dailyReturn === 0) {
+                        let durationDays = 1;
+                        if (oldestInWindow) {
+                            const diffTime = Math.abs(now.getTime() - oldestInWindow.getTime());
+                            durationDays = diffTime / (1000 * 60 * 60 * 24);
+                        }
+                        const effectiveDays = Math.min(90, Math.max(0.1, durationDays));
+                        dailyReturn = returnLast90Days / effectiveDays;
+                    }
+
+                    // Calculate Forecast Date
+                    if (dailyReturn > 0.001) {
                         const remaining = Math.abs(netValue);
                         const daysLeft = remaining / dailyReturn;
                         const date = new Date();
                         date.setDate(date.getDate() + daysLeft);
+                        
                         // Cap date at 100 years to prevent "Year 5000" bugs
                         if (daysLeft < 36500) {
                              breakEvenDate = date.toISOString();
