@@ -368,6 +368,7 @@ app.get('/api/history', (req, res) => {
                     production: rows[i].power_pv,
                     consumption: rows[i].power_load,
                     soc: rows[i].soc,
+                    grid: rows[i].power_grid, // Add Grid Power to chart data
                     status: rows[i].status_code !== undefined ? rows[i].status_code : 1 
                 });
             }
@@ -379,6 +380,7 @@ app.get('/api/history', (req, res) => {
                     production: last.power_pv,
                     consumption: last.power_load,
                     soc: last.soc,
+                    grid: last.power_grid,
                     status: last.status_code !== undefined ? last.status_code : 1
                 });
             }

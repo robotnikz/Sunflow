@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sun, Home, Zap, Battery } from 'lucide-react';
+import { Sun, Home, Zap, Battery, ArrowDown, ArrowUp } from 'lucide-react';
 
 interface PowerFlowProps {
   power: {
@@ -13,7 +13,11 @@ interface PowerFlowProps {
 
 const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
   // Normalize grid/battery for visual flow direction
+  // Fronius: +Grid = Import, -Grid = Export
   const isImporting = power.grid > 0;
+  const isExporting = power.grid < 0;
+  const gridPowerAbs = Math.abs(power.grid);
+  
   const isCharging = power.battery > 0;
   const isDischarging = power.battery < -10; // Threshold
 
@@ -84,10 +88,18 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
         <div className={`p-3 rounded-full bg-slate-800 border-2 ${isImporting ? 'border-red-500' : 'border-green-500'} transition-colors duration-500`}>
           <Zap className={isImporting ? 'text-red-500' : 'text-green-500'} size={32} />
         </div>
-        <span className={`mt-2 font-mono font-bold ${isImporting ? 'text-red-400' : 'text-green-400'}`}>
-          {Math.round(Math.abs(power.grid))} W
-        </span>
-        <span className="text-[10px] uppercase tracking-wide text-slate-500">{isImporting ? 'Grid Import' : 'Grid Export'}</span>
+        
+        {/* Unambiguous Grid Status */}
+        <div className="flex flex-col items-center mt-2">
+            <span className={`font-mono font-bold text-lg flex items-center gap-1 ${isImporting ? 'text-red-400' : isExporting ? 'text-green-400' : 'text-slate-500'}`}>
+                {Math.round(gridPowerAbs)} W
+                {isImporting && <ArrowDown size={18} strokeWidth={3} />}
+                {isExporting && <ArrowUp size={18} strokeWidth={3} />}
+            </span>
+            <span className={`text-xs font-bold uppercase tracking-wide ${isImporting ? 'text-red-500' : isExporting ? 'text-green-500' : 'text-slate-500'}`}>
+                {isImporting ? 'Purchasing' : isExporting ? 'Selling' : 'Grid Idle'}
+            </span>
+        </div>
       </div>
 
       {/* Battery (Left) */}
