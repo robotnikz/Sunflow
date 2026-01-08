@@ -96,7 +96,10 @@ const saveConfig = (cfg) => {
     const diskConfig = {
         inverterIp: cfg.inverterIp,
         currency: cfg.currency,
-        systemStartDate: cfg.systemStartDate || new Date().toISOString().split('T')[0]
+        systemStartDate: cfg.systemStartDate || new Date().toISOString().split('T')[0],
+        latitude: cfg.latitude,
+        longitude: cfg.longitude,
+        systemCapacity: cfg.systemCapacity
     };
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(diskConfig, null, 2));
 };

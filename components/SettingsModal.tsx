@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SystemConfig, Tariff, Expense } from '../types';
-import { X, Save, Plus, Trash2, Calendar, DollarSign, PenTool } from 'lucide-react';
+import { X, Save, Plus, Trash2, Calendar, DollarSign, PenTool, MapPin, Zap } from 'lucide-react';
 import { getTariffs, addTariff, deleteTariff, getExpenses, addExpense, deleteExpense } from '../services/api';
 
 interface SettingsModalProps {
@@ -115,7 +115,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
             onClick={() => setActiveTab('general')}
             className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors ${activeTab === 'general' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
           >
-            General
+            General & Location
           </button>
           <button 
             onClick={() => setActiveTab('tariffs')}
@@ -137,41 +137,87 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
           {/* TAB: General */}
           {activeTab === 'general' && (
             <form onSubmit={handleConfigSubmit} className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Inverter IP Address</label>
-                <input 
-                  type="text" 
-                  value={formData.inverterIp}
-                  onChange={(e) => setFormData({...formData, inverterIp: e.target.value})}
-                  placeholder="e.g. 192.168.1.50"
-                  className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500"
-                  required
-                />
+              
+              <div className="space-y-4">
+                  <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2">Connection & Date</h3>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-2">Inverter IP Address</label>
+                    <input 
+                      type="text" 
+                      value={formData.inverterIp}
+                      onChange={(e) => setFormData({...formData, inverterIp: e.target.value})}
+                      placeholder="e.g. 192.168.1.50"
+                      className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-2">System Commissioning Date</label>
+                    <input 
+                      type="date" 
+                      value={formData.systemStartDate}
+                      onChange={(e) => setFormData({...formData, systemStartDate: e.target.value})}
+                      className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
+                      required
+                    />
+                    <p className="text-xs text-slate-500 mt-1">Used to calculate recurring yearly costs.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-2">Currency Symbol</label>
+                    <select 
+                      value={formData.currency}
+                      onChange={(e) => setFormData({...formData, currency: e.target.value})}
+                      className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
+                    >
+                        <option value="EUR">EUR (€)</option>
+                        <option value="USD">USD ($)</option>
+                        <option value="GBP">GBP (£)</option>
+                    </select>
+                  </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">System Commissioning Date</label>
-                <input 
-                  type="date" 
-                  value={formData.systemStartDate}
-                  onChange={(e) => setFormData({...formData, systemStartDate: e.target.value})}
-                  className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
-                  required
-                />
-                <p className="text-xs text-slate-500 mt-1">Used to calculate recurring yearly costs.</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Currency Symbol</label>
-                <select 
-                  value={formData.currency}
-                  onChange={(e) => setFormData({...formData, currency: e.target.value})}
-                  className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
-                >
-                    <option value="EUR">EUR (€)</option>
-                    <option value="USD">USD ($)</option>
-                    <option value="GBP">GBP (£)</option>
-                </select>
+              <div className="space-y-4 pt-4">
+                 <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2 flex items-center gap-2">
+                    <MapPin size={18}/> Location & Forecast
+                 </h3>
+                 <div className="grid grid-cols-2 gap-4">
+                     <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-2">Latitude</label>
+                        <input 
+                          type="text" 
+                          value={formData.latitude || ''}
+                          onChange={(e) => setFormData({...formData, latitude: e.target.value})}
+                          placeholder="e.g. 52.52"
+                          className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
+                        />
+                     </div>
+                     <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-2">Longitude</label>
+                        <input 
+                          type="text" 
+                          value={formData.longitude || ''}
+                          onChange={(e) => setFormData({...formData, longitude: e.target.value})}
+                          placeholder="e.g. 13.40"
+                          className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
+                        />
+                     </div>
+                 </div>
+                 
+                 <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
+                        <Zap size={14} className="text-yellow-500"/> System Capacity (kWp)
+                    </label>
+                    <input 
+                      type="number" step="0.1"
+                      value={formData.systemCapacity || ''}
+                      onChange={(e) => setFormData({...formData, systemCapacity: parseFloat(e.target.value)})}
+                      placeholder="e.g. 10.5"
+                      className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">Required for estimating solar yield forecasts based on weather.</p>
+                 </div>
               </div>
 
               <div className="pt-4 flex justify-end gap-3">
@@ -180,7 +226,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                   className="flex items-center gap-2 px-6 py-2 bg-yellow-500 text-slate-900 font-bold rounded-lg hover:bg-yellow-400 transition"
                 >
                   <Save size={18} />
-                  Save General Settings
+                  Save Settings
                 </button>
               </div>
             </form>

@@ -116,10 +116,12 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
           itemStyle={{ color: '#e2e8f0' }}
           labelFormatter={(label) => new Date(label).toLocaleString()}
           formatter={(value: number, name: string) => {
+              // Round to max 2 decimals
+              const rounded = Math.round(value * 100) / 100;
               if (name === 'Grid') {
-                  return [`${Math.abs(value)} W`, value > 0 ? "Importing" : "Exporting"];
+                  return [`${Math.abs(rounded)} W`, value > 0 ? "Importing" : "Exporting"];
               }
-              return [`${value} W`, name];
+              return [`${rounded} W`, name];
           }}
         />
         

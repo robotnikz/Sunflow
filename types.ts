@@ -18,6 +18,9 @@ export interface SystemConfig {
   inverterIp: string;
   currency: string;
   systemStartDate?: string; // For calculating recurring costs duration
+  latitude?: string;
+  longitude?: string;
+  systemCapacity?: number; // kWp
 }
 
 export type TimeRange = 'hour' | 'day' | 'week' | 'month' | 'year' | 'custom';

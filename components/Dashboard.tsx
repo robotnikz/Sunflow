@@ -9,6 +9,7 @@ import EnergyDonut from './EnergyDonut';
 import BatteryWidget from './BatteryWidget';
 import StatusTimeline from './StatusTimeline'; 
 import AmortizationWidget from './AmortizationWidget';
+import WeatherWidget from './WeatherWidget';
 import { getHistory, getRoiData } from '../services/api';
 import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp } from 'lucide-react';
 
@@ -35,7 +36,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
     return () => clearInterval(interval);
   }, [timeRange, startDate, endDate]); 
 
-  // Fetch ROI data separately (it might change less frequently but good to have)
+  // Fetch ROI data separately
   useEffect(() => {
     const fetchRoi = async () => {
         try {
@@ -44,7 +45,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
         } catch(e) { console.error("ROI Fetch Error", e); }
     };
     fetchRoi();
-    // Fetch ROI on load and then less frequently could be an option, but sticking to effect here is fine.
   }, []);
 
   const fetchHistory = async () => {
@@ -102,8 +102,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
 
       {/* --- ROW 1: Realtime Power Flow & Status --- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Power Flow Diagram */}
-        <div className="lg:col-span-2 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl relative overflow-hidden flex flex-col h-full min-h-[450px]">
+        {/* Left: Power Flow Diagram (Takes 2/3 width) */}
+        <div className="lg:col-span-2 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl relative overflow-hidden flex flex-col h-[460px]">
           <div className="absolute top-6 left-6 flex items-center gap-2 text-slate-300 font-semibold z-10">
              <div className="p-1.5 bg-slate-700/50 rounded-lg backdrop-blur">
                 <Zap className="text-yellow-500" size={18} />
@@ -116,41 +116,21 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
           </div>
         </div>
 
-        {/* Right: Realtime Stats Column */}
-        <div className="flex flex-col gap-4">
-          <BatteryWidget 
-            soc={data.battery.soc}
-            power={data.power.battery}
-            state={data.battery.state}
-          />
-          
-          {/* Realtime Efficiency Donuts */}
-          <div className="grid grid-cols-2 gap-4">
-              <div className="bg-slate-800 rounded-2xl p-2 border border-slate-700 shadow-lg h-36">
-                  <EnergyDonut 
-                      percentage={data.autonomy} 
-                      label="Autonomy" 
-                      color="#3b82f6" 
-                      small
-                  />
-              </div>
-              <div className="bg-slate-800 rounded-2xl p-2 border border-slate-700 shadow-lg h-36">
-                  <EnergyDonut 
-                      percentage={data.selfConsumption} 
-                      label="Self Cons." 
-                      color="#22c55e" 
-                      small
-                  />
-              </div>
+        {/* Right: Widgets Column (Takes 1/3 width) */}
+        <div className="flex flex-col gap-6 h-[460px]">
+          {/* Battery Widget (Takes approx half height) */}
+          <div className="flex-1 min-h-0">
+             <BatteryWidget 
+                soc={data.battery.soc}
+                power={data.power.battery}
+                state={data.battery.state}
+             />
           </div>
-
-          <StatsCard 
-            title="PV Power" 
-            value={`${(data.power.pv / 1000).toFixed(2)} kW`} 
-            subValue="Current Output"
-            icon={<Sun className="text-yellow-400" size={24} />}
-            highlight
-          />
+          
+          {/* Weather Widget (Takes remaining height) */}
+          <div className="flex-1 min-h-0">
+             <WeatherWidget config={config} />
+          </div>
         </div>
       </div>
 
@@ -211,7 +191,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
         )}
       </div>
 
-      {/* --- ROW 4: Historical Data & Donuts --- */}
+      {/* --- ROW 4: Historical Data & Analysis --- */}
       {history && !loadingHist ? (
         <div className="animate-fade-in space-y-6">
             
@@ -246,10 +226,30 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
                         </div>
                     </div>
 
-                    {/* NEW: ROI / AMORTIZATION WIDGET */}
+                    {/* ROI Widget */}
                     <AmortizationWidget roiData={roiData} currency={config.currency} />
 
-                    {/* Environment & Peaks (New Feature) */}
+                    {/* Efficiency Donuts (Moved here) */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-slate-800 rounded-2xl p-2 border border-slate-700 shadow-lg h-36">
+                            <EnergyDonut 
+                                percentage={data.autonomy} 
+                                label="Autonomy" 
+                                color="#3b82f6" 
+                                small
+                            />
+                        </div>
+                        <div className="bg-slate-800 rounded-2xl p-2 border border-slate-700 shadow-lg h-36">
+                            <EnergyDonut 
+                                percentage={data.selfConsumption} 
+                                label="Self Cons." 
+                                color="#22c55e" 
+                                small
+                            />
+                        </div>
+                    </div>
+
+                    {/* Environment & Peaks */}
                     <div className="grid grid-cols-2 gap-4">
                         <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-lg">
                             <div className="flex items-center gap-2 mb-2 text-emerald-400">
