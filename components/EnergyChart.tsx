@@ -1,13 +1,12 @@
 import React from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from 'recharts';
 
 interface EnergyChartProps {
   history: Array<{
     timestamp: string;
     production: number;
     consumption: number;
-    soc: number;
-    grid?: number; // Optional as old data might miss it temporarily before reload
+    grid?: number;
   }>;
 }
 
@@ -34,11 +33,10 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
     rawTime: h.timestamp,
     Production: h.production,
     Consumption: h.consumption,
-    SOC: h.soc,
     Grid: h.grid || 0
   }));
 
-  // Calculate gradient offset for Grid (Split between positive/Red and negative/Green)
+  // Calculate gradient offset for Grid
   const gridMax = Math.max(...data.map((i) => i.Grid));
   const gridMin = Math.min(...data.map((i) => i.Grid));
   
@@ -46,6 +44,35 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
   if (gridMax <= 0) gridOff = 0;
   else if (gridMin >= 0) gridOff = 1;
   else gridOff = gridMax / (gridMax - gridMin);
+
+  // Custom Legend to allow colored text
+  const renderLegend = (props: any) => {
+    const { payload } = props;
+    
+    return (
+      <div className="flex flex-wrap justify-center gap-6 mt-4 select-none">
+        {payload.map((entry: any, index: number) => {
+          let textColorClass = "text-slate-400";
+          if (entry.value === 'Production') textColorClass = "text-yellow-400";
+          if (entry.value === 'Consumption') textColorClass = "text-blue-400";
+          
+          const isGrid = entry.value === 'Grid';
+
+          return (
+            <div key={`item-${index}`} className="flex items-center gap-2">
+              <div 
+                style={{ backgroundColor: entry.color }} 
+                className={`w-3 h-3 rounded-full ${isGrid ? 'bg-gradient-to-r from-red-500 to-green-500' : ''}`}
+              />
+              <span className={`text-sm font-bold ${textColorClass} ${isGrid ? 'bg-clip-text text-transparent bg-gradient-to-r from-red-400 to-green-400' : ''}`}>
+                {isGrid ? 'Grid Power' : entry.value}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -59,8 +86,6 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
             <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8}/>
             <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
           </linearGradient>
-          
-          {/* Split Gradient for Grid: Top (Positive/Import) is Red, Bottom (Negative/Export) is Green */}
           <linearGradient id="colorGrid" x1="0" y1="0" x2="0" y2="1">
             <stop offset={gridOff} stopColor="#EF4444" stopOpacity={0.8} />
             <stop offset={gridOff} stopColor="#10B981" stopOpacity={0.8} />
@@ -86,44 +111,25 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
           label={{ value: 'Watts', angle: -90, position: 'insideLeft', fill: '#64748b' }} 
         />
         
-        <YAxis 
-          yAxisId="right"
-          orientation="right" 
-          stroke="#a855f7" 
-          fontSize={11} 
-          tickLine={false} 
-          domain={[0, 100]}
-          unit="%"
-        />
-        
         <Tooltip 
           contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#e2e8f0', borderRadius: '8px' }}
           itemStyle={{ color: '#e2e8f0' }}
           labelFormatter={(label) => new Date(label).toLocaleString()}
           formatter={(value: number, name: string) => {
               if (name === 'Grid') {
-                  return [`${Math.abs(value)} W`, value > 0 ? "Grid Import" : "Grid Export"];
+                  return [`${Math.abs(value)} W`, value > 0 ? "Importing" : "Exporting"];
               }
-              return [`${value} ${name === 'SOC' ? '%' : 'W'}`, name];
+              return [`${value} W`, name];
           }}
         />
         
-        <Legend 
-          verticalAlign="bottom" 
-          height={36} 
-          wrapperStyle={{ paddingTop: '20px' }}
-          iconType="circle"
-        />
+        <Legend content={renderLegend} />
         
         <ReferenceLine y={0} stroke="#475569" strokeDasharray="3 3" />
 
         <Area type="monotone" dataKey="Production" stroke="#EAB308" fillOpacity={1} fill="url(#colorProd)" dot={false} activeDot={{ r: 5 }} />
         <Area type="monotone" dataKey="Consumption" stroke="#3B82F6" fillOpacity={1} fill="url(#colorCons)" dot={false} activeDot={{ r: 5 }} />
-        
-        {/* Grid Area with Split Colors */}
         <Area type="monotone" dataKey="Grid" stroke="url(#colorGrid)" fillOpacity={1} fill="url(#colorGrid)" dot={false} activeDot={{ r: 5 }} />
-        
-        <Area yAxisId="right" type="monotone" dataKey="SOC" stroke="#a855f7" fill="none" strokeWidth={2} dot={false} activeDot={{ r: 5 }} />
       </AreaChart>
     </ResponsiveContainer>
   );

@@ -51,7 +51,9 @@ export interface HistoryData {
     production: number;
     consumption: number;
     soc: number;
-    grid: number;   // New field: Positive = Import, Negative = Export
+    grid: number;   // Positive = Import, Negative = Export
+    autonomy: number; // %
+    selfConsumption: number; // %
     status: number; // 0=Offline, 1=Running, 2=Error
   }>;
   stats: EnergyStats;

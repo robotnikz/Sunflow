@@ -240,41 +240,29 @@ const getTariffForTime = (tariffs, timestamp) => {
 // History Endpoint
 app.get('/api/history', (req, res) => {
     const range = req.query.range || 'day'; 
-    const startDate = req.query.start; // YYYY-MM-DD
-    const endDate = req.query.end;     // YYYY-MM-DD
+    const startDate = req.query.start; 
+    const endDate = req.query.end;     
     
     let queryTimeClause = "";
     let groupBy = 1; 
 
     // Dynamic Grouping Logic
-    // If we request a huge timeframe (e.g. 6 months), we cannot return minute-by-minute data (too slow/heavy).
-    // We must group data (downsampling).
-    
     if (range === 'custom' && startDate && endDate) {
-        // Construct full timestamp strings for SQLite comparison
         const startTs = `${startDate} 00:00:00`;
         const endTs = `${endDate} 23:59:59`;
         queryTimeClause = `timestamp BETWEEN '${startTs}' AND '${endTs}'`;
 
-        // Calculate difference in days to determine grouping
         const d1 = new Date(startDate);
         const d2 = new Date(endDate);
         const diffTime = Math.abs(d2 - d1);
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-        if (diffDays <= 1) {
-            groupBy = 1; // Every minute
-        } else if (diffDays <= 7) {
-            groupBy = 15; // Every 15 mins
-        } else if (diffDays <= 30) {
-            groupBy = 60; // Every hour
-        } else if (diffDays <= 90) {
-            groupBy = 120; // Every 2 hours
-        } else {
-            groupBy = 1440; // Daily averages (1440 mins)
-        }
+        if (diffDays <= 1) groupBy = 1; 
+        else if (diffDays <= 7) groupBy = 15;
+        else if (diffDays <= 30) groupBy = 60; 
+        else if (diffDays <= 90) groupBy = 120; 
+        else groupBy = 1440; 
     } else {
-        // Standard presets
         switch(range) {
             case 'hour': 
                 queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of day', '+' || strftime('%H', 'now', 'localtime') || ' hours')"; 
@@ -284,15 +272,15 @@ app.get('/api/history', (req, res) => {
                 break;
             case 'week': 
                 queryTimeClause = "timestamp >= datetime('now', 'localtime', '-6 days')"; 
-                groupBy = 12; // ~12 mins
+                groupBy = 12; 
                 break;
             case 'month': 
                 queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of month')"; 
-                groupBy = 60; // 1 Hour
+                groupBy = 60; 
                 break;
             case 'year': 
                 queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of year')"; 
-                groupBy = 1440; // 1 Day
+                groupBy = 1440; 
                 break;
             default: 
                 queryTimeClause = "timestamp >= datetime('now', 'localtime', '-24 hours')";
@@ -320,7 +308,7 @@ app.get('/api/history', (req, res) => {
         db.all(query, [], (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
 
-            const sampleDurationHours = 1 / 60; // Base data is always 1 minute intervals
+            const sampleDurationHours = 1 / 60; 
 
             let stats = {
                 production: 0, consumption: 0, imported: 0, exported: 0,
@@ -328,7 +316,7 @@ app.get('/api/history', (req, res) => {
                 autonomy: 0, selfConsumption: 0, costSaved: 0, earnings: 0
             };
 
-            // Calculate totals using ALL rows (high precision for stats)
+            // Calculate totals using ALL rows
             rows.forEach(r => {
                 const tariff = getTariffForTime(tariffs, r.timestamp);
                 const prod = (r.power_pv || 0) * sampleDurationHours / 1000;
@@ -356,31 +344,67 @@ app.get('/api/history', (req, res) => {
             stats.autonomy = stats.consumption > 0 ? (totalSelfPowered / stats.consumption) * 100 : 0;
             stats.selfConsumption = stats.production > 0 ? (totalSelfPowered / stats.production) * 100 : 0;
 
-            // Generate Chart Data (Downsampling)
+            // Generate Chart Data
             const chartData = [];
             
-            // Simple Downsampling: Just pick the Nth row
-            // Ideally, we would average the values between i and i+groupBy, 
-            // but picking Nth row is faster and usually sufficient for trends.
             for (let i = 0; i < rows.length; i += groupBy) {
+                // Calculate Autonomy/Self Consumption for this specific point
+                const row = rows[i];
+                const pProd = row.power_pv || 0;
+                const pCons = row.power_load || 0;
+                const pGrid = row.power_grid || 0; // +Import, -Export
+                
+                let pImp = 0;
+                if (pGrid > 0) pImp = pGrid;
+                
+                let pExp = 0;
+                if (pGrid < 0) pExp = Math.abs(pGrid);
+
+                let pointAutonomy = 0;
+                if (pCons > 0) {
+                    // Autonomy = (Consumption - Import) / Consumption
+                    pointAutonomy = ((pCons - pImp) / pCons) * 100;
+                    if (pointAutonomy < 0) pointAutonomy = 0; 
+                }
+
+                let pointSelfCon = 0;
+                if (pProd > 0) {
+                    // SelfCons = (Production - Export) / Production
+                    pointSelfCon = ((pProd - pExp) / pProd) * 100;
+                }
+
                 chartData.push({
-                    timestamp: rows[i].timestamp,
-                    production: rows[i].power_pv,
-                    consumption: rows[i].power_load,
-                    soc: rows[i].soc,
-                    grid: rows[i].power_grid, // Add Grid Power to chart data
-                    status: rows[i].status_code !== undefined ? rows[i].status_code : 1 
+                    timestamp: row.timestamp,
+                    production: row.power_pv,
+                    consumption: row.power_load,
+                    soc: row.soc,
+                    grid: row.power_grid, 
+                    autonomy: Math.round(pointAutonomy),
+                    selfConsumption: Math.round(pointSelfCon),
+                    status: row.status_code !== undefined ? row.status_code : 1 
                 });
             }
-            // Ensure the very last point is included if missed by loop
-            if (rows.length > 0 && chartData[chartData.length-1].timestamp !== rows[rows.length-1].timestamp) {
+
+            // Ensure last point
+            if (rows.length > 0 && chartData.length > 0 && chartData[chartData.length-1].timestamp !== rows[rows.length-1].timestamp) {
                 const last = rows[rows.length-1];
+                // Recalc for last point
+                const pProd = last.power_pv || 0;
+                const pCons = last.power_load || 0;
+                const pGrid = last.power_grid || 0;
+                let pImp = pGrid > 0 ? pGrid : 0;
+                let pExp = pGrid < 0 ? Math.abs(pGrid) : 0;
+                let aut = (pCons > 0) ? ((pCons - pImp)/pCons)*100 : 0;
+                let self = (pProd > 0) ? ((pProd - pExp)/pProd)*100 : 0;
+
                 chartData.push({
                     timestamp: last.timestamp,
                     production: last.power_pv,
                     consumption: last.power_load,
                     soc: last.soc,
                     grid: last.power_grid,
+                    autonomy: Math.round(Math.max(0, aut)),
+                    selfConsumption: Math.round(Math.max(0, self)),
                     status: last.status_code !== undefined ? last.status_code : 1
                 });
             }

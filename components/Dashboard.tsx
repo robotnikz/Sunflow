@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { InverterData, SystemConfig, TimeRange, HistoryData } from '../types';
 import PowerFlow from './PowerFlow';
 import EnergyChart from './EnergyChart';
+import BatteryChart from './BatteryChart';
+import EfficiencyChart from './EfficiencyChart';
 import StatsCard from './StatsCard';
 import EnergyDonut from './EnergyDonut';
 import BatteryWidget from './BatteryWidget';
 import StatusTimeline from './StatusTimeline'; 
 import { getHistory } from '../services/api';
-import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight } from 'lucide-react';
+import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3 } from 'lucide-react';
 
 interface DashboardProps {
   data: InverterData | null;
@@ -26,13 +28,12 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
 
   useEffect(() => {
     fetchHistory();
-    // Refresh history every 60s to keep it somewhat fresh, but less frequent for heavy queries
+    // Refresh history every 60s
     const interval = setInterval(fetchHistory, 60000); 
     return () => clearInterval(interval);
   }, [timeRange, startDate, endDate]); 
 
   const fetchHistory = async () => {
-    // If custom is selected but dates are invalid/empty, don't fetch
     if (timeRange === 'custom' && (!startDate || !endDate)) return;
 
     setLoadingHist(true);
@@ -150,7 +151,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
         <div className="animate-fade-in space-y-6">
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Financials & Meters Grid */}
+                {/* Left Column: Financials & Meters */}
                 <div className="lg:col-span-1 space-y-6">
                     <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
                         <h3 className="text-slate-400 text-sm font-medium mb-4 flex items-center gap-2">
@@ -198,30 +199,50 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
                             </div>
                         </div>
                     </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg">
+                            <EnergyDonut 
+                                percentage={history.stats.autonomy} 
+                                label="Autonomy" 
+                                color="#3b82f6" 
+                            />
+                        </div>
+                        <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg">
+                            <EnergyDonut 
+                                percentage={history.stats.selfConsumption} 
+                                label="Self Cons." 
+                                color="#22c55e" 
+                            />
+                        </div>
+                    </div>
                 </div>
 
-                {/* Donuts & Charts */}
-                <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg">
-                        <EnergyDonut 
-                            percentage={history.stats.autonomy} 
-                            label="Autonomy" 
-                            subLabel="Self-powered vs. Grid"
-                            color="#3b82f6" 
-                        />
-                    </div>
-                    <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg">
-                        <EnergyDonut 
-                            percentage={history.stats.selfConsumption} 
-                            label="Self Consumption" 
-                            subLabel="Consumed vs. Exported"
-                            color="#22c55e" 
-                        />
-                    </div>
+                {/* Right Column: Charts */}
+                <div className="lg:col-span-2 flex flex-col gap-6">
                     
-                    <div className="md:col-span-2 bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[400px]">
-                        <h3 className="text-slate-400 text-sm font-medium mb-4">Power History</h3>
+                    {/* Main Power Chart */}
+                    <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[400px]">
+                        <h3 className="text-slate-400 text-sm font-medium mb-4 flex items-center gap-2">
+                             <Zap size={16}/> Power History
+                        </h3>
                         <EnergyChart history={history.chart} />
+                    </div>
+
+                    {/* Battery SOC Chart */}
+                    <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[250px]">
+                        <h3 className="text-slate-400 text-sm font-medium mb-4 flex items-center gap-2">
+                            <Battery size={16}/> Battery State of Charge
+                        </h3>
+                        <BatteryChart history={history.chart} />
+                    </div>
+
+                    {/* Efficiency Chart */}
+                    <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[250px]">
+                        <h3 className="text-slate-400 text-sm font-medium mb-4 flex items-center gap-2">
+                            <BarChart3 size={16}/> Efficiency (Autonomy & Self-Consumption)
+                        </h3>
+                        <EfficiencyChart history={history.chart} />
                     </div>
                 </div>
             </div>
