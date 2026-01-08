@@ -62,7 +62,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
       {/* --- ROW 1: Realtime Power Flow & Status --- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Power Flow Diagram */}
-        <div className="lg:col-span-2 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl relative overflow-hidden flex flex-col h-[450px]">
+        <div className="lg:col-span-2 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl relative overflow-hidden flex flex-col h-full min-h-[450px]">
           <div className="absolute top-4 left-6 flex items-center gap-2 text-slate-300 font-semibold z-10">
              <Zap className="text-yellow-500" size={20} />
              Live Power Flow
