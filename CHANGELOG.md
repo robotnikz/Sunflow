@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/robotnikz/Sunflow/compare/v1.0.1...v1.0.2) (2026-01-08)
+
+
+### Bug Fixes
+
+* fixed bugged hindering container to start ([5cdb37e](https://github.com/robotnikz/Sunflow/commit/5cdb37e1b7ca6790e8ed9ab827ae5e024b665e1e))
+
 ## [1.0.1](https://github.com/robotnikz/Sunflow/compare/v1.0.0...v1.0.1) (2026-01-08)
 
 
