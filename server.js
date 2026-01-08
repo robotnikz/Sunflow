@@ -8,12 +8,21 @@
  * 4. Serve aggregated API to the Frontend.
  */
 
-const express = require('express');
+import express from 'express';
+import { createRequire } from 'module';
+import axios from 'axios';
+import cors from 'cors';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+// Create require for CommonJS modules (sqlite3 compatibility)
+const require = createRequire(import.meta.url);
 const sqlite3 = require('sqlite3').verbose();
-const axios = require('axios');
-const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
+
+// Replicate __dirname functionality in ES Modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3000;
@@ -174,5 +183,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`SolarSense Backend running on http://localhost:${PORT}`);
+    console.log(`SunFlow Backend running on http://localhost:${PORT}`);
 });
