@@ -1,5 +1,5 @@
 {
-  "name": "SolarSense Dashboard",
+  "name": "SunFlow Dashboard",
   "description": "A comprehensive monitoring solution for Fronius Gen24 inverters featuring real-time power flow, historical analysis, and financial tracking using a persistent SQLite database.",
   "requestFramePermissions": []
 }

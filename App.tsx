@@ -84,7 +84,7 @@ const App: React.FC = () => {
                 <Sun size={24} strokeWidth={2.5} />
               </div>
               <div>
-                <h1 className="text-xl font-bold tracking-tight">SolarSense</h1>
+                <h1 className="text-xl font-bold tracking-tight">SunFlow</h1>
                 <div className="flex items-center gap-2 text-xs text-slate-400">
                   <span className={`inline-block w-2 h-2 rounded-full ${error ? 'bg-red-500' : 'bg-green-500'}`}></span>
                   {error ? 'System Offline' : 'System Operational'}
