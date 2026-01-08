@@ -5,33 +5,51 @@ export interface SystemConfig {
   currency: string;
 }
 
-// Data structure returned by our Backend API which aggregates Fronius data
+export type TimeRange = 'day' | 'week' | 'month' | 'year';
+
+export interface EnergyStats {
+  production: number;    // kWh
+  consumption: number;   // kWh
+  imported: number;      // kWh
+  exported: number;      // kWh
+  batteryCharged: number; // kWh
+  batteryDischarged: number; // kWh
+  autonomy: number;      // %
+  selfConsumption: number; // %
+  costSaved: number;     // Currency
+  earnings: number;      // Currency
+}
+
 export interface InverterData {
   power: {
-    pv: number;      // Watts produced by Solar
-    load: number;    // Watts consumed by House (always positive in this app)
-    grid: number;    // Watts (+ = import, - = export)
-    battery: number; // Watts (+ = charge, - = discharge)
+    pv: number;
+    load: number;
+    grid: number;
+    battery: number;
   };
   battery: {
-    soc: number;     // State of charge %
+    soc: number;
     state: 'charging' | 'discharging' | 'idle';
   };
   energy: {
     today: {
-      production: number; // kWh
-      consumption: number; // kWh
+      production: number;
+      consumption: number;
     };
   };
-  history: Array<{
+}
+
+export interface HistoryData {
+  chart: Array<{
     timestamp: string;
     production: number;
     consumption: number;
     soc: number;
   }>;
+  stats: EnergyStats;
 }
 
-// Simplified version of Fronius API JSON response for internal mapping
+// Simplified version of Fronius API JSON response
 export interface FroniusRealtimeResponse {
   Body: {
     Data: {
@@ -42,6 +60,9 @@ export interface FroniusRealtimeResponse {
         P_PV: number | null;
         rel_SelfConsumption: number | null;
         rel_Autonomy: number | null;
+        E_Day?: number;
+        E_Year?: number;
+        E_Total?: number;
       };
       Inverters: {
         [key: string]: {

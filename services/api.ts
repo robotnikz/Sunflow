@@ -1,12 +1,16 @@
-import { InverterData, SystemConfig } from '../types';
+import { InverterData, SystemConfig, HistoryData, TimeRange } from '../types';
 
-// Use relative paths so calls go through Vite proxy in dev 
-// or directly to same origin in prod.
 const API_BASE = ''; 
 
 export const getRealtimeData = async (): Promise<InverterData> => {
   const res = await fetch(`${API_BASE}/api/data`);
   if (!res.ok) throw new Error("API call failed");
+  return res.json();
+};
+
+export const getHistory = async (range: TimeRange): Promise<HistoryData> => {
+  const res = await fetch(`${API_BASE}/api/history?range=${range}`);
+  if (!res.ok) throw new Error("History call failed");
   return res.json();
 };
 
