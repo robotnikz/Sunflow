@@ -301,8 +301,10 @@ app.get('/api/roi', (req, res) => {
                 feedInTariff: t.feed_in_tariff
             }));
 
-            // Calculate Total Invested
+            // Calculate Total Invested and Total Recurring Yearly Costs
             let totalInvested = 0;
+            let totalYearlyRecurringCost = 0;
+
             const now = new Date();
             // const systemStart = new Date(config.systemStartDate || '2000-01-01');
             
@@ -310,7 +312,10 @@ app.get('/api/roi', (req, res) => {
                 if (exp.type === 'one_time') {
                     totalInvested += exp.amount;
                 } else if (exp.type === 'yearly') {
-                    // Calculate years since expense date or system start
+                    // Accumulate base yearly cost for future forecast
+                    totalYearlyRecurringCost += exp.amount;
+
+                    // Calculate years since expense date or system start for PAST/CURRENT totals
                     const expDate = new Date(exp.date);
                     const diffTime = Math.abs(now.getTime() - expDate.getTime());
                     const diffYears = diffTime / (1000 * 60 * 60 * 24 * 365.25);
@@ -367,36 +372,39 @@ app.get('/api/roi', (req, res) => {
                 const roiPercent = totalInvested > 0 ? (totalReturned / totalInvested) * 100 : 0;
 
                 if (netValue < 0) {
-                    let dailyReturn = 0;
+                    let grossDailyReturn = 0;
                     const systemStart = config.systemStartDate ? new Date(config.systemStartDate) : null;
                     
+                    // 1. Calculate Gross Daily Income (Revenue)
                     // Priority: Use Total Lifecycle Average if System Start Date is available
-                    // Formula: (Historical $ + App-Tracked $) / Days since System Commissioning
                     if (systemStart && systemStart < now) {
                         const lifeTimeMs = now.getTime() - systemStart.getTime();
                         const lifeTimeDays = lifeTimeMs / (1000 * 60 * 60 * 24);
-                        
-                        // Prevent division by tiny numbers just in case
                         if (lifeTimeDays > 1) {
-                            dailyReturn = totalReturned / lifeTimeDays;
+                            grossDailyReturn = totalReturned / lifeTimeDays;
                         }
                     }
 
                     // Fallback: If no start date or calculation failed, use DB-only short-term average
-                    if (dailyReturn === 0) {
+                    if (grossDailyReturn === 0) {
                         let durationDays = 1;
                         if (oldestInWindow) {
                             const diffTime = Math.abs(now.getTime() - oldestInWindow.getTime());
                             durationDays = diffTime / (1000 * 60 * 60 * 24);
                         }
                         const effectiveDays = Math.min(90, Math.max(0.1, durationDays));
-                        dailyReturn = returnLast90Days / effectiveDays;
+                        grossDailyReturn = returnLast90Days / effectiveDays;
                     }
 
+                    // 2. Calculate Effective Net Daily Profit
+                    // Subtract future daily recurring costs from future daily revenue
+                    const dailyRecurringCost = totalYearlyRecurringCost / 365.25;
+                    const netDailyProfit = grossDailyReturn - dailyRecurringCost;
+
                     // Calculate Forecast Date
-                    if (dailyReturn > 0.001) {
+                    if (netDailyProfit > 0.001) {
                         const remaining = Math.abs(netValue);
-                        const daysLeft = remaining / dailyReturn;
+                        const daysLeft = remaining / netDailyProfit;
                         const date = new Date();
                         date.setDate(date.getDate() + daysLeft);
                         
