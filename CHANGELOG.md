@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/robotnikz/Sunflow/compare/v1.0.0...v1.0.1) (2026-01-08)
+
+
+### Bug Fixes
+
+* fixed a bug where tarrifs could not be deleted ([e9451ca](https://github.com/robotnikz/Sunflow/commit/e9451ca4689b83611e692118a8f74a1df727cee6))
+
 # 1.0.0 (2026-01-08)
 
 
