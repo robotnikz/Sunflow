@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { InverterData, SystemConfig, TimeRange, HistoryData } from '../types';
+import { InverterData, SystemConfig, TimeRange, HistoryData, RoiData } from '../types';
 import PowerFlow from './PowerFlow';
 import EnergyChart from './EnergyChart';
 import BatteryChart from './BatteryChart';
@@ -8,7 +8,8 @@ import StatsCard from './StatsCard';
 import EnergyDonut from './EnergyDonut';
 import BatteryWidget from './BatteryWidget';
 import StatusTimeline from './StatusTimeline'; 
-import { getHistory } from '../services/api';
+import AmortizationWidget from './AmortizationWidget';
+import { getHistory, getRoiData } from '../services/api';
 import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp } from 'lucide-react';
 
 interface DashboardProps {
@@ -20,6 +21,7 @@ interface DashboardProps {
 const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
   const [timeRange, setTimeRange] = useState<TimeRange>('day');
   const [history, setHistory] = useState<HistoryData | null>(null);
+  const [roiData, setRoiData] = useState<RoiData | null>(null);
   const [loadingHist, setLoadingHist] = useState(false);
   
   // Custom Date Range State
@@ -32,6 +34,18 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
     const interval = setInterval(fetchHistory, 60000); 
     return () => clearInterval(interval);
   }, [timeRange, startDate, endDate]); 
+
+  // Fetch ROI data separately (it might change less frequently but good to have)
+  useEffect(() => {
+    const fetchRoi = async () => {
+        try {
+            const rData = await getRoiData();
+            setRoiData(rData);
+        } catch(e) { console.error("ROI Fetch Error", e); }
+    };
+    fetchRoi();
+    // Fetch ROI on load and then less frequently could be an option, but sticking to effect here is fine.
+  }, []);
 
   const fetchHistory = async () => {
     if (timeRange === 'custom' && (!startDate || !endDate)) return;
@@ -209,7 +223,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
                     <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/5 blur-[50px] rounded-full pointer-events-none"></div>
                         <h3 className="text-slate-400 text-sm font-medium mb-6 flex items-center gap-2">
-                            <PiggyBank size={16} className="text-green-400"/> Financial Impact
+                            <PiggyBank size={16} className="text-green-400"/> Financial Impact ({timeRange})
                         </h3>
                         <div className="flex flex-col gap-6 relative z-10">
                             <div>
@@ -231,6 +245,9 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
                             </div>
                         </div>
                     </div>
+
+                    {/* NEW: ROI / AMORTIZATION WIDGET */}
+                    <AmortizationWidget roiData={roiData} currency={config.currency} />
 
                     {/* Environment & Peaks (New Feature) */}
                     <div className="grid grid-cols-2 gap-4">

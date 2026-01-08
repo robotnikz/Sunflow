@@ -146,7 +146,7 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
 
       {/* BATTERY NODE (Left) */}
       <div className="absolute left-[2%] top-1/2 -translate-y-1/2 flex flex-col items-center gap-3 w-[120px]">
-        {/* REMOVED SOC BADGE HERE */}
+        {/* REMOVED SOC BADGE HERE - CLEANER LOOK */}
         <div className={`p-4 rounded-full bg-slate-800/80 backdrop-blur border ${isDischarging ? 'border-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.3)]' : 'border-slate-600'} transition-all duration-300 hover:scale-110`}>
              <Battery className="text-purple-500" size={36} />
         </div>

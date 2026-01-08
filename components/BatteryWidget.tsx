@@ -3,11 +3,11 @@ import { BatteryCharging, Zap } from 'lucide-react';
 
 interface BatteryWidgetProps {
   soc: number;
-  power: number; // Positive = Charging, Negative = Discharging
+  power: number; // Used for status calculation only now
   state: 'charging' | 'discharging' | 'idle';
 }
 
-const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state }) => {
+const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, state }) => {
   // Determine Color based on SOC
   const getColor = () => {
     if (soc <= 20) return 'from-red-500 to-red-600';
@@ -22,39 +22,34 @@ const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state }) => {
   };
 
   const isCharging = state === 'charging';
-  const isDischarging = state === 'discharging';
 
   return (
-    <div className={`relative overflow-hidden bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-xl transition-all duration-500 ${isCharging ? 'border-emerald-500/30' : ''}`}>
+    <div className={`relative overflow-hidden bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-xl transition-all duration-500 flex flex-col items-center justify-center min-h-[220px]`}>
         
         {/* Background Glow Effect */}
         <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${getColor()} opacity-10 blur-[50px] rounded-full pointer-events-none`}></div>
 
-        <div className="flex justify-between items-start mb-4 relative z-10">
-            <h3 className="text-slate-400 text-sm font-medium">Energy Storage</h3>
-            <div className="flex gap-2">
-                {isCharging && <BatteryCharging className="text-emerald-400 animate-pulse" size={20} />}
-                {isDischarging && <Zap className="text-amber-400" size={20} />}
-            </div>
-        </div>
+        <h3 className="text-slate-400 text-sm font-medium absolute top-4 left-4 flex items-center gap-2">
+            Energy Storage
+        </h3>
 
         {/* Main Centered Content */}
-        <div className="flex flex-col items-center justify-center gap-3 relative z-10">
+        <div className="flex flex-col items-center justify-center gap-2 relative z-10 mt-4">
             
             {/* The Visual Battery Container */}
-            <div className="relative">
+            <div className="relative transform scale-110">
                 {/* Battery Cap */}
-                <div className="w-10 h-3 bg-slate-600 mx-auto rounded-t-sm mb-[1px]"></div>
+                <div className="w-12 h-4 bg-slate-600 mx-auto rounded-t-sm mb-[1px]"></div>
                 
                 {/* Battery Body */}
-                <div className="w-24 h-36 bg-slate-900 border-4 border-slate-600 rounded-2xl relative p-1 shadow-inner">
+                <div className="w-28 h-40 bg-slate-900 border-[5px] border-slate-600 rounded-2xl relative p-1 shadow-inner overflow-hidden">
                     
                     {/* Grid Pattern Background inside Battery */}
                     <div className="absolute inset-0 opacity-20 bg-[linear-gradient(rgba(255,255,255,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[size:10px_10px]"></div>
 
                     {/* The Liquid Fill */}
                     <div 
-                        className={`absolute bottom-1 left-1 right-1 rounded-xl bg-gradient-to-t ${getColor()} transition-all duration-1000 ease-out shadow-[0_0_15px_rgba(0,0,0,0.5)] ${getShadowColor()}`}
+                        className={`absolute bottom-1 left-1 right-1 rounded-lg bg-gradient-to-t ${getColor()} transition-all duration-1000 ease-out shadow-[0_0_15px_rgba(0,0,0,0.5)] ${getShadowColor()}`}
                         style={{ height: `${Math.max(soc, 5)}%` }} // Min 5% so we always see a sliver
                     >
                         {/* Shimmer/Reflection effect on the liquid */}
@@ -72,15 +67,16 @@ const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state }) => {
 
                     {/* Percentage Text Overlay centered in Battery */}
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <span className="text-3xl font-bold text-white drop-shadow-md z-20 mix-blend-overlay opacity-90 tracking-tight">{Math.round(soc)}%</span>
+                        <span className="text-4xl font-bold text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] z-20 tracking-tight">{Math.round(soc)}%</span>
                     </div>
                 </div>
             </div>
 
             {/* Status Text below */}
-            <div className="text-center mt-1">
-                 <span className={`text-xs font-bold uppercase tracking-widest ${
-                        isCharging ? 'text-emerald-400' : isDischarging ? 'text-amber-400' : 'text-slate-500'
+            <div className="flex items-center gap-2 mt-2">
+                 {isCharging ? <BatteryCharging size={16} className="text-emerald-400 animate-pulse"/> : <Zap size={16} className="text-slate-500"/>}
+                 <span className={`text-sm font-bold uppercase tracking-widest ${
+                        state === 'charging' ? 'text-emerald-400' : state === 'discharging' ? 'text-amber-400' : 'text-slate-500'
                     }`}>
                         {state === 'idle' ? 'Standby' : state}
                  </span>

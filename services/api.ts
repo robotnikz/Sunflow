@@ -1,4 +1,4 @@
-import { InverterData, SystemConfig, HistoryData, TimeRange, Tariff } from '../types';
+import { InverterData, SystemConfig, HistoryData, TimeRange, Tariff, Expense, RoiData } from '../types';
 
 const API_BASE = ''; 
 
@@ -16,6 +16,12 @@ export const getHistory = async (range: TimeRange, startDate?: string, endDate?:
   
   const res = await fetch(url);
   if (!res.ok) throw new Error("History call failed");
+  return res.json();
+};
+
+export const getRoiData = async (): Promise<RoiData> => {
+  const res = await fetch(`${API_BASE}/api/roi`);
+  if (!res.ok) throw new Error("ROI data call failed");
   return res.json();
 };
 
@@ -56,4 +62,28 @@ export const deleteTariff = async (id: number): Promise<void> => {
     method: 'DELETE'
   });
   if (!res.ok) throw new Error("Failed to delete tariff");
+};
+
+// --- Expenses API ---
+
+export const getExpenses = async (): Promise<Expense[]> => {
+  const res = await fetch(`${API_BASE}/api/expenses`);
+  if (!res.ok) throw new Error("Failed to fetch expenses");
+  return res.json();
+};
+
+export const addExpense = async (expense: Expense): Promise<void> => {
+  const res = await fetch(`${API_BASE}/api/expenses`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(expense)
+  });
+  if (!res.ok) throw new Error("Failed to add expense");
+};
+
+export const deleteExpense = async (id: number): Promise<void> => {
+  const res = await fetch(`${API_BASE}/api/expenses/${id}`, {
+    method: 'DELETE'
+  });
+  if (!res.ok) throw new Error("Failed to delete expense");
 };

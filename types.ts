@@ -6,9 +6,18 @@ export interface Tariff {
   feedInTariff: number;
 }
 
+export interface Expense {
+  id?: number;
+  name: string;
+  amount: number;
+  type: 'one_time' | 'yearly';
+  date: string; // Date incurred or start date for yearly
+}
+
 export interface SystemConfig {
   inverterIp: string;
   currency: string;
+  systemStartDate?: string; // For calculating recurring costs duration
 }
 
 export type TimeRange = 'hour' | 'day' | 'week' | 'month' | 'year' | 'custom';
@@ -59,6 +68,15 @@ export interface HistoryData {
     status: number; // 0=Offline, 1=Running, 2=Error
   }>;
   stats: EnergyStats;
+}
+
+export interface RoiData {
+  totalInvested: number;
+  totalReturned: number;
+  netValue: number;
+  roiPercent: number;
+  breakEvenDate: string | null; // ISO Date or null if calculated in past/infinite
+  expenses: Expense[];
 }
 
 export interface FroniusRealtimeResponse {

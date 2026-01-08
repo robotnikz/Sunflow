@@ -47,9 +47,8 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
             // Migration: Add status_code column if it doesn't exist
             db.run("ALTER TABLE energy_log ADD COLUMN status_code INTEGER DEFAULT 1", (err) => {
                 if (err) {
-                    // Only log if the error is NOT about the column already existing
                     if (!err.message.includes("duplicate column name")) {
-                        console.error("Migration error:", err.message);
+                        console.error("Migration error (status_code):", err.message);
                     }
                 }
             });
@@ -73,6 +72,15 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
                     }
                 });
             });
+
+            // Expenses Table (For ROI)
+            db.run(`CREATE TABLE IF NOT EXISTS expenses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                amount REAL NOT NULL,
+                type TEXT NOT NULL, -- 'one_time' or 'yearly'
+                date DATE NOT NULL
+            )`);
         });
     }
 });
@@ -81,13 +89,14 @@ const getConfig = () => {
     if (fs.existsSync(CONFIG_FILE)) {
         return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
     }
-    return { inverterIp: '', currency: 'EUR' };
+    return { inverterIp: '', currency: 'EUR', systemStartDate: new Date().toISOString().split('T')[0] };
 };
 
 const saveConfig = (cfg) => {
     const diskConfig = {
         inverterIp: cfg.inverterIp,
-        currency: cfg.currency
+        currency: cfg.currency,
+        systemStartDate: cfg.systemStartDate || new Date().toISOString().split('T')[0]
     };
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(diskConfig, null, 2));
 };
@@ -163,6 +172,7 @@ app.post('/api/config', (req, res) => {
     res.json({ success: true });
 });
 
+// TARIFFS
 app.get('/api/tariffs', (req, res) => {
     db.all("SELECT id, valid_from as validFrom, cost_per_kwh as costPerKwh, feed_in_tariff as feedInTariff FROM tariffs ORDER BY valid_from ASC", (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -191,6 +201,33 @@ app.delete('/api/tariffs/:id', (req, res) => {
     });
 });
 
+// EXPENSES
+app.get('/api/expenses', (req, res) => {
+    db.all("SELECT id, name, amount, type, date FROM expenses ORDER BY date ASC", (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+app.post('/api/expenses', (req, res) => {
+    const { name, amount, type, date } = req.body;
+    const stmt = db.prepare("INSERT INTO expenses (name, amount, type, date) VALUES (?, ?, ?, ?)");
+    stmt.run(name, amount, type, date, function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ id: this.lastID, success: true });
+    });
+    stmt.finalize();
+});
+
+app.delete('/api/expenses/:id', (req, res) => {
+    const stmt = db.prepare("DELETE FROM expenses WHERE id = ?");
+    stmt.run(req.params.id, (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true });
+    });
+});
+
+// REALTIME DATA
 app.get('/api/data', async (req, res) => {
     const config = getConfig();
     if (!config.inverterIp) return res.status(500).json({ error: "No Inverter IP" });
@@ -243,7 +280,115 @@ const getTariffForTime = (tariffs, timestamp) => {
     return activeTariff;
 };
 
-// History Endpoint
+// ROI / Amortization Endpoint
+app.get('/api/roi', (req, res) => {
+    const config = getConfig();
+    
+    db.all("SELECT * FROM expenses", [], (err, expenses) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        db.all("SELECT * FROM tariffs ORDER BY valid_from ASC", [], (err, tariffs) => {
+            if (err) return res.status(500).json({ error: err.message });
+            
+            const tariffList = tariffs.map(t => ({
+                validFrom: t.valid_from,
+                costPerKwh: t.cost_per_kwh,
+                feedInTariff: t.feed_in_tariff
+            }));
+
+            // Calculate Total Invested
+            let totalInvested = 0;
+            const now = new Date();
+            const systemStart = new Date(config.systemStartDate || '2000-01-01');
+            
+            expenses.forEach(exp => {
+                if (exp.type === 'one_time') {
+                    totalInvested += exp.amount;
+                } else if (exp.type === 'yearly') {
+                    // Calculate years since expense date or system start
+                    const expDate = new Date(exp.date);
+                    const diffTime = Math.abs(now.getTime() - expDate.getTime());
+                    const diffYears = diffTime / (1000 * 60 * 60 * 24 * 365.25);
+                    totalInvested += exp.amount * diffYears;
+                }
+            });
+
+            // Calculate Total Returns (All Time)
+            // Note: Optimizing this to not process millions of rows on every request in a prod env
+            // would involve a cache or summary table. For home use (<1M rows), this is acceptable.
+            const query = "SELECT timestamp, power_pv, power_load, power_grid FROM energy_log ORDER BY timestamp ASC";
+            
+            db.all(query, [], (err, rows) => {
+                if (err) return res.status(500).json({ error: err.message });
+                
+                let totalReturned = 0;
+                let returnLast90Days = 0;
+                const sampleDurationHours = 1 / 60; // 1 minute
+                const ninetyDaysAgo = new Date();
+                ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+                rows.forEach(r => {
+                    const tsDate = new Date(r.timestamp);
+                    const tariff = getTariffForTime(tariffList, r.timestamp);
+                    
+                    const cons = (r.power_load || 0) * sampleDurationHours / 1000;
+                    let imp = 0;
+                    let exp = 0;
+
+                    if (r.power_grid > 0) imp = (r.power_grid) * sampleDurationHours / 1000;
+                    else exp = Math.abs(r.power_grid) * sampleDurationHours / 1000;
+
+                    const selfPoweredKwh = Math.max(0, cons - imp);
+                    const saved = selfPoweredKwh * tariff.costPerKwh;
+                    const earned = exp * tariff.feedInTariff;
+                    const value = saved + earned;
+
+                    totalReturned += value;
+
+                    if (tsDate >= ninetyDaysAgo) {
+                        returnLast90Days += value;
+                    }
+                });
+
+                // Forecast
+                const netValue = totalReturned - totalInvested;
+                let breakEvenDate = null;
+                const roiPercent = totalInvested > 0 ? (totalReturned / totalInvested) * 100 : 0;
+
+                if (netValue < 0) {
+                    // Estimate future daily return based on last 90 days average
+                    // If system is younger than 90 days, use total average
+                    const systemAgeDays = (now.getTime() - systemStart.getTime()) / (1000 * 3600 * 24);
+                    const daysToAvg = Math.min(90, Math.max(1, systemAgeDays));
+                    
+                    const dailyReturn = returnLast90Days > 0 ? (returnLast90Days / daysToAvg) : (totalReturned / Math.max(1, systemAgeDays));
+                    
+                    if (dailyReturn > 0) {
+                        const remaining = Math.abs(netValue);
+                        const daysLeft = remaining / dailyReturn;
+                        const date = new Date();
+                        date.setDate(date.getDate() + daysLeft);
+                        breakEvenDate = date.toISOString();
+                    }
+                } else {
+                    // Already broke even - simplistic calculation could find exact date in past
+                    // For now, return null to indicate "Done"
+                }
+
+                res.json({
+                    totalInvested,
+                    totalReturned,
+                    netValue,
+                    roiPercent,
+                    breakEvenDate,
+                    expenses
+                });
+            });
+        });
+    });
+});
+
+// HISTORY
 app.get('/api/history', (req, res) => {
     const range = req.query.range || 'day'; 
     const startDate = req.query.start; 
