@@ -5,7 +5,7 @@ import EnergyChart from './EnergyChart';
 import StatsCard from './StatsCard';
 import EnergyDonut from './EnergyDonut';
 import BatteryWidget from './BatteryWidget';
-import StatusTimeline from './StatusTimeline'; // Import new component
+import StatusTimeline from './StatusTimeline'; 
 import { getHistory } from '../services/api';
 import { Sun, Zap, Home, PiggyBank, Calendar } from 'lucide-react';
 
@@ -20,7 +20,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
   const [history, setHistory] = useState<HistoryData | null>(null);
   const [loadingHist, setLoadingHist] = useState(false);
 
-  // Fetch history when range changes or initial load
+  // Auto-Refresh History Interval (every 30 seconds) to ensure continuous feel
   useEffect(() => {
     const fetchHistory = async () => {
       setLoadingHist(true);
@@ -33,8 +33,11 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
         setLoadingHist(false);
       }
     };
+
     fetchHistory();
-  }, [timeRange, data?.energy.today.production]); // Refetch if today's prod changes (polling)
+    const interval = setInterval(fetchHistory, 30000); 
+    return () => clearInterval(interval);
+  }, [timeRange]); 
 
   if (!data) return null;
 
@@ -51,28 +54,23 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
       {/* --- ROW 1: Realtime Power Flow & Status --- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Power Flow Diagram */}
-        <div className="lg:col-span-2 bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-xl relative overflow-hidden">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold text-slate-300 flex items-center gap-2">
-                <Zap className="text-yellow-500" size={20} />
-                Live Power Flow
-            </h2>
+        <div className="lg:col-span-2 bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-xl relative overflow-hidden flex items-center justify-center">
+          <div className="absolute top-4 left-6 flex items-center gap-2 text-slate-300 font-semibold">
+             <Zap className="text-yellow-500" size={20} />
+             Live Power Flow
           </div>
-          <div className="h-[300px] flex items-center justify-center">
+          <div className="w-full">
              <PowerFlow power={data.power} soc={data.battery.soc} />
           </div>
         </div>
 
         {/* Right: Realtime Stats Column */}
         <div className="flex flex-col gap-4">
-          
-          {/* NEW VISUAL BATTERY WIDGET REPLACES STATS CARD */}
           <BatteryWidget 
             soc={data.battery.soc}
             power={data.power.battery}
             state={data.battery.state}
           />
-
           <StatsCard 
             title="PV Power" 
             value={`${(data.power.pv / 1000).toFixed(2)} kW`} 
@@ -80,18 +78,16 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
             icon={<Sun className="text-yellow-400" />}
             highlight
           />
-           <StatsCard 
-            title="Grid Power" 
-            value={`${(Math.abs(data.power.grid) / 1000).toFixed(2)} kW`} 
-            subValue={data.power.grid > 0 ? "Importing" : "Exporting"}
-            icon={<Zap className={data.power.grid > 0 ? "text-red-400" : "text-green-400"} />}
-            valueColor={data.power.grid > 0 ? "text-red-400" : "text-green-400"}
-          />
         </div>
       </div>
 
-      {/* --- ROW 2: Controls for Statistics --- */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-800/50 p-2 rounded-xl border border-slate-700/50">
+      {/* --- ROW 2: STATUS TIMELINE (Moved Up) --- */}
+      <div className="animate-fade-in">
+        <StatusTimeline history={history?.chart || []} />
+      </div>
+
+      {/* --- ROW 3: Controls for Statistics --- */}
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-800/50 p-2 rounded-xl border border-slate-700/50 mt-4">
         <h2 className="text-lg font-semibold text-slate-200 px-2 flex items-center gap-2">
             <Calendar size={18} className="text-blue-400"/>
             Statistics & Savings
@@ -113,17 +109,16 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
         </div>
       </div>
 
-      {/* --- ROW 3: Historical Data & Donuts --- */}
+      {/* --- ROW 4: Historical Data & Donuts --- */}
       {history ? (
         <div className="animate-fade-in space-y-6">
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Left: Financials & Meters Grid */}
+                {/* Financials & Meters Grid */}
                 <div className="lg:col-span-1 space-y-6">
-                    {/* Financial Card */}
                     <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
                         <h3 className="text-slate-400 text-sm font-medium mb-4 flex items-center gap-2">
-                            <PiggyBank size={16} /> Estimated Savings
+                            <PiggyBank size={16} /> Estimated Savings ({timeRange})
                         </h3>
                         <div className="flex flex-col gap-6">
                             <div>
@@ -146,38 +141,37 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
                         </div>
                     </div>
 
-                    {/* Energy Detail Grid */}
                     <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
-                        <h3 className="text-slate-400 text-sm font-medium mb-4">Energy Meters ({timeRange})</h3>
+                        <h3 className="text-slate-400 text-sm font-medium mb-4">Energy Meters</h3>
                         <div className="grid grid-cols-2 gap-y-6 gap-x-4">
                             <div>
                                 <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Sun size={12}/> Solar Yield</div>
-                                <div className="text-xl font-bold text-yellow-400">{history.stats.production.toFixed(1)} <span className="text-xs text-slate-500">kWh</span></div>
+                                <div className="text-xl font-bold text-yellow-400">{history.stats.production.toFixed(2)} <span className="text-xs text-slate-500">kWh</span></div>
                             </div>
                             <div>
                                 <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Home size={12}/> Consumption</div>
-                                <div className="text-xl font-bold text-blue-400">{history.stats.consumption.toFixed(1)} <span className="text-xs text-slate-500">kWh</span></div>
+                                <div className="text-xl font-bold text-blue-400">{history.stats.consumption.toFixed(2)} <span className="text-xs text-slate-500">kWh</span></div>
                             </div>
                             <div>
                                 <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Zap size={12}/> Imported</div>
-                                <div className="text-xl font-bold text-red-400">{history.stats.imported.toFixed(1)} <span className="text-xs text-slate-500">kWh</span></div>
+                                <div className="text-xl font-bold text-red-400">{history.stats.imported.toFixed(2)} <span className="text-xs text-slate-500">kWh</span></div>
                             </div>
                             <div>
                                 <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Zap size={12}/> Exported</div>
-                                <div className="text-xl font-bold text-green-400">{history.stats.exported.toFixed(1)} <span className="text-xs text-slate-500">kWh</span></div>
+                                <div className="text-xl font-bold text-green-400">{history.stats.exported.toFixed(2)} <span className="text-xs text-slate-500">kWh</span></div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Middle: Donuts */}
+                {/* Donuts & Charts */}
                 <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg">
                         <EnergyDonut 
                             percentage={history.stats.autonomy} 
                             label="Autonomy" 
                             subLabel="Self-powered vs. Grid"
-                            color="#3b82f6" // blue
+                            color="#3b82f6" 
                         />
                     </div>
                     <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg">
@@ -185,20 +179,16 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
                             percentage={history.stats.selfConsumption} 
                             label="Self Consumption" 
                             subLabel="Consumed vs. Exported"
-                            color="#22c55e" // green
+                            color="#22c55e" 
                         />
                     </div>
                     
-                    {/* Chart spanning full width of this column section */}
                     <div className="md:col-span-2 bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[350px]">
                         <h3 className="text-slate-400 text-sm font-medium mb-4">Power History</h3>
                         <EnergyChart history={history.chart} />
                     </div>
                 </div>
             </div>
-
-            {/* NEW STATUS TIMELINE (Full Width below everything) */}
-            <StatusTimeline history={history.chart} />
 
         </div>
       ) : (

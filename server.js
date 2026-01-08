@@ -44,13 +44,12 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
                 status_code INTEGER DEFAULT 1
             )`);
             
-            // Migration: Add status_code column if it doesn't exist (for existing DBs)
-            // SQLite doesn't support "IF NOT EXISTS" in ADD COLUMN, so we catch the error
+            // Migration: Add status_code column if it doesn't exist
             db.run("ALTER TABLE energy_log ADD COLUMN status_code INTEGER DEFAULT 1", (err) => {
                 if (err && !err.message.includes("duplicate column name")) {
+                    // Ignore duplicate column errors
+                } else if (err) {
                     console.error("Migration error:", err.message);
-                } else if (!err) {
-                    console.log("Migrated DB: Added status_code column");
                 }
             });
 
@@ -102,7 +101,7 @@ const fetchFroniusData = async (ip) => {
     }
 };
 
-// Polling Job
+// Polling Job - INCREASED FREQUENCY TO 1 MINUTE
 setInterval(async () => {
     const config = getConfig();
     if (!config.inverterIp) return;
@@ -113,7 +112,7 @@ setInterval(async () => {
     let statusCode = 0; // 0 = Offline
 
     if (rawData && rawData.Body && rawData.Body.Data) {
-        // Check Fronius API Response Code (usually in Head.Status.Code)
+        // Check Fronius API Response Code
         const apiCode = rawData.Head?.Status?.Code;
         
         if (apiCode === 0) {
@@ -136,12 +135,11 @@ setInterval(async () => {
         statusCode = 0; // Offline / Network Error
     }
 
-    // Only log if we have data or to log an outage
     const stmt = db.prepare(`INSERT INTO energy_log (power_pv, power_load, power_grid, power_battery, soc, energy_day_prod, status_code) VALUES (?, ?, ?, ?, ?, ?, ?)`);
     stmt.run(p_pv, p_load, p_grid, p_batt, soc, e_day, statusCode);
     stmt.finalize();
 
-}, 5 * 60 * 1000); // 5 Minutes
+}, 60 * 1000); // 1 Minute Interval for continuous updates
 
 // --- API ---
 
@@ -152,7 +150,6 @@ app.post('/api/config', (req, res) => {
     res.json({ success: true });
 });
 
-// Tariff Endpoints
 app.get('/api/tariffs', (req, res) => {
     db.all("SELECT id, valid_from as validFrom, cost_per_kwh as costPerKwh, feed_in_tariff as feedInTariff FROM tariffs ORDER BY valid_from ASC", (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -230,17 +227,36 @@ const getTariffForTime = (tariffs, timestamp) => {
 // History Endpoint
 app.get('/api/history', (req, res) => {
     const range = req.query.range || 'day'; 
-    const config = getConfig();
     
-    let timeFilter;
-    let groupBy;
-    
+    let queryTimeClause;
+    let groupBy = 1; // Default no grouping (every point)
+
+    // Using 'Localtime' logic:
+    // Hour: Start of the current hour e.g. 14:00 to Now
+    // Day: Start of today (00:00) to Now
     switch(range) {
-        case 'hour': timeFilter = "-1 hours"; groupBy = 1; break;
-        case 'week': timeFilter = "-7 days"; groupBy = 4; break;
-        case 'month': timeFilter = "-30 days"; groupBy = 12; break;
-        case 'year': timeFilter = "-365 days"; groupBy = 288; break;
-        case 'day': default: timeFilter = "-24 hours"; groupBy = 1; break;
+        case 'hour': 
+            // Calculate start of current hour: YYYY-MM-DD HH:00:00
+            queryTimeClause = "timestamp >= datetime('now', 'start of day', '+' || strftime('%H', 'now') || ' hours')"; 
+            break;
+        case 'day': 
+            queryTimeClause = "timestamp >= datetime('now', 'start of day')"; 
+            break;
+        case 'week': 
+            // Last 7 days rolling
+            queryTimeClause = "timestamp >= datetime('now', '-6 days')"; 
+            groupBy = 12; // 1 hour steps approx
+            break;
+        case 'month': 
+            queryTimeClause = "timestamp >= datetime('now', 'start of month')"; 
+            groupBy = 24; // 2 hour steps approx
+            break;
+        case 'year': 
+            queryTimeClause = "timestamp >= datetime('now', 'start of year')"; 
+            groupBy = 288; // ~1 day steps
+            break;
+        default: 
+            queryTimeClause = "timestamp >= datetime('now', '-24 hours')";
     }
 
     db.all("SELECT * FROM tariffs ORDER BY valid_from ASC", [], (err, tariffRows) => {
@@ -257,14 +273,15 @@ app.get('/api/history', (req, res) => {
                 timestamp,
                 power_pv, power_load, power_grid, power_battery, soc, status_code
             FROM energy_log 
-            WHERE timestamp >= datetime('now', '${timeFilter}') 
+            WHERE ${queryTimeClause}
             ORDER BY timestamp ASC
         `;
 
         db.all(query, [], (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
 
-            const sampleDurationHours = 5 / 60; 
+            // 1 Minute samples = 1/60 hours
+            const sampleDurationHours = 1 / 60; 
 
             let stats = {
                 production: 0, consumption: 0, imported: 0, exported: 0,
@@ -300,14 +317,17 @@ app.get('/api/history', (req, res) => {
             stats.selfConsumption = stats.production > 0 ? (totalSelfPowered / stats.production) * 100 : 0;
 
             const chartData = [];
-            for (let i = 0; i < rows.length; i += groupBy) {
-                chartData.push({
-                    timestamp: rows[i].timestamp,
-                    production: rows[i].power_pv,
-                    consumption: rows[i].power_load,
-                    soc: rows[i].soc,
-                    status: rows[i].status_code !== undefined ? rows[i].status_code : 1 // Default to 1 (Running) if old data
-                });
+            // Basic downsampling if groupBy > 1
+            for (let i = 0; i < rows.length; i++) {
+                if (i % groupBy === 0 || i === rows.length - 1) {
+                    chartData.push({
+                        timestamp: rows[i].timestamp,
+                        production: rows[i].power_pv,
+                        consumption: rows[i].power_load,
+                        soc: rows[i].soc,
+                        status: rows[i].status_code !== undefined ? rows[i].status_code : 1 
+                    });
+                }
             }
 
             res.json({ chart: chartData, stats });
