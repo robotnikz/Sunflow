@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  sunflow:
+    # Builds from the current directory. 
+    # Once published to GHCR, you can replace this with: image: ghcr.io/your-username/sunflow-dashboard:latest
+    build: .
+    container_name: sunflow
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Maps the container's data directory to a local folder for persistence
+      - ./sunflow-data:/app/data
+    environment:
+      # Set your timezone for correct logging
+      - TZ=Europe/Berlin
