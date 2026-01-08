@@ -46,10 +46,11 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
             
             // Migration: Add status_code column if it doesn't exist
             db.run("ALTER TABLE energy_log ADD COLUMN status_code INTEGER DEFAULT 1", (err) => {
-                if (err && !err.message.includes("duplicate column name")) {
-                    // Ignore duplicate column errors
-                } else if (err) {
-                    console.error("Migration error:", err.message);
+                if (err) {
+                    // Only log if the error is NOT about the column already existing
+                    if (!err.message.includes("duplicate column name")) {
+                        console.error("Migration error:", err.message);
+                    }
                 }
             });
 
