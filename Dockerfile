@@ -5,7 +5,8 @@ WORKDIR /app
 
 # Abhängigkeiten installieren
 COPY package*.json ./
-RUN npm ci
+# ÄNDERUNG: 'npm install' statt 'npm ci' verwenden, um Fehler bei fehlender Lock-Datei zu vermeiden
+RUN npm install
 
 # Quellcode kopieren
 COPY . .
@@ -25,7 +26,8 @@ ENV DATA_DIR=/app/data
 
 # Nur Produktions-Abhängigkeiten installieren (spart Platz)
 COPY package*.json ./
-RUN npm ci --only=production
+# ÄNDERUNG: 'npm install' statt 'npm ci'
+RUN npm install --only=production
 
 # Backend-Script kopieren
 COPY server.js ./
