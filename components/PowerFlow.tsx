@@ -139,8 +139,8 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
              <Sun className="text-yellow-500" size={36} fill={power.pv > 0 ? "currentColor" : "none"} fillOpacity={0.2} />
         </div>
         <div className="text-center mb-1 flex flex-col">
-             <span className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-0.5">SOLAR</span>
              <span className="block text-xl font-bold text-yellow-400 drop-shadow-md leading-none">{Math.round(power.pv)} W</span>
+             <span className="text-xs text-slate-500 font-medium uppercase tracking-wider mt-0.5">SOLAR</span>
         </div>
       </div>
 

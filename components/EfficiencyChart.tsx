@@ -28,7 +28,7 @@ const EfficiencyChart: React.FC<EfficiencyChartProps> = ({ history }) => {
   const renderLegend = (props: any) => {
     const { payload } = props;
     return (
-      <div className="flex justify-center gap-6 mt-6 select-none">
+      <div className="flex justify-center gap-6 mt-8 select-none">
         {payload.map((entry: any, index: number) => (
           <div key={`item-${index}`} className="flex items-center gap-2">
             <div style={{ backgroundColor: entry.color }} className="w-3 h-3 rounded-full" />
@@ -45,7 +45,7 @@ const EfficiencyChart: React.FC<EfficiencyChartProps> = ({ history }) => {
 
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={history} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+      <LineChart data={history} margin={{ top: 10, right: 20, left: 0, bottom: 20 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
         <XAxis 
           dataKey="timestamp" 
