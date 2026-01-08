@@ -100,6 +100,8 @@ const saveConfig = (cfg) => {
         latitude: cfg.latitude,
         longitude: cfg.longitude,
         systemCapacity: cfg.systemCapacity,
+        degradationRate: cfg.degradationRate,
+        inflationRate: cfg.inflationRate,
         initialValues: cfg.initialValues
     };
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(diskConfig, null, 2));
@@ -289,6 +291,10 @@ app.get('/api/roi', (req, res) => {
     const config = getConfig();
     const initialFinancialReturn = config.initialValues?.financialReturn || 0;
     
+    // Advanced Forecast Params (Default values if not set)
+    const degradationRate = config.degradationRate !== undefined ? config.degradationRate : 0.5; // 0.5% default
+    const inflationRate = config.inflationRate !== undefined ? config.inflationRate : 2.0; // 2.0% default
+
     db.all("SELECT * FROM expenses", [], (err, expenses) => {
         if (err) return res.status(500).json({ error: err.message });
 
@@ -301,24 +307,29 @@ app.get('/api/roi', (req, res) => {
                 feedInTariff: t.feed_in_tariff
             }));
 
-            // Calculate Total Invested and Total Recurring Yearly Costs
+            // Calculate Total Invested and Total Recurring Yearly Costs (BASE)
             let totalInvested = 0;
-            let totalYearlyRecurringCost = 0;
+            let baseYearlyRecurringCost = 0;
 
             const now = new Date();
-            // const systemStart = new Date(config.systemStartDate || '2000-01-01');
+            // We use systemStartDate for calculating how many years recurring costs have applied in the past
+            const systemStart = config.systemStartDate ? new Date(config.systemStartDate) : new Date();
             
             expenses.forEach(exp => {
                 if (exp.type === 'one_time') {
                     totalInvested += exp.amount;
                 } else if (exp.type === 'yearly') {
-                    // Accumulate base yearly cost for future forecast
-                    totalYearlyRecurringCost += exp.amount;
+                    baseYearlyRecurringCost += exp.amount;
 
                     // Calculate years since expense date or system start for PAST/CURRENT totals
+                    // For past recurring costs, we assume simple multiplication for simplicity or apply inflation if we wanted to be very precise, 
+                    // but usually past expenses are just "paid". Let's stick to simple sum for past.
                     const expDate = new Date(exp.date);
-                    const diffTime = Math.abs(now.getTime() - expDate.getTime());
+                    // Use the later of expense date or system start
+                    const effectiveDate = expDate > systemStart ? expDate : systemStart;
+                    const diffTime = Math.max(0, now.getTime() - effectiveDate.getTime());
                     const diffYears = diffTime / (1000 * 60 * 60 * 24 * 365.25);
+                    
                     totalInvested += exp.amount * diffYears;
                 }
             });
@@ -387,31 +398,25 @@ app.get('/api/roi', (req, res) => {
 
                 if (netValue < 0) {
                     // --- INTELLIGENT FORECAST SIMULATION ---
-                    // Instead of extrapolating $, we extrapolate Energy (kWh) and apply future Tariffs.
-
+                    
                     let avgDailyExport = 0;
                     let avgDailySelfCons = 0;
-                    const systemStart = config.systemStartDate ? new Date(config.systemStartDate) : null;
-                    const dailyRecurringCost = totalYearlyRecurringCost / 365.25;
                     
                     // 1. Determine Average Energy Profile
                     if (systemStart && systemStart < now) {
-                        // Use Lifetime Totals
                         const lifeTimeMs = now.getTime() - systemStart.getTime();
                         const lifeTimeDays = lifeTimeMs / (1000 * 60 * 60 * 24);
                         
                         if (lifeTimeDays > 1) {
                             const initProd = config.initialValues?.production || 0;
                             const initExport = config.initialValues?.export || 0;
-                            // Self Consumed = Production - Export
                             const initSelfCons = Math.max(0, initProd - initExport);
-
                             avgDailyExport = (initExport + totalDbExportedKwh) / lifeTimeDays;
                             avgDailySelfCons = (initSelfCons + totalDbSelfConsumedKwh) / lifeTimeDays;
                         }
                     }
 
-                    // Fallback to recent history if lifetime calculation fails
+                    // Fallback to recent history
                     if (avgDailyExport === 0 && avgDailySelfCons === 0) {
                         let durationDays = 1;
                         if (oldestInWindow) {
@@ -425,67 +430,92 @@ app.get('/api/roi', (req, res) => {
 
                     // 2. Simulate Future
                     let remainingDebt = Math.abs(netValue);
-                    let simDate = new Date();
+                    let simDate = new Date(); // Start simulation from Now
+                    const simStartTs = simDate.getTime();
                     const maxDate = new Date();
                     maxDate.setFullYear(maxDate.getFullYear() + 50); // Hard stop after 50 years
                     
                     let isBreakEvenFound = false;
                     
-                    // Sort tariffs descending to find next changes easily? 
-                    // Better: Filter tariffs that start in the future.
+                    // Generate checkpoints: Tariff Changes AND Yearly increments (to apply degradation/inflation)
+                    // 1. Tariff Changes
                     const futureTariffs = tariffList.filter(t => t.validFrom > simDate.toISOString().split('T')[0]);
                     
-                    // Simulation Loop chunks
-                    // We iterate through tariff periods to avoid day-by-day looping for 20 years
-                    
-                    const checkPoints = [
-                        { date: simDate, tariff: getTariffForTime(tariffList, simDate.toISOString()) },
-                        ...futureTariffs.map(t => ({ date: new Date(t.validFrom), tariff: t }))
+                    // 2. Yearly Checkpoints (Jan 1st of every year for 50 years)
+                    const yearlyCheckpoints = [];
+                    for(let i=1; i<=50; i++) {
+                        const d = new Date(simDate);
+                        d.setFullYear(d.getFullYear() + i);
+                        d.setMonth(0); d.setDate(1); // Jan 1st
+                        yearlyCheckpoints.push(d);
+                    }
+
+                    // Merge and Sort Checkpoints
+                    const rawCheckPoints = [
+                        { date: simDate, tariff: getTariffForTime(tariffList, simDate.toISOString()) }, // Start
+                        ...futureTariffs.map(t => ({ date: new Date(t.validFrom), tariff: t })),
+                        ...yearlyCheckpoints.map(d => ({ date: d, tariff: getTariffForTime(tariffList, d.toISOString()) })) // Warning: This tariff lookup assumes tariffs are constant if not changed
                     ].sort((a,b) => a.date.getTime() - b.date.getTime());
 
+                    // Filter duplicates (same date)
+                    const checkPoints = rawCheckPoints.filter((item, pos, ary) => {
+                        return !pos || item.date.getTime() !== ary[pos - 1].date.getTime();
+                    });
+
+                    // Simulation Loop
                     for (let i = 0; i < checkPoints.length; i++) {
                         if (isBreakEvenFound) break;
 
                         const currentSegment = checkPoints[i];
-                        const nextSegment = checkPoints[i+1]; // Might be undefined (end of defined tariffs)
+                        const nextSegment = checkPoints[i+1];
                         
-                        // Calculate Daily Profit for this segment
+                        // Calculate Time Delta from Simulation Start to Current Segment Start (for Degradation/Inflation)
+                        const msFromStart = currentSegment.date.getTime() - simStartTs;
+                        const yearsPassed = msFromStart / (1000 * 60 * 60 * 24 * 365.25);
+                        
+                        // Apply Factors
+                        // Degradation: Reduces Output. Factor = (1 - rate)^years
+                        const degFactor = Math.pow(1 - (degradationRate/100), yearsPassed);
+                        // Inflation: Increases Expense. Factor = (1 + rate)^years
+                        const infFactor = Math.pow(1 + (inflationRate/100), yearsPassed);
+
+                        const segmentDailyExport = avgDailyExport * degFactor;
+                        const segmentDailySelfCons = avgDailySelfCons * degFactor;
+                        const segmentDailyRecurringCost = (baseYearlyRecurringCost / 365.25) * infFactor;
+
+                        // Daily Profit
                         const segmentProfitPerDay = 
-                            (avgDailySelfCons * currentSegment.tariff.costPerKwh) + 
-                            (avgDailyExport * currentSegment.tariff.feedInTariff) - 
-                            dailyRecurringCost;
+                            (segmentDailySelfCons * currentSegment.tariff.costPerKwh) + 
+                            (segmentDailyExport * currentSegment.tariff.feedInTariff) - 
+                            segmentDailyRecurringCost;
                         
                         if (segmentProfitPerDay <= 0) {
-                            // System is losing money daily in this period. 
-                            // If it's the last period, we never break even.
+                            // Losing money
                             if (!nextSegment) break; 
-                            
-                            // Otherwise, add loss to debt and jump to next tariff
                             const daysInSegment = (nextSegment.date.getTime() - currentSegment.date.getTime()) / (1000 * 60 * 60 * 24);
                             remainingDebt += Math.abs(segmentProfitPerDay) * daysInSegment;
                             continue;
                         }
 
-                        // We make profit. Will we clear debt in this segment?
+                        // Making profit
                         let daysToClear = remainingDebt / segmentProfitPerDay;
                         
-                        // Is there a next segment?
                         if (nextSegment) {
                             const daysInSegment = (nextSegment.date.getTime() - currentSegment.date.getTime()) / (1000 * 60 * 60 * 24);
                             
                             if (daysToClear <= daysInSegment) {
-                                // Yes, cleared in this segment
+                                // Cleared
                                 const doneDate = new Date(currentSegment.date);
                                 doneDate.setDate(doneDate.getDate() + daysToClear);
                                 breakEvenDate = doneDate.toISOString();
                                 isBreakEvenFound = true;
                             } else {
-                                // No, subtract profit from this segment and continue
+                                // Not cleared
                                 remainingDebt -= segmentProfitPerDay * daysInSegment;
                             }
                         } else {
-                            // Last segment (indefinite future)
-                            if (daysToClear < 365 * 50) { // Limit to 50 years
+                            // Infinite segment
+                            if (daysToClear < 365 * 50) { 
                                 const doneDate = new Date(currentSegment.date);
                                 doneDate.setDate(doneDate.getDate() + daysToClear);
                                 breakEvenDate = doneDate.toISOString();

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SystemConfig, Tariff, Expense } from '../types';
-import { X, Save, Plus, Trash2, Calendar, DollarSign, PenTool, MapPin, Zap, History, HelpCircle, Calculator, CheckCircle2, AlertTriangle, ArrowRight } from 'lucide-react';
+import { X, Save, Plus, Trash2, Calendar, DollarSign, PenTool, MapPin, Zap, History, HelpCircle, Calculator, CheckCircle2, AlertTriangle, ArrowRight, TrendingUp } from 'lucide-react';
 import { getTariffs, addTariff, deleteTariff, getExpenses, addExpense, deleteExpense } from '../services/api';
 
 interface SettingsModalProps {
@@ -27,6 +27,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
             }
         }));
     }
+    // Set defaults for new fields if not present
+    if (formData.degradationRate === undefined) setFormData(prev => ({ ...prev, degradationRate: 0.5 }));
+    if (formData.inflationRate === undefined) setFormData(prev => ({ ...prev, inflationRate: 2.0 }));
   }, []);
 
   // New Tariff State
@@ -377,6 +380,43 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
           {/* TAB: Expenses */}
           {activeTab === 'expenses' && (
             <div className="space-y-6">
+                
+                {/* Advanced Forecast Parameters */}
+                <div className="bg-slate-900/50 rounded-xl border border-slate-700 overflow-hidden">
+                    <div className="px-4 py-3 bg-slate-800/50 border-b border-slate-700 flex items-center justify-between">
+                         <h3 className="text-slate-300 text-sm font-bold flex items-center gap-2">
+                            <TrendingUp size={16} className="text-blue-400"/> Advanced Forecast Parameters
+                        </h3>
+                        <button onClick={handleConfigSubmit} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded text-white transition">Update Params</button>
+                    </div>
+                    <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                         <div>
+                            <label className="block text-xs font-bold text-slate-400 mb-1">Module Degradation (% per year)</label>
+                            <input 
+                                type="number" step="0.1"
+                                value={formData.degradationRate}
+                                onChange={(e) => setFormData({...formData, degradationRate: parseFloat(e.target.value)})}
+                                className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                            <p className="text-[10px] text-slate-500 mt-1">
+                                PV modules lose efficiency over time. Default: 0.5%.
+                            </p>
+                         </div>
+                         <div>
+                            <label className="block text-xs font-bold text-slate-400 mb-1">Expense Inflation (% per year)</label>
+                            <input 
+                                type="number" step="0.1"
+                                value={formData.inflationRate}
+                                onChange={(e) => setFormData({...formData, inflationRate: parseFloat(e.target.value)})}
+                                className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                            <p className="text-[10px] text-slate-500 mt-1">
+                                Annual increase in recurring maintenance costs. Default: 2.0%.
+                            </p>
+                         </div>
+                    </div>
+                </div>
+
                 <div className="bg-emerald-900/20 border border-emerald-800 p-4 rounded-lg">
                     <p className="text-sm text-emerald-200">
                     Track your system costs (CAPEX) and recurring maintenance (OPEX) to calculate your Return on Investment.

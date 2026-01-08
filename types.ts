@@ -21,6 +21,8 @@ export interface SystemConfig {
   latitude?: string;
   longitude?: string;
   systemCapacity?: number; // kWp
+  degradationRate?: number; // % per year (default 0.5)
+  inflationRate?: number; // % per year (default 2.0)
   initialValues?: {
     production?: number; // kWh
     import?: number; // kWh
