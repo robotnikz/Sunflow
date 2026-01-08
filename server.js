@@ -331,7 +331,7 @@ app.get('/api/data', async (req, res) => {
     if (rawData && rawData.Body && rawData.Body.Data) {
         const site = rawData.Body.Data.Site;
         const inverters = rawData.Body.Data.Inverters;
-        const invKey = Object.keys(inverters)[0];
+        const inverterKey = Object.keys(inverters)[0];
         
         responseData.power = {
             pv: Math.round(site.P_PV || 0),
