@@ -1,6 +1,8 @@
 import { InverterData, SystemConfig } from '../types';
 
-const API_BASE = (import.meta as any).env?.PROD ? '' : 'http://localhost:3000'; // Adjust for dev mode
+// Use relative paths so calls go through Vite proxy in dev 
+// or directly to same origin in prod.
+const API_BASE = ''; 
 
 export const getRealtimeData = async (): Promise<InverterData> => {
   const res = await fetch(`${API_BASE}/api/data`);
