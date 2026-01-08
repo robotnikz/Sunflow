@@ -7,7 +7,7 @@ import EnergyDonut from './EnergyDonut';
 import BatteryWidget from './BatteryWidget';
 import StatusTimeline from './StatusTimeline'; 
 import { getHistory } from '../services/api';
-import { Sun, Zap, Home, PiggyBank, Calendar } from 'lucide-react';
+import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight } from 'lucide-react';
 
 interface DashboardProps {
   data: InverterData | null;
@@ -19,25 +19,32 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
   const [timeRange, setTimeRange] = useState<TimeRange>('day');
   const [history, setHistory] = useState<HistoryData | null>(null);
   const [loadingHist, setLoadingHist] = useState(false);
+  
+  // Custom Date Range State
+  const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
-  // Auto-Refresh History Interval (every 30 seconds) to ensure continuous feel
   useEffect(() => {
-    const fetchHistory = async () => {
-      setLoadingHist(true);
-      try {
-        const hist = await getHistory(timeRange);
-        setHistory(hist);
-      } catch (e) {
-        console.error("History fetch failed", e);
-      } finally {
-        setLoadingHist(false);
-      }
-    };
-
     fetchHistory();
-    const interval = setInterval(fetchHistory, 30000); 
+    // Refresh history every 60s to keep it somewhat fresh, but less frequent for heavy queries
+    const interval = setInterval(fetchHistory, 60000); 
     return () => clearInterval(interval);
-  }, [timeRange]); 
+  }, [timeRange, startDate, endDate]); 
+
+  const fetchHistory = async () => {
+    // If custom is selected but dates are invalid/empty, don't fetch
+    if (timeRange === 'custom' && (!startDate || !endDate)) return;
+
+    setLoadingHist(true);
+    try {
+      const hist = await getHistory(timeRange, startDate, endDate);
+      setHistory(hist);
+    } catch (e) {
+      console.error("History fetch failed", e);
+    } finally {
+      setLoadingHist(false);
+    }
+  };
 
   if (!data) return null;
 
@@ -81,32 +88,61 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
         </div>
       </div>
 
-      {/* --- ROW 2: STATUS TIMELINE (Moved Up) --- */}
+      {/* --- ROW 2: STATUS TIMELINE --- */}
       <div className="animate-fade-in">
         <StatusTimeline history={history?.chart || []} />
       </div>
 
       {/* --- ROW 3: Controls for Statistics --- */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-800/50 p-2 rounded-xl border border-slate-700/50 mt-4">
-        <h2 className="text-lg font-semibold text-slate-200 px-2 flex items-center gap-2">
-            <Calendar size={18} className="text-blue-400"/>
-            Statistics & Savings
-        </h2>
-        <div className="flex bg-slate-900 rounded-lg p-1">
-            {(['hour', 'day', 'week', 'month', 'year'] as TimeRange[]).map((range) => (
-                <button
-                    key={range}
-                    onClick={() => setTimeRange(range)}
-                    className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-                        timeRange === range 
-                        ? 'bg-slate-700 text-white shadow' 
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                >
-                    {range.charAt(0).toUpperCase() + range.slice(1)}
-                </button>
-            ))}
+      <div className="flex flex-col bg-slate-800/50 p-2 rounded-xl border border-slate-700/50 mt-4 gap-4">
+        
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+            <h2 className="text-lg font-semibold text-slate-200 px-2 flex items-center gap-2">
+                <Calendar size={18} className="text-blue-400"/>
+                Statistics & Savings
+            </h2>
+            <div className="flex flex-wrap bg-slate-900 rounded-lg p-1">
+                {(['hour', 'day', 'week', 'month', 'year', 'custom'] as TimeRange[]).map((range) => (
+                    <button
+                        key={range}
+                        onClick={() => setTimeRange(range)}
+                        className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                            timeRange === range 
+                            ? 'bg-slate-700 text-white shadow' 
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                    >
+                        {range.charAt(0).toUpperCase() + range.slice(1)}
+                    </button>
+                ))}
+            </div>
         </div>
+
+        {/* Custom Date Range Picker */}
+        {timeRange === 'custom' && (
+            <div className="flex flex-col sm:flex-row items-center justify-end gap-3 bg-slate-900/50 p-3 rounded-lg border border-slate-700/50 animate-fade-in">
+                <span className="text-sm text-slate-400">Select Interval:</span>
+                <input 
+                    type="date" 
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="bg-slate-800 border border-slate-600 text-white text-sm rounded px-3 py-1.5 focus:border-yellow-500 focus:outline-none"
+                />
+                <ArrowRight size={16} className="text-slate-500" />
+                <input 
+                    type="date" 
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="bg-slate-800 border border-slate-600 text-white text-sm rounded px-3 py-1.5 focus:border-yellow-500 focus:outline-none"
+                />
+                <button 
+                    onClick={fetchHistory}
+                    className="bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-medium px-4 py-1.5 rounded ml-2 transition-colors"
+                >
+                    Apply
+                </button>
+            </div>
+        )}
       </div>
 
       {/* --- ROW 4: Historical Data & Donuts --- */}
@@ -183,7 +219,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
                         />
                     </div>
                     
-                    <div className="md:col-span-2 bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[350px]">
+                    <div className="md:col-span-2 bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[400px]">
                         <h3 className="text-slate-400 text-sm font-medium mb-4">Power History</h3>
                         <EnergyChart history={history.chart} />
                     </div>
@@ -193,7 +229,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
         </div>
       ) : (
         <div className="h-64 flex items-center justify-center text-slate-500">
-            {loadingHist ? <span className="animate-pulse">Loading historical data...</span> : "No data available."}
+            {loadingHist ? <span className="animate-pulse">Loading historical data...</span> : "Select a range to view data."}
         </div>
       )}
     </div>

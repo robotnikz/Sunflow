@@ -11,21 +11,36 @@ interface EnergyChartProps {
 }
 
 const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
-  // Format data for chart
+  if (history.length === 0) {
+    return <div className="flex items-center justify-center h-full text-slate-500">No historical data available yet.</div>;
+  }
+
+  // Smart Date Formatting
+  // If the dataset spans more than 24 hours, we show "Date + Time", otherwise just "Time"
+  const startTime = new Date(history[0].timestamp).getTime();
+  const endTime = new Date(history[history.length - 1].timestamp).getTime();
+  const durationHours = (endTime - startTime) / (1000 * 60 * 60);
+  const showDate = durationHours > 24;
+
+  const formatTick = (ts: string) => {
+    const d = new Date(ts);
+    if (showDate) {
+      // e.g. "17.03 14:00"
+      return `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth()+1).toString().padStart(2, '0')} ${d.getHours().toString().padStart(2, '0')}:00`;
+    }
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
   const data = history.map(h => ({
-    time: new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    rawTime: h.timestamp,
     Production: h.production,
     Consumption: h.consumption,
     SOC: h.soc
   }));
 
-  if (data.length === 0) {
-    return <div className="flex items-center justify-center h-full text-slate-500">No historical data available yet.</div>;
-  }
-
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <AreaChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+      <AreaChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
         <defs>
           <linearGradient id="colorProd" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="#EAB308" stopOpacity={0.8}/>
@@ -38,15 +53,17 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
         <XAxis 
-          dataKey="time" 
+          dataKey="rawTime" 
+          tickFormatter={formatTick}
           stroke="#94a3b8" 
-          fontSize={12} 
+          fontSize={11} 
           tickLine={false} 
-          minTickGap={30}
+          minTickGap={40}
+          dy={10}
         />
         <YAxis 
           stroke="#94a3b8" 
-          fontSize={12} 
+          fontSize={11} 
           tickLine={false} 
           label={{ value: 'Watts', angle: -90, position: 'insideLeft', fill: '#64748b' }} 
         />
@@ -54,21 +71,27 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
           yAxisId="right"
           orientation="right" 
           stroke="#a855f7" 
-          fontSize={12} 
+          fontSize={11} 
           tickLine={false} 
           domain={[0, 100]}
           unit="%"
         />
         <Tooltip 
-          contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#e2e8f0' }}
+          contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#e2e8f0', borderRadius: '8px' }}
           itemStyle={{ color: '#e2e8f0' }}
+          labelFormatter={(label) => new Date(label).toLocaleString()}
         />
-        <Legend />
-        {/* Enable dots (r:0 to hide by default, but we use explicit true or r:3 to show them if needed. 
-            However, area usually hides them. We'll enable small dots so single points are seen.) */}
-        <Area type="monotone" dataKey="Production" stroke="#EAB308" fillOpacity={1} fill="url(#colorProd)" dot={{ r: 2 }} activeDot={{ r: 6 }} />
-        <Area type="monotone" dataKey="Consumption" stroke="#3B82F6" fillOpacity={1} fill="url(#colorCons)" dot={{ r: 2 }} activeDot={{ r: 6 }} />
-        <Area yAxisId="right" type="monotone" dataKey="SOC" stroke="#a855f7" fill="none" strokeWidth={2} dot={false} activeDot={{ r: 6 }} />
+        <Legend 
+          verticalAlign="bottom" 
+          height={36} 
+          wrapperStyle={{ paddingTop: '20px' }}
+          iconType="circle"
+        />
+        
+        {/* Areas with smaller dots for cleaner look on large datasets, activeDot larger */}
+        <Area type="monotone" dataKey="Production" stroke="#EAB308" fillOpacity={1} fill="url(#colorProd)" dot={false} activeDot={{ r: 5 }} />
+        <Area type="monotone" dataKey="Consumption" stroke="#3B82F6" fillOpacity={1} fill="url(#colorCons)" dot={false} activeDot={{ r: 5 }} />
+        <Area yAxisId="right" type="monotone" dataKey="SOC" stroke="#a855f7" fill="none" strokeWidth={2} dot={false} activeDot={{ r: 5 }} />
       </AreaChart>
     </ResponsiveContainer>
   );

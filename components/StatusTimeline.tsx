@@ -22,6 +22,21 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
   }
 
   const totalPoints = history.length;
+  
+  // Smart Tick Formatting
+  const startTime = new Date(history[0].timestamp).getTime();
+  const endTime = new Date(history[history.length - 1].timestamp).getTime();
+  const durationHours = (endTime - startTime) / (1000 * 60 * 60);
+  const showDate = durationHours > 24;
+
+  const formatTime = (ts: string) => {
+    const d = new Date(ts);
+    if (showDate) {
+         // dd.MM HH:mm
+         return `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:00`;
+    }
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
   // Helper to compress data into visual segments
   const createSegments = (getValue: (p: any) => any, getLabel: (val: any) => string, getColor: (val: any) => string) => {
@@ -81,7 +96,7 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
     history[0].timestamp,
     history[Math.floor(totalPoints / 2)].timestamp,
     history[totalPoints - 1].timestamp
-  ].map(t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })) : [];
+  ].map(t => formatTime(t)) : [];
 
   const Row = ({ label, segments }: { label: string, segments: typeof errorSegments }) => (
     <div className="contents">
@@ -105,7 +120,7 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
 
   return (
     <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg">
-      <h3 className="text-slate-200 text-lg font-semibold mb-6">Inverter Status</h3>
+      <h3 className="text-slate-200 text-lg font-semibold mb-6">Inverter Status ({showDate ? 'Long Term' : '24h'})</h3>
       
       <div className="grid grid-cols-[80px_1fr] gap-y-4 gap-x-4 items-center">
         <Row label="Errors" segments={errorSegments} />

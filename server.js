@@ -240,35 +240,63 @@ const getTariffForTime = (tariffs, timestamp) => {
 // History Endpoint
 app.get('/api/history', (req, res) => {
     const range = req.query.range || 'day'; 
+    const startDate = req.query.start; // YYYY-MM-DD
+    const endDate = req.query.end;     // YYYY-MM-DD
     
-    let queryTimeClause;
+    let queryTimeClause = "";
     let groupBy = 1; 
 
-    // Query Logic uses 'localtime' because we now store Local Timestamps
-    switch(range) {
-        case 'hour': 
-            // From start of current Local Hour
-            queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of day', '+' || strftime('%H', 'now', 'localtime') || ' hours')"; 
-            break;
-        case 'day': 
-            // From start of today (Local)
-            queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of day')"; 
-            break;
-        case 'week': 
-            // Last 7 days
-            queryTimeClause = "timestamp >= datetime('now', 'localtime', '-6 days')"; 
-            groupBy = 12; 
-            break;
-        case 'month': 
-            queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of month')"; 
-            groupBy = 24; 
-            break;
-        case 'year': 
-            queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of year')"; 
-            groupBy = 288; 
-            break;
-        default: 
-            queryTimeClause = "timestamp >= datetime('now', 'localtime', '-24 hours')";
+    // Dynamic Grouping Logic
+    // If we request a huge timeframe (e.g. 6 months), we cannot return minute-by-minute data (too slow/heavy).
+    // We must group data (downsampling).
+    
+    if (range === 'custom' && startDate && endDate) {
+        // Construct full timestamp strings for SQLite comparison
+        const startTs = `${startDate} 00:00:00`;
+        const endTs = `${endDate} 23:59:59`;
+        queryTimeClause = `timestamp BETWEEN '${startTs}' AND '${endTs}'`;
+
+        // Calculate difference in days to determine grouping
+        const d1 = new Date(startDate);
+        const d2 = new Date(endDate);
+        const diffTime = Math.abs(d2 - d1);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays <= 1) {
+            groupBy = 1; // Every minute
+        } else if (diffDays <= 7) {
+            groupBy = 15; // Every 15 mins
+        } else if (diffDays <= 30) {
+            groupBy = 60; // Every hour
+        } else if (diffDays <= 90) {
+            groupBy = 120; // Every 2 hours
+        } else {
+            groupBy = 1440; // Daily averages (1440 mins)
+        }
+    } else {
+        // Standard presets
+        switch(range) {
+            case 'hour': 
+                queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of day', '+' || strftime('%H', 'now', 'localtime') || ' hours')"; 
+                break;
+            case 'day': 
+                queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of day')"; 
+                break;
+            case 'week': 
+                queryTimeClause = "timestamp >= datetime('now', 'localtime', '-6 days')"; 
+                groupBy = 12; // ~12 mins
+                break;
+            case 'month': 
+                queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of month')"; 
+                groupBy = 60; // 1 Hour
+                break;
+            case 'year': 
+                queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of year')"; 
+                groupBy = 1440; // 1 Day
+                break;
+            default: 
+                queryTimeClause = "timestamp >= datetime('now', 'localtime', '-24 hours')";
+        }
     }
 
     db.all("SELECT * FROM tariffs ORDER BY valid_from ASC", [], (err, tariffRows) => {
@@ -292,7 +320,7 @@ app.get('/api/history', (req, res) => {
         db.all(query, [], (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
 
-            const sampleDurationHours = 1 / 60; 
+            const sampleDurationHours = 1 / 60; // Base data is always 1 minute intervals
 
             let stats = {
                 production: 0, consumption: 0, imported: 0, exported: 0,
@@ -300,6 +328,7 @@ app.get('/api/history', (req, res) => {
                 autonomy: 0, selfConsumption: 0, costSaved: 0, earnings: 0
             };
 
+            // Calculate totals using ALL rows (high precision for stats)
             rows.forEach(r => {
                 const tariff = getTariffForTime(tariffs, r.timestamp);
                 const prod = (r.power_pv || 0) * sampleDurationHours / 1000;
@@ -327,17 +356,31 @@ app.get('/api/history', (req, res) => {
             stats.autonomy = stats.consumption > 0 ? (totalSelfPowered / stats.consumption) * 100 : 0;
             stats.selfConsumption = stats.production > 0 ? (totalSelfPowered / stats.production) * 100 : 0;
 
+            // Generate Chart Data (Downsampling)
             const chartData = [];
-            for (let i = 0; i < rows.length; i++) {
-                if (i % groupBy === 0 || i === rows.length - 1) {
-                    chartData.push({
-                        timestamp: rows[i].timestamp,
-                        production: rows[i].power_pv,
-                        consumption: rows[i].power_load,
-                        soc: rows[i].soc,
-                        status: rows[i].status_code !== undefined ? rows[i].status_code : 1 
-                    });
-                }
+            
+            // Simple Downsampling: Just pick the Nth row
+            // Ideally, we would average the values between i and i+groupBy, 
+            // but picking Nth row is faster and usually sufficient for trends.
+            for (let i = 0; i < rows.length; i += groupBy) {
+                chartData.push({
+                    timestamp: rows[i].timestamp,
+                    production: rows[i].power_pv,
+                    consumption: rows[i].power_load,
+                    soc: rows[i].soc,
+                    status: rows[i].status_code !== undefined ? rows[i].status_code : 1 
+                });
+            }
+            // Ensure the very last point is included if missed by loop
+            if (rows.length > 0 && chartData[chartData.length-1].timestamp !== rows[rows.length-1].timestamp) {
+                const last = rows[rows.length-1];
+                chartData.push({
+                    timestamp: last.timestamp,
+                    production: last.power_pv,
+                    consumption: last.power_load,
+                    soc: last.soc,
+                    status: last.status_code !== undefined ? last.status_code : 1
+                });
             }
 
             res.json({ chart: chartData, stats });

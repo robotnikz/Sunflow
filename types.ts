@@ -1,3 +1,4 @@
+
 export interface Tariff {
   id?: number;
   validFrom: string; // ISO Date string (YYYY-MM-DD)
@@ -10,7 +11,7 @@ export interface SystemConfig {
   currency: string;
 }
 
-export type TimeRange = 'hour' | 'day' | 'week' | 'month' | 'year';
+export type TimeRange = 'hour' | 'day' | 'week' | 'month' | 'year' | 'custom';
 
 export interface EnergyStats {
   production: number;    // kWh

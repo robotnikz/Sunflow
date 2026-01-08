@@ -8,8 +8,13 @@ export const getRealtimeData = async (): Promise<InverterData> => {
   return res.json();
 };
 
-export const getHistory = async (range: TimeRange): Promise<HistoryData> => {
-  const res = await fetch(`${API_BASE}/api/history?range=${range}`);
+export const getHistory = async (range: TimeRange, startDate?: string, endDate?: string): Promise<HistoryData> => {
+  let url = `${API_BASE}/api/history?range=${range}`;
+  if (range === 'custom' && startDate && endDate) {
+    url += `&start=${startDate}&end=${endDate}`;
+  }
+  
+  const res = await fetch(url);
   if (!res.ok) throw new Error("History call failed");
   return res.json();
 };
