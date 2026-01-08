@@ -330,14 +330,25 @@ app.get('/api/roi', (req, res) => {
                 if (err) return res.status(500).json({ error: err.message });
                 
                 let dbReturned = 0;
-                let returnLast90Days = 0;
+                let totalDbSelfConsumedKwh = 0;
+                let totalDbExportedKwh = 0;
+                let totalDbDays = 0;
+
                 const sampleDurationHours = 1 / 60; // 1 minute
                 
+                // For fallback average calculation (recent data only)
                 const ninetyDaysAgo = new Date();
                 ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-                
-                // Track oldest data point within the 90 day window to calculate effective average
+                let recentDbExport = 0;
+                let recentDbSelfCons = 0;
                 let oldestInWindow = null;
+
+                if (rows.length > 0) {
+                     const firstTs = new Date(rows[0].timestamp);
+                     const lastTs = new Date(rows[rows.length-1].timestamp);
+                     totalDbDays = (lastTs.getTime() - firstTs.getTime()) / (1000 * 60 * 60 * 24);
+                     if (totalDbDays < 0.01) totalDbDays = 0.01;
+                }
 
                 rows.forEach(r => {
                     const tsDate = new Date(r.timestamp);
@@ -356,9 +367,12 @@ app.get('/api/roi', (req, res) => {
                     const value = saved + earned;
 
                     dbReturned += value;
+                    totalDbSelfConsumedKwh += selfPoweredKwh;
+                    totalDbExportedKwh += exp;
 
                     if (tsDate >= ninetyDaysAgo) {
-                        returnLast90Days += value;
+                        recentDbSelfCons += selfPoweredKwh;
+                        recentDbExport += exp;
                         if (!oldestInWindow) oldestInWindow = tsDate;
                     }
                 });
@@ -372,45 +386,111 @@ app.get('/api/roi', (req, res) => {
                 const roiPercent = totalInvested > 0 ? (totalReturned / totalInvested) * 100 : 0;
 
                 if (netValue < 0) {
-                    let grossDailyReturn = 0;
+                    // --- INTELLIGENT FORECAST SIMULATION ---
+                    // Instead of extrapolating $, we extrapolate Energy (kWh) and apply future Tariffs.
+
+                    let avgDailyExport = 0;
+                    let avgDailySelfCons = 0;
                     const systemStart = config.systemStartDate ? new Date(config.systemStartDate) : null;
+                    const dailyRecurringCost = totalYearlyRecurringCost / 365.25;
                     
-                    // 1. Calculate Gross Daily Income (Revenue)
-                    // Priority: Use Total Lifecycle Average if System Start Date is available
+                    // 1. Determine Average Energy Profile
                     if (systemStart && systemStart < now) {
+                        // Use Lifetime Totals
                         const lifeTimeMs = now.getTime() - systemStart.getTime();
                         const lifeTimeDays = lifeTimeMs / (1000 * 60 * 60 * 24);
+                        
                         if (lifeTimeDays > 1) {
-                            grossDailyReturn = totalReturned / lifeTimeDays;
+                            const initProd = config.initialValues?.production || 0;
+                            const initExport = config.initialValues?.export || 0;
+                            // Self Consumed = Production - Export
+                            const initSelfCons = Math.max(0, initProd - initExport);
+
+                            avgDailyExport = (initExport + totalDbExportedKwh) / lifeTimeDays;
+                            avgDailySelfCons = (initSelfCons + totalDbSelfConsumedKwh) / lifeTimeDays;
                         }
                     }
 
-                    // Fallback: If no start date or calculation failed, use DB-only short-term average
-                    if (grossDailyReturn === 0) {
+                    // Fallback to recent history if lifetime calculation fails
+                    if (avgDailyExport === 0 && avgDailySelfCons === 0) {
                         let durationDays = 1;
                         if (oldestInWindow) {
                             const diffTime = Math.abs(now.getTime() - oldestInWindow.getTime());
                             durationDays = diffTime / (1000 * 60 * 60 * 24);
                         }
                         const effectiveDays = Math.min(90, Math.max(0.1, durationDays));
-                        grossDailyReturn = returnLast90Days / effectiveDays;
+                        avgDailyExport = recentDbExport / effectiveDays;
+                        avgDailySelfCons = recentDbSelfCons / effectiveDays;
                     }
 
-                    // 2. Calculate Effective Net Daily Profit
-                    // Subtract future daily recurring costs from future daily revenue
-                    const dailyRecurringCost = totalYearlyRecurringCost / 365.25;
-                    const netDailyProfit = grossDailyReturn - dailyRecurringCost;
+                    // 2. Simulate Future
+                    let remainingDebt = Math.abs(netValue);
+                    let simDate = new Date();
+                    const maxDate = new Date();
+                    maxDate.setFullYear(maxDate.getFullYear() + 50); // Hard stop after 50 years
+                    
+                    let isBreakEvenFound = false;
+                    
+                    // Sort tariffs descending to find next changes easily? 
+                    // Better: Filter tariffs that start in the future.
+                    const futureTariffs = tariffList.filter(t => t.validFrom > simDate.toISOString().split('T')[0]);
+                    
+                    // Simulation Loop chunks
+                    // We iterate through tariff periods to avoid day-by-day looping for 20 years
+                    
+                    const checkPoints = [
+                        { date: simDate, tariff: getTariffForTime(tariffList, simDate.toISOString()) },
+                        ...futureTariffs.map(t => ({ date: new Date(t.validFrom), tariff: t }))
+                    ].sort((a,b) => a.date.getTime() - b.date.getTime());
 
-                    // Calculate Forecast Date
-                    if (netDailyProfit > 0.001) {
-                        const remaining = Math.abs(netValue);
-                        const daysLeft = remaining / netDailyProfit;
-                        const date = new Date();
-                        date.setDate(date.getDate() + daysLeft);
+                    for (let i = 0; i < checkPoints.length; i++) {
+                        if (isBreakEvenFound) break;
+
+                        const currentSegment = checkPoints[i];
+                        const nextSegment = checkPoints[i+1]; // Might be undefined (end of defined tariffs)
                         
-                        // Cap date at 100 years to prevent "Year 5000" bugs
-                        if (daysLeft < 36500) {
-                             breakEvenDate = date.toISOString();
+                        // Calculate Daily Profit for this segment
+                        const segmentProfitPerDay = 
+                            (avgDailySelfCons * currentSegment.tariff.costPerKwh) + 
+                            (avgDailyExport * currentSegment.tariff.feedInTariff) - 
+                            dailyRecurringCost;
+                        
+                        if (segmentProfitPerDay <= 0) {
+                            // System is losing money daily in this period. 
+                            // If it's the last period, we never break even.
+                            if (!nextSegment) break; 
+                            
+                            // Otherwise, add loss to debt and jump to next tariff
+                            const daysInSegment = (nextSegment.date.getTime() - currentSegment.date.getTime()) / (1000 * 60 * 60 * 24);
+                            remainingDebt += Math.abs(segmentProfitPerDay) * daysInSegment;
+                            continue;
+                        }
+
+                        // We make profit. Will we clear debt in this segment?
+                        let daysToClear = remainingDebt / segmentProfitPerDay;
+                        
+                        // Is there a next segment?
+                        if (nextSegment) {
+                            const daysInSegment = (nextSegment.date.getTime() - currentSegment.date.getTime()) / (1000 * 60 * 60 * 24);
+                            
+                            if (daysToClear <= daysInSegment) {
+                                // Yes, cleared in this segment
+                                const doneDate = new Date(currentSegment.date);
+                                doneDate.setDate(doneDate.getDate() + daysToClear);
+                                breakEvenDate = doneDate.toISOString();
+                                isBreakEvenFound = true;
+                            } else {
+                                // No, subtract profit from this segment and continue
+                                remainingDebt -= segmentProfitPerDay * daysInSegment;
+                            }
+                        } else {
+                            // Last segment (indefinite future)
+                            if (daysToClear < 365 * 50) { // Limit to 50 years
+                                const doneDate = new Date(currentSegment.date);
+                                doneDate.setDate(doneDate.getDate() + daysToClear);
+                                breakEvenDate = doneDate.toISOString();
+                                isBreakEvenFound = true;
+                            }
                         }
                     }
                 }
