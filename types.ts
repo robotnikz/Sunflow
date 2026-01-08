@@ -1,8 +1,16 @@
-export interface SystemConfig {
-  inverterIp: string;
+export interface Tariff {
+  id?: number;
+  validFrom: string; // ISO Date string (YYYY-MM-DD)
   costPerKwh: number;
   feedInTariff: number;
+}
+
+export interface SystemConfig {
+  inverterIp: string;
   currency: string;
+  // Legacy fields are removed in favor of Tariff logic, 
+  // but we keep them optional in type if needed for migration checks, 
+  // though the UI will now rely on the tariff list.
 }
 
 export type TimeRange = 'hour' | 'day' | 'week' | 'month' | 'year';
@@ -49,7 +57,6 @@ export interface HistoryData {
   stats: EnergyStats;
 }
 
-// Simplified version of Fronius API JSON response
 export interface FroniusRealtimeResponse {
   Body: {
     Data: {

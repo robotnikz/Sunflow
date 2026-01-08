@@ -1,4 +1,4 @@
-import { InverterData, SystemConfig, HistoryData, TimeRange } from '../types';
+import { InverterData, SystemConfig, HistoryData, TimeRange, Tariff } from '../types';
 
 const API_BASE = ''; 
 
@@ -27,4 +27,28 @@ export const saveConfig = async (config: SystemConfig): Promise<void> => {
     body: JSON.stringify(config)
   });
   if (!res.ok) throw new Error("API call failed");
+};
+
+// --- Tariff API ---
+
+export const getTariffs = async (): Promise<Tariff[]> => {
+  const res = await fetch(`${API_BASE}/api/tariffs`);
+  if (!res.ok) throw new Error("Failed to fetch tariffs");
+  return res.json();
+};
+
+export const addTariff = async (tariff: Tariff): Promise<void> => {
+  const res = await fetch(`${API_BASE}/api/tariffs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(tariff)
+  });
+  if (!res.ok) throw new Error("Failed to add tariff");
+};
+
+export const deleteTariff = async (id: number): Promise<void> => {
+  const res = await fetch(`${API_BASE}/api/tariffs/${id}`, {
+    method: 'DELETE'
+  });
+  if (!res.ok) throw new Error("Failed to delete tariff");
 };

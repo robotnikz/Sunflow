@@ -31,7 +31,7 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
     else {
         console.log("Connected to SQLite database.");
         db.serialize(() => {
-            // Main table
+            // Main Log Table
             db.run(`CREATE TABLE IF NOT EXISTS energy_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -42,10 +42,27 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
                 soc REAL,
                 energy_day_prod REAL
             )`);
-            
-            // CRITICAL FOR PERFORMANCE: Index on timestamp
-            // This ensures that queries like "last year" remain fast even with millions of rows
             db.run(`CREATE INDEX IF NOT EXISTS idx_timestamp ON energy_log(timestamp)`);
+
+            // Tariffs Table
+            db.run(`CREATE TABLE IF NOT EXISTS tariffs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                valid_from DATE NOT NULL,
+                cost_per_kwh REAL NOT NULL,
+                feed_in_tariff REAL NOT NULL
+            )`, () => {
+                // Migration: Check if we need to seed initial tariff from old config
+                db.get("SELECT count(*) as count FROM tariffs", (err, row) => {
+                    if (row.count === 0) {
+                        const oldConfig = getConfig();
+                        console.log("Seeding initial tariff from config...");
+                        const stmt = db.prepare("INSERT INTO tariffs (valid_from, cost_per_kwh, feed_in_tariff) VALUES (?, ?, ?)");
+                        // Set a date far in the past to ensure all historical data is covered
+                        stmt.run("2000-01-01", oldConfig.costPerKwh || 0.30, oldConfig.feedInTariff || 0.08);
+                        stmt.finalize();
+                    }
+                });
+            });
         });
     }
 });
@@ -54,11 +71,17 @@ const getConfig = () => {
     if (fs.existsSync(CONFIG_FILE)) {
         return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
     }
-    return { inverterIp: '', costPerKwh: 0.30, feedInTariff: 0.08, currency: 'EUR' };
+    // Default config (Tariffs are now in DB, so we only strictly need IP and currency here)
+    return { inverterIp: '', currency: 'EUR' };
 };
 
 const saveConfig = (cfg) => {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2));
+    // We only save non-tariff data to the file now
+    const diskConfig = {
+        inverterIp: cfg.inverterIp,
+        currency: cfg.currency
+    };
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(diskConfig, null, 2));
 };
 
 const fetchFroniusData = async (ip) => {
@@ -67,7 +90,6 @@ const fetchFroniusData = async (ip) => {
         const response = await axios.get(url, { timeout: 3000 });
         return response.data;
     } catch (error) {
-        // console.error(`Fronius Fetch Error: ${error.message}`);
         return null;
     }
 };
@@ -105,6 +127,37 @@ app.post('/api/config', (req, res) => {
     res.json({ success: true });
 });
 
+// Tariff Endpoints
+app.get('/api/tariffs', (req, res) => {
+    db.all("SELECT id, valid_from as validFrom, cost_per_kwh as costPerKwh, feed_in_tariff as feedInTariff FROM tariffs ORDER BY valid_from ASC", (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+app.post('/api/tariffs', (req, res) => {
+    const { validFrom, costPerKwh, feedInTariff } = req.body;
+    const stmt = db.prepare("INSERT INTO tariffs (valid_from, cost_per_kwh, feed_in_tariff) VALUES (?, ?, ?)");
+    stmt.run(validFrom, costPerKwh, feedInTariff, function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ id: this.lastID, success: true });
+    });
+    stmt.finalize();
+});
+
+app.delete('/api/tariffs/:id', (req, res) => {
+    // Prevent deleting the last remaining tariff
+    db.get("SELECT count(*) as count FROM tariffs", (err, row) => {
+        if (row.count <= 1) return res.status(400).json({ error: "Cannot delete the last tariff." });
+        
+        const stmt = db.prepare("DELETE FROM tariffs WHERE id = ?");
+        stmt.run(req.params.id, (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true });
+        });
+    });
+});
+
 app.get('/api/data', async (req, res) => {
     const config = getConfig();
     if (!config.inverterIp) return res.status(500).json({ error: "No Inverter IP" });
@@ -138,94 +191,114 @@ app.get('/api/data', async (req, res) => {
     res.json(responseData);
 });
 
-// History Endpoint with Aggregation
+// Helper to find valid tariff for a timestamp
+const getTariffForTime = (tariffs, timestamp) => {
+    // Tariffs are sorted ASC. We want the latest tariff that has valid_from <= timestamp
+    // Since timestamp in DB is 'YYYY-MM-DD HH:MM:SS' and valid_from is 'YYYY-MM-DD', string comparison works for date part
+    let activeTariff = tariffs[0];
+    const datePart = timestamp.substring(0, 10); // Extract YYYY-MM-DD
+    
+    for (const t of tariffs) {
+        if (t.validFrom <= datePart) {
+            activeTariff = t;
+        } else {
+            break; // Since sorted, future dates mean we stop
+        }
+    }
+    return activeTariff;
+};
+
+// History Endpoint with Accurate Financial Calculation
 app.get('/api/history', (req, res) => {
-    const range = req.query.range || 'day'; // hour, day, week, month, year
+    const range = req.query.range || 'day'; 
     const config = getConfig();
     
     let timeFilter;
     let groupBy;
     
     switch(range) {
-        case 'hour':
-            timeFilter = "-1 hours";
-            groupBy = 1; // Every data point (high res)
-            break;
-        case 'week':
-            timeFilter = "-7 days";
-            groupBy = 4; // Approx every 20 mins
-            break;
-        case 'month':
-            timeFilter = "-30 days";
-            groupBy = 12; // Approx every hour
-            break;
-        case 'year':
-            timeFilter = "-365 days";
-            groupBy = 288; // Approx every day (24h / 5min = 288 points)
-            break;
-        case 'day':
-        default:
-            timeFilter = "-24 hours";
-            groupBy = 1;
-            break;
+        case 'hour': timeFilter = "-1 hours"; groupBy = 1; break;
+        case 'week': timeFilter = "-7 days"; groupBy = 4; break;
+        case 'month': timeFilter = "-30 days"; groupBy = 12; break;
+        case 'year': timeFilter = "-365 days"; groupBy = 288; break;
+        case 'day': default: timeFilter = "-24 hours"; groupBy = 1; break;
     }
 
-    const query = `
-        SELECT 
-            timestamp,
-            power_pv, power_load, power_grid, power_battery, soc
-        FROM energy_log 
-        WHERE timestamp >= datetime('now', '${timeFilter}') 
-        ORDER BY timestamp ASC
-    `;
-
-    db.all(query, [], (err, rows) => {
+    // 1. Fetch Tariffs First
+    db.all("SELECT * FROM tariffs ORDER BY valid_from ASC", [], (err, tariffRows) => {
         if (err) return res.status(500).json({ error: err.message });
+        
+        const tariffs = tariffRows.map(t => ({
+            validFrom: t.valid_from,
+            costPerKwh: t.cost_per_kwh,
+            feedInTariff: t.feed_in_tariff
+        }));
 
-        // Helper to integrate power (Watts) over time to get Energy (kWh)
-        // We log every 5 minutes. 
-        // Energy (kWh) = Power (W) * (5/60) hours / 1000
-        const sampleDurationHours = 5 / 60; 
+        // 2. Fetch Data Logs
+        const query = `
+            SELECT 
+                timestamp,
+                power_pv, power_load, power_grid, power_battery, soc
+            FROM energy_log 
+            WHERE timestamp >= datetime('now', '${timeFilter}') 
+            ORDER BY timestamp ASC
+        `;
 
-        let stats = {
-            production: 0, consumption: 0, imported: 0, exported: 0,
-            batteryCharged: 0, batteryDischarged: 0,
-            autonomy: 0, selfConsumption: 0, costSaved: 0, earnings: 0
-        };
+        db.all(query, [], (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
 
-        rows.forEach(r => {
-            stats.production += (r.power_pv || 0) * sampleDurationHours / 1000;
-            stats.consumption += (r.power_load || 0) * sampleDurationHours / 1000;
-            
-            if (r.power_grid > 0) stats.imported += (r.power_grid) * sampleDurationHours / 1000;
-            else stats.exported += Math.abs(r.power_grid) * sampleDurationHours / 1000;
+            const sampleDurationHours = 5 / 60; // 5 minute intervals
 
-            if (r.power_battery > 0) stats.batteryCharged += r.power_battery * sampleDurationHours / 1000;
-            else stats.batteryDischarged += Math.abs(r.power_battery) * sampleDurationHours / 1000;
-        });
+            let stats = {
+                production: 0, consumption: 0, imported: 0, exported: 0,
+                batteryCharged: 0, batteryDischarged: 0,
+                autonomy: 0, selfConsumption: 0, costSaved: 0, earnings: 0
+            };
 
-        // Financials
-        // Cost Saved = (Total Consumption - Imported from Grid) * Cost per kWh
-        const selfPoweredKwh = Math.max(0, stats.consumption - stats.imported);
-        stats.costSaved = selfPoweredKwh * config.costPerKwh;
-        stats.earnings = stats.exported * config.feedInTariff;
+            rows.forEach(r => {
+                // Determine active tariff for this specific data point
+                const tariff = getTariffForTime(tariffs, r.timestamp);
 
-        // Percentages
-        stats.autonomy = stats.consumption > 0 ? (selfPoweredKwh / stats.consumption) * 100 : 0;
-        stats.selfConsumption = stats.production > 0 ? (selfPoweredKwh / stats.production) * 100 : 0;
+                const prod = (r.power_pv || 0) * sampleDurationHours / 1000;
+                const cons = (r.power_load || 0) * sampleDurationHours / 1000;
+                let imp = 0;
+                let exp = 0;
 
-        // Resample rows for Chart (reduce points)
-        const chartData = [];
-        for (let i = 0; i < rows.length; i += groupBy) {
-            chartData.push({
-                timestamp: rows[i].timestamp,
-                production: rows[i].power_pv,
-                consumption: rows[i].power_load,
-                soc: rows[i].soc
+                if (r.power_grid > 0) imp = (r.power_grid) * sampleDurationHours / 1000;
+                else exp = Math.abs(r.power_grid) * sampleDurationHours / 1000;
+
+                if (r.power_battery > 0) stats.batteryCharged += r.power_battery * sampleDurationHours / 1000;
+                else stats.batteryDischarged += Math.abs(r.power_battery) * sampleDurationHours / 1000;
+
+                stats.production += prod;
+                stats.consumption += cons;
+                stats.imported += imp;
+                stats.exported += exp;
+
+                // Calculate Financials based on THIS timestamp's tariff
+                const selfPoweredKwh = Math.max(0, cons - imp);
+                stats.costSaved += selfPoweredKwh * tariff.costPerKwh;
+                stats.earnings += exp * tariff.feedInTariff;
             });
-        }
 
-        res.json({ chart: chartData, stats });
+            // Percentages (Totals)
+            const totalSelfPowered = Math.max(0, stats.consumption - stats.imported);
+            stats.autonomy = stats.consumption > 0 ? (totalSelfPowered / stats.consumption) * 100 : 0;
+            stats.selfConsumption = stats.production > 0 ? (totalSelfPowered / stats.production) * 100 : 0;
+
+            // Chart Data Downsampling
+            const chartData = [];
+            for (let i = 0; i < rows.length; i += groupBy) {
+                chartData.push({
+                    timestamp: rows[i].timestamp,
+                    production: rows[i].power_pv,
+                    consumption: rows[i].power_load,
+                    soc: rows[i].soc
+                });
+            }
+
+            res.json({ chart: chartData, stats });
+        });
     });
 });
 
