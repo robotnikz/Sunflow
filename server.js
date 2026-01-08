@@ -304,7 +304,7 @@ app.get('/api/roi', (req, res) => {
             // Calculate Total Invested
             let totalInvested = 0;
             const now = new Date();
-            const systemStart = new Date(config.systemStartDate || '2000-01-01');
+            // const systemStart = new Date(config.systemStartDate || '2000-01-01');
             
             expenses.forEach(exp => {
                 if (exp.type === 'one_time') {
@@ -327,8 +327,12 @@ app.get('/api/roi', (req, res) => {
                 let dbReturned = 0;
                 let returnLast90Days = 0;
                 const sampleDurationHours = 1 / 60; // 1 minute
+                
                 const ninetyDaysAgo = new Date();
                 ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+                
+                // Track oldest data point within the 90 day window to calculate effective average
+                let oldestInWindow = null;
 
                 rows.forEach(r => {
                     const tsDate = new Date(r.timestamp);
@@ -350,6 +354,7 @@ app.get('/api/roi', (req, res) => {
 
                     if (tsDate >= ninetyDaysAgo) {
                         returnLast90Days += value;
+                        if (!oldestInWindow) oldestInWindow = tsDate;
                     }
                 });
 
@@ -362,19 +367,29 @@ app.get('/api/roi', (req, res) => {
                 const roiPercent = totalInvested > 0 ? (totalReturned / totalInvested) * 100 : 0;
 
                 if (netValue < 0) {
-                    // Estimate future daily return based on last 90 days average
-                    // If system is younger than 90 days, use total average
-                    const systemAgeDays = (now.getTime() - systemStart.getTime()) / (1000 * 3600 * 24);
-                    const daysToAvg = Math.min(90, Math.max(1, systemAgeDays));
+                    // FIX: Calculate daily return based on actual data availability, not system age.
+                    // If we only have 1 day of data, divide by 1. If we have >90 days, divide by 90.
+                    let durationDays = 1;
                     
-                    const dailyReturn = returnLast90Days > 0 ? (returnLast90Days / daysToAvg) : (totalReturned / Math.max(1, systemAgeDays));
+                    if (oldestInWindow) {
+                        const diffTime = Math.abs(now.getTime() - oldestInWindow.getTime());
+                        durationDays = diffTime / (1000 * 60 * 60 * 24);
+                    }
                     
-                    if (dailyReturn > 0) {
+                    // Clamp duration: Minimum 0.1 days (avoid div by zero), Max 90 days.
+                    const effectiveDays = Math.min(90, Math.max(0.1, durationDays));
+                    
+                    const dailyReturn = returnLast90Days / effectiveDays;
+                    
+                    if (dailyReturn > 0.01) { // Prevent massive numbers if return is basically zero
                         const remaining = Math.abs(netValue);
                         const daysLeft = remaining / dailyReturn;
                         const date = new Date();
                         date.setDate(date.getDate() + daysLeft);
-                        breakEvenDate = date.toISOString();
+                        // Cap date at 100 years to prevent "Year 5000" bugs
+                        if (daysLeft < 36500) {
+                             breakEvenDate = date.toISOString();
+                        }
                     }
                 }
 

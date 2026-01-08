@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SystemConfig, Tariff, Expense } from '../types';
-import { X, Save, Plus, Trash2, Calendar, DollarSign, PenTool, MapPin, Zap, History, HelpCircle } from 'lucide-react';
+import { X, Save, Plus, Trash2, Calendar, DollarSign, PenTool, MapPin, Zap, History, HelpCircle, Calculator } from 'lucide-react';
 import { getTariffs, addTariff, deleteTariff, getExpenses, addExpense, deleteExpense } from '../services/api';
 
 interface SettingsModalProps {
@@ -63,6 +63,33 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
   const handleConfigSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave(formData);
+  };
+
+  // Auto-Calculate History Estimation
+  const handleEstimateFinancials = () => {
+    const vals = formData.initialValues;
+    if (!vals) return;
+
+    // Use most recent tariff or default
+    const latestTariff = tariffs.length > 0 ? tariffs[tariffs.length - 1] : { costPerKwh: 0.30, feedInTariff: 0.08 };
+    
+    const totalProd = vals.production || 0;
+    const totalExport = vals.export || 0;
+    
+    // Self Consumption = Production - Export (simplified, assuming all non-export is self consumed or battery loss)
+    const selfConsumed = Math.max(0, totalProd - totalExport);
+    
+    const saved = selfConsumed * latestTariff.costPerKwh;
+    const earned = totalExport * latestTariff.feedInTariff;
+    
+    const total = saved + earned;
+
+    if (confirm(`Estimate based on current/latest prices:\n\nSelf-Consumed (${selfConsumed.toFixed(0)} kWh) × ${latestTariff.costPerKwh} = ${formData.currency === 'EUR' ? '€' : '$'}${saved.toFixed(2)}\nExported (${totalExport.toFixed(0)} kWh) × ${latestTariff.feedInTariff} = ${formData.currency === 'EUR' ? '€' : '$'}${earned.toFixed(2)}\n\nTotal Estimate: ${formData.currency === 'EUR' ? '€' : '$'}${total.toFixed(2)}\n\nApply this value?`)) {
+        setFormData({
+            ...formData,
+            initialValues: { ...vals, financialReturn: parseFloat(total.toFixed(2)) }
+        });
+    }
   };
 
   // Tariff Handlers
@@ -466,20 +493,30 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                         <label className="block text-sm font-medium text-white mb-2 flex items-center gap-2">
                            <DollarSign size={16} className="text-green-400"/> Previous Financial Return
                         </label>
-                        <div className="flex items-center bg-slate-900 border border-slate-600 rounded-lg overflow-hidden focus-within:border-yellow-500 transition-colors">
-                            <div className="shrink-0 pl-3 pr-2 text-slate-400 font-bold border-r border-slate-700/50">
-                                {formData.currency === 'EUR' ? '€' : '$'}
+                        <div className="flex gap-2">
+                            <div className="flex-1 flex items-center bg-slate-900 border border-slate-600 rounded-lg overflow-hidden focus-within:border-yellow-500 transition-colors">
+                                <div className="shrink-0 pl-3 pr-2 text-slate-400 font-bold border-r border-slate-700/50">
+                                    {formData.currency === 'EUR' ? '€' : '$'}
+                                </div>
+                                <input 
+                                    type="number" step="0.01"
+                                    value={formData.initialValues?.financialReturn || 0}
+                                    onChange={(e) => setFormData({
+                                        ...formData, 
+                                        initialValues: { ...formData.initialValues, financialReturn: parseFloat(e.target.value) }
+                                    })}
+                                    className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0"
+                                    placeholder="0.00"
+                                />
                             </div>
-                            <input 
-                                type="number" step="0.01"
-                                value={formData.initialValues?.financialReturn || 0}
-                                onChange={(e) => setFormData({
-                                    ...formData, 
-                                    initialValues: { ...formData.initialValues, financialReturn: parseFloat(e.target.value) }
-                                })}
-                                className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0"
-                                placeholder="0.00"
-                            />
+                            <button 
+                                type="button"
+                                onClick={handleEstimateFinancials}
+                                className="px-3 bg-slate-700 hover:bg-slate-600 rounded-lg border border-slate-600 text-slate-300 transition-colors flex items-center gap-1"
+                                title="Estimate based on kWh values below"
+                            >
+                                <Calculator size={16} /> <span className="text-xs font-medium hidden sm:inline">Estimate</span>
+                            </button>
                         </div>
                         <p className="text-xs text-slate-500 mt-1">
                             Calculated savings + feed-in revenue before app installation.
