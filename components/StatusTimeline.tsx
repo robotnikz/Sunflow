@@ -3,145 +3,146 @@ import React from 'react';
 interface StatusTimelineProps {
   history: Array<{
     timestamp: string;
-    status: number; // 0=Offline, 1=Running, 2=Error
+    status?: number; // 0=Offline, 1=Running, 2=Error
     soc: number;
-    production: number; // Used for "Producing" status check
-    consumption: number;
   }>;
 }
 
 const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
   if (!history || history.length === 0) return null;
 
-  // Transform data into segments to reduce DOM nodes and create blocks
-  // 1. Inverter Status Row
-  const statusSegments = [];
-  let currentSegment = { status: history[0].status, startTime: 0, count: 0 };
-  
-  // 2. Battery Status Row
-  const batterySegments = [];
-  // Helper to determine simplified battery state from historical data points
-  // Since we don't store "Charging/Discharging" string in history DB, we infer from SOC delta or if we had power data.
-  // Limitation: DB only stores SOC. Let's infer: 
-  // We don't have historical power_battery in the chart array (it's in raw DB).
-  // We can use SOC > 0 as "Active".
-  let currentBattSegment = { status: history[0].soc > 0 ? 'active' : 'idle', startTime: 0, count: 0 };
-
-  history.forEach((point, index) => {
-    // --- Inverter Logic ---
-    if (point.status !== currentSegment.status) {
-      statusSegments.push({ ...currentSegment, width: 0 }); // width calc later
-      currentSegment = { status: point.status, startTime: index, count: 1 };
-    } else {
-      currentSegment.count++;
-    }
-
-    // --- Battery Logic ---
-    const battState = point.soc > 0 ? 'active' : 'idle';
-    if (battState !== currentBattSegment.status) {
-      batterySegments.push({ ...currentBattSegment, width: 0 });
-      currentBattSegment = { status: battState, startTime: index, count: 1 };
-    } else {
-      currentBattSegment.count++;
-    }
-  });
-  
-  // Push last segments
-  statusSegments.push(currentSegment);
-  batterySegments.push(currentBattSegment);
-
-  // Calculate widths
   const totalPoints = history.length;
-  statusSegments.forEach(seg => seg.width = (seg.count / totalPoints) * 100);
-  batterySegments.forEach(seg => seg.width = (seg.count / totalPoints) * 100);
 
-  // Status mapping
-  const getStatusColor = (code: number) => {
-    switch (code) {
-      case 1: return 'bg-emerald-500'; // Running
-      case 2: return 'bg-red-500';     // Error
-      default: return 'bg-slate-600';  // Offline
-    }
+  // Helper to compress data into visual segments
+  const createSegments = (getValue: (p: any) => any, getLabel: (val: any) => string, getColor: (val: any) => string) => {
+    const segments: Array<{ value: any; start: number; count: number; label: string; color: string }> = [];
+    let current = { 
+        value: getValue(history[0]), 
+        start: 0, 
+        count: 0,
+        label: getLabel(getValue(history[0])),
+        color: getColor(getValue(history[0]))
+    };
+
+    history.forEach((point, index) => {
+      const val = getValue(point);
+      if (val !== current.value) {
+        segments.push({ ...current });
+        current = { 
+            value: val, 
+            start: index, 
+            count: 1,
+            label: getLabel(val),
+            color: getColor(val)
+        };
+      } else {
+        current.count++;
+      }
+    });
+    segments.push(current);
+
+    // Calc widths
+    return segments.map(seg => ({
+      ...seg,
+      width: (seg.count / totalPoints) * 100
+    }));
   };
 
-  const getStatusLabel = (code: number) => {
-    switch (code) {
-      case 1: return 'Running';
-      case 2: return 'Error';
-      default: return 'Offline';
-    }
-  };
+  // --- Row 1: Errors (Health) ---
+  // If status is 2 (Error), show Error. Otherwise show "Flawless"
+  const errorSegments = createSegments(
+    (p) => p.status === 2 ? 'error' : 'ok',
+    (val) => val === 'error' ? 'Error' : 'Flawless',
+    (val) => val === 'error' ? 'bg-red-500/80' : 'bg-emerald-600/80'
+  );
 
-  // Generate ticks for X-Axis (Time)
+  // --- Row 2: Status (Connectivity) ---
+  // If status is 0 (Offline), show Offline. Default to Running (1) if undefined (migration fallback)
+  const statusSegments = createSegments(
+    (p) => (p.status === 0) ? 'offline' : 'running',
+    (val) => val === 'offline' ? 'Offline' : 'Running',
+    (val) => val === 'offline' ? 'bg-slate-600' : 'bg-emerald-600/80'
+  );
+
+  // --- Row 3: Battery ---
+  // If SOC > 0 it's Active, else Idle
+  const batterySegments = createSegments(
+    (p) => p.soc > 0 ? 'active' : 'idle',
+    (val) => val === 'active' ? 'Active' : 'Idle',
+    (val) => val === 'active' ? 'bg-emerald-600/80' : 'bg-slate-700'
+  );
+
+  // X-Axis Time Ticks
   const ticks = [
     history[0].timestamp,
     history[Math.floor(totalPoints / 2)].timestamp,
     history[totalPoints - 1].timestamp
   ].map(t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
 
+  const Row = ({ label, segments }: { label: string, segments: typeof errorSegments }) => (
+    <div className="contents">
+        {/* Label Column */}
+        <div className="text-sm font-medium text-slate-400 py-1">{label}</div>
+        
+        {/* Bar Column */}
+        <div className="relative h-8 w-full bg-slate-900 rounded flex overflow-hidden">
+            {segments.map((seg, i) => (
+                <div 
+                    key={i} 
+                    className={`h-full flex items-center pl-2 overflow-hidden whitespace-nowrap transition-all border-r border-slate-900/10 ${seg.color}`}
+                    style={{ width: `${seg.width}%` }}
+                    title={`${seg.label} (${Math.round(seg.width)}%)`}
+                >
+                    {/* Show label only if segment is wide enough (>5%) */}
+                    {seg.width > 5 && (
+                        <span className="text-xs font-bold text-white/90 drop-shadow-md">{seg.label}</span>
+                    )}
+                </div>
+            ))}
+        </div>
+    </div>
+  );
+
   return (
     <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg">
-      <h3 className="text-slate-400 text-sm font-medium mb-4">System Status Timeline</h3>
+      <h3 className="text-slate-200 text-lg font-semibold mb-6">Inverter Status</h3>
       
-      <div className="space-y-4">
-        
-        {/* Row 1: Inverter Status */}
-        <div className="flex flex-col gap-1">
-          <div className="flex justify-between text-xs text-slate-400 uppercase tracking-wider mb-1">
-            <span>Inverter State</span>
-          </div>
-          <div className="w-full h-8 flex rounded-md overflow-hidden bg-slate-900 border border-slate-700">
-            {statusSegments.map((seg, i) => (
-              <div 
-                key={i} 
-                className={`${getStatusColor(seg.status)} hover:brightness-110 transition-all`}
-                style={{ width: `${seg.width}%` }}
-                title={`${getStatusLabel(seg.status)}: ${(seg.width).toFixed(1)}% of time`}
-              ></div>
-            ))}
-          </div>
-        </div>
+      {/* Grid Layout: [Label] [Bar] */}
+      <div className="grid grid-cols-[80px_1fr] gap-y-4 gap-x-4 items-center">
+        <Row label="Errors" segments={errorSegments} />
+        <Row label="Status" segments={statusSegments} />
+        <Row label="Battery" segments={batterySegments} />
+      </div>
 
-        {/* Row 2: Battery Availability */}
-        <div className="flex flex-col gap-1">
-          <div className="flex justify-between text-xs text-slate-400 uppercase tracking-wider mb-1">
-            <span>Battery Availability</span>
-          </div>
-          <div className="w-full h-8 flex rounded-md overflow-hidden bg-slate-900 border border-slate-700">
-            {batterySegments.map((seg, i) => (
-              <div 
-                key={i} 
-                className={`${seg.status === 'active' ? 'bg-emerald-600' : 'bg-slate-700'} border-r border-slate-800/20`}
-                style={{ width: `${seg.width}%` }}
-                title={`${seg.status === 'active' ? 'Active' : 'Standby'}`}
-              ></div>
-            ))}
-          </div>
-        </div>
-
-        {/* X Axis Labels */}
-        <div className="flex justify-between text-xs text-slate-500 mt-2 font-mono">
-           <span>{ticks[0]}</span>
-           <span>{ticks[1]}</span>
-           <span>{ticks[2]}</span>
-        </div>
-
-        {/* Legend */}
-        <div className="flex gap-4 mt-2 justify-center border-t border-slate-700/50 pt-3">
+      {/* X Axis */}
+      <div className="grid grid-cols-[80px_1fr] gap-x-4 mt-2">
+         <div></div> {/* Spacer for label col */}
+         <div className="flex justify-between text-xs text-slate-500 font-mono px-1">
+            <span>{ticks[0]}</span>
+            <span>{ticks[1]}</span>
+            <span>{ticks[2]}</span>
+         </div>
+      </div>
+      
+      {/* Legend */}
+      <div className="flex gap-6 mt-6 justify-center border-t border-slate-700/50 pt-4">
             <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-                <span className="text-xs text-slate-400">Running / Active</span>
+                <div className="w-4 h-1 bg-emerald-600 rounded"></div>
+                <span className="text-xs text-slate-400">Flawless / Running</span>
             </div>
             <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                <div className="w-4 h-1 bg-red-500 rounded"></div>
                 <span className="text-xs text-slate-400">Error</span>
             </div>
             <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-slate-600"></div>
-                <span className="text-xs text-slate-400">Offline / Standby</span>
+                <div className="w-4 h-1 bg-slate-600 rounded"></div>
+                <span className="text-xs text-slate-400">Offline</span>
+            </div>
+            <div className="flex items-center gap-2">
+                <div className="w-4 h-1 bg-slate-700 rounded"></div>
+                <span className="text-xs text-slate-400">Idle</span>
             </div>
         </div>
-      </div>
     </div>
   );
 };
