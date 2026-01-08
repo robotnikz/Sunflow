@@ -30,16 +30,23 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
     if (err) console.error("Error opening database:", err.message);
     else {
         console.log("Connected to SQLite database.");
-        db.run(`CREATE TABLE IF NOT EXISTS energy_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            power_pv REAL,
-            power_load REAL,
-            power_grid REAL,
-            power_battery REAL,
-            soc REAL,
-            energy_day_prod REAL
-        )`);
+        db.serialize(() => {
+            // Main table
+            db.run(`CREATE TABLE IF NOT EXISTS energy_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                power_pv REAL,
+                power_load REAL,
+                power_grid REAL,
+                power_battery REAL,
+                soc REAL,
+                energy_day_prod REAL
+            )`);
+            
+            // CRITICAL FOR PERFORMANCE: Index on timestamp
+            // This ensures that queries like "last year" remain fast even with millions of rows
+            db.run(`CREATE INDEX IF NOT EXISTS idx_timestamp ON energy_log(timestamp)`);
+        });
     }
 });
 
@@ -133,24 +140,28 @@ app.get('/api/data', async (req, res) => {
 
 // History Endpoint with Aggregation
 app.get('/api/history', (req, res) => {
-    const range = req.query.range || 'day'; // day, week, month, year
+    const range = req.query.range || 'day'; // hour, day, week, month, year
     const config = getConfig();
     
     let timeFilter;
     let groupBy;
     
     switch(range) {
+        case 'hour':
+            timeFilter = "-1 hours";
+            groupBy = 1; // Every data point (high res)
+            break;
         case 'week':
             timeFilter = "-7 days";
-            groupBy = 4; // Approximate grouping for graph smoothness
+            groupBy = 4; // Approx every 20 mins
             break;
         case 'month':
             timeFilter = "-30 days";
-            groupBy = 12; 
+            groupBy = 12; // Approx every hour
             break;
         case 'year':
             timeFilter = "-365 days";
-            groupBy = 288; // 1 day approx
+            groupBy = 288; // Approx every day (24h / 5min = 288 points)
             break;
         case 'day':
         default:

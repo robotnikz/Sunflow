@@ -101,7 +101,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
             Statistics & Savings
         </h2>
         <div className="flex bg-slate-900 rounded-lg p-1">
-            {(['day', 'week', 'month', 'year'] as TimeRange[]).map((range) => (
+            {(['hour', 'day', 'week', 'month', 'year'] as TimeRange[]).map((range) => (
                 <button
                     key={range}
                     onClick={() => setTimeRange(range)}

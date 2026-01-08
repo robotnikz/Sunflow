@@ -5,7 +5,7 @@ export interface SystemConfig {
   currency: string;
 }
 
-export type TimeRange = 'day' | 'week' | 'month' | 'year';
+export type TimeRange = 'hour' | 'day' | 'week' | 'month' | 'year';
 
 export interface EnergyStats {
   production: number;    // kWh
