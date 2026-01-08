@@ -200,7 +200,9 @@ app.get('/api/data', async (req, res) => {
     let responseData = {
         power: { pv: 0, load: 0, grid: 0, battery: 0 },
         battery: { soc: 0, state: 'idle' },
-        energy: { today: { production: 0, consumption: 0 } }
+        energy: { today: { production: 0, consumption: 0 } },
+        autonomy: 0,
+        selfConsumption: 0
     };
 
     if (rawData && rawData.Body && rawData.Body.Data) {
@@ -220,6 +222,10 @@ app.get('/api/data', async (req, res) => {
             state: (site.P_Akku > 5) ? 'charging' : (site.P_Akku < -5) ? 'discharging' : 'idle'
         };
         responseData.energy.today.production = (site.E_Day || 0) / 1000;
+        
+        // Populate Realtime Efficiency
+        responseData.autonomy = Math.round(site.rel_Autonomy || 0);
+        responseData.selfConsumption = Math.round(site.rel_SelfConsumption || 0);
     }
     res.json(responseData);
 });

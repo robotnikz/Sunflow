@@ -43,6 +43,8 @@ export interface InverterData {
       consumption: number;
     };
   };
+  autonomy: number;      // Realtime %
+  selfConsumption: number; // Realtime %
 }
 
 export interface HistoryData {

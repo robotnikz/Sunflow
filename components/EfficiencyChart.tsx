@@ -45,7 +45,7 @@ const EfficiencyChart: React.FC<EfficiencyChartProps> = ({ history }) => {
 
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={history} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+      <LineChart data={history} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
         <XAxis 
           dataKey="timestamp" 

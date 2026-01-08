@@ -79,6 +79,27 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
             power={data.power.battery}
             state={data.battery.state}
           />
+          
+          {/* Realtime Efficiency Donuts */}
+          <div className="grid grid-cols-2 gap-4">
+              <div className="bg-slate-800 rounded-2xl p-2 border border-slate-700 shadow-lg h-36">
+                  <EnergyDonut 
+                      percentage={data.autonomy} 
+                      label="Autonomy" 
+                      color="#3b82f6" 
+                      small
+                  />
+              </div>
+              <div className="bg-slate-800 rounded-2xl p-2 border border-slate-700 shadow-lg h-36">
+                  <EnergyDonut 
+                      percentage={data.selfConsumption} 
+                      label="Self Cons." 
+                      color="#22c55e" 
+                      small
+                  />
+              </div>
+          </div>
+
           <StatsCard 
             title="PV Power" 
             value={`${(data.power.pv / 1000).toFixed(2)} kW`} 
@@ -197,23 +218,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
                                 <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Zap size={12}/> Exported</div>
                                 <div className="text-xl font-bold text-green-400">{history.stats.exported.toFixed(2)} <span className="text-xs text-slate-500">kWh</span></div>
                             </div>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg">
-                            <EnergyDonut 
-                                percentage={history.stats.autonomy} 
-                                label="Autonomy" 
-                                color="#3b82f6" 
-                            />
-                        </div>
-                        <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg">
-                            <EnergyDonut 
-                                percentage={history.stats.selfConsumption} 
-                                label="Self Cons." 
-                                color="#22c55e" 
-                            />
                         </div>
                     </div>
                 </div>
