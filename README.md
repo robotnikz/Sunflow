@@ -1,20 +1,41 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# SunFlow Dashboard for Fronius Gen24
 
-# Run and deploy your AI Studio app
+A comprehensive monitoring solution for Fronius Gen24 inverters featuring real-time power flow, historical analysis, and financial tracking.
 
-This contains everything you need to run your app locally.
+## Prerequisites
 
-View your app in AI Studio: https://ai.studio/apps/drive/1rmjRkjXLpC5cCiok41btJCbm_nCeFp8Q
+1. **Docker Desktop** (Windows/Mac) or Docker Engine (Linux).
+2. **Fronius Gen24 Inverter** with "Solar API" enabled (Settings > Communication > Solar API).
 
-## Run Locally
+## Installation
 
-**Prerequisites:**  Node.js
+### Option 1: Run via Docker Image (Easiest for Users)
 
+Replace `YOUR_USERNAME` with the GitHub username hosting this repo.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+```bash
+docker run -d \
+  -p 3000:3000 \
+  -v $(pwd)/sunflow-data:/app/data \
+  -e TZ=Europe/Berlin \
+  --name sunflow \
+  ghcr.io/robotnikz/sunflow:latest
+```
+
+### Option 2: Build from Source (For Developers)
+
+1. Clone the repository.
+2. Build and run with Docker Compose:
+
+```powershell
+docker-compose up -d --build
+```
+
+Access the dashboard at [http://localhost:3000](http://localhost:3000).
+
+## Configuration
+
+1. Open the dashboard.
+2. Click the **Settings (Gear Icon)**.
+3. Enter your Inverter IP (e.g., `192.168.178.50`).
+4. Configure your expenses and tariffs for ROI calculation.
