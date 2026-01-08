@@ -99,7 +99,8 @@ const saveConfig = (cfg) => {
         systemStartDate: cfg.systemStartDate || new Date().toISOString().split('T')[0],
         latitude: cfg.latitude,
         longitude: cfg.longitude,
-        systemCapacity: cfg.systemCapacity
+        systemCapacity: cfg.systemCapacity,
+        initialValues: cfg.initialValues
     };
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(diskConfig, null, 2));
 };
@@ -286,6 +287,7 @@ const getTariffForTime = (tariffs, timestamp) => {
 // ROI / Amortization Endpoint
 app.get('/api/roi', (req, res) => {
     const config = getConfig();
+    const initialFinancialReturn = config.initialValues?.financialReturn || 0;
     
     db.all("SELECT * FROM expenses", [], (err, expenses) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -317,14 +319,12 @@ app.get('/api/roi', (req, res) => {
             });
 
             // Calculate Total Returns (All Time)
-            // Note: Optimizing this to not process millions of rows on every request in a prod env
-            // would involve a cache or summary table. For home use (<1M rows), this is acceptable.
             const query = "SELECT timestamp, power_pv, power_load, power_grid FROM energy_log ORDER BY timestamp ASC";
             
             db.all(query, [], (err, rows) => {
                 if (err) return res.status(500).json({ error: err.message });
                 
-                let totalReturned = 0;
+                let dbReturned = 0;
                 let returnLast90Days = 0;
                 const sampleDurationHours = 1 / 60; // 1 minute
                 const ninetyDaysAgo = new Date();
@@ -346,12 +346,15 @@ app.get('/api/roi', (req, res) => {
                     const earned = exp * tariff.feedInTariff;
                     const value = saved + earned;
 
-                    totalReturned += value;
+                    dbReturned += value;
 
                     if (tsDate >= ninetyDaysAgo) {
                         returnLast90Days += value;
                     }
                 });
+
+                // Add Initial/Historical Value to the DB calculated value
+                const totalReturned = dbReturned + initialFinancialReturn;
 
                 // Forecast
                 const netValue = totalReturned - totalInvested;
@@ -373,9 +376,6 @@ app.get('/api/roi', (req, res) => {
                         date.setDate(date.getDate() + daysLeft);
                         breakEvenDate = date.toISOString();
                     }
-                } else {
-                    // Already broke even - simplistic calculation could find exact date in past
-                    // For now, return null to indicate "Done"
                 }
 
                 res.json({

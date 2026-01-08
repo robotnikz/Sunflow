@@ -21,6 +21,12 @@ export interface SystemConfig {
   latitude?: string;
   longitude?: string;
   systemCapacity?: number; // kWp
+  initialValues?: {
+    production?: number; // kWh
+    import?: number; // kWh
+    export?: number; // kWh
+    financialReturn?: number; // Money amount already saved/earned before app installation
+  };
 }
 
 export type TimeRange = 'hour' | 'day' | 'week' | 'month' | 'year' | 'custom';

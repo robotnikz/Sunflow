@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SystemConfig, Tariff, Expense } from '../types';
-import { X, Save, Plus, Trash2, Calendar, DollarSign, PenTool, MapPin, Zap } from 'lucide-react';
+import { X, Save, Plus, Trash2, Calendar, DollarSign, PenTool, MapPin, Zap, History } from 'lucide-react';
 import { getTariffs, addTariff, deleteTariff, getExpenses, addExpense, deleteExpense } from '../services/api';
 
 interface SettingsModalProps {
@@ -14,6 +14,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
   const [tariffs, setTariffs] = useState<Tariff[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   
+  // Initialize initialValues if undefined
+  useEffect(() => {
+    if (!formData.initialValues) {
+        setFormData(prev => ({
+            ...prev,
+            initialValues: {
+                production: 0,
+                import: 0,
+                export: 0,
+                financialReturn: 0
+            }
+        }));
+    }
+  }, []);
+
   // New Tariff State
   const [newTariff, setNewTariff] = useState<Partial<Tariff>>({ 
     validFrom: new Date().toISOString().split('T')[0], 
@@ -29,7 +44,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
     date: new Date().toISOString().split('T')[0]
   });
 
-  const [activeTab, setActiveTab] = useState<'general' | 'tariffs' | 'expenses'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'tariffs' | 'expenses' | 'history'>('general');
 
   useEffect(() => {
     loadData();
@@ -128,6 +143,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
             className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors ${activeTab === 'expenses' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
           >
             Expenses & ROI
+          </button>
+          <button 
+            onClick={() => setActiveTab('history')}
+            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors ${activeTab === 'history' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
+          >
+            Historical Data
           </button>
         </div>
         
@@ -421,6 +442,104 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                   </div>
                 </div>
             </div>
+          )}
+
+          {/* TAB: History */}
+          {activeTab === 'history' && (
+            <form onSubmit={handleConfigSubmit} className="space-y-6">
+                <div className="bg-purple-900/20 border border-purple-800 p-4 rounded-lg">
+                    <p className="text-sm text-purple-200">
+                        If your system was running before you installed this app, enter the historical totals below.
+                        These values will be added to the calculated metrics to correct your ROI and Lifetime totals.
+                    </p>
+                </div>
+                
+                <div className="space-y-4">
+                    <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2 flex items-center gap-2">
+                        <History size={18}/> Pre-App Installation Totals
+                    </h3>
+
+                    <div>
+                        <label className="block text-sm font-medium text-white mb-2 flex items-center gap-2">
+                           <DollarSign size={16} className="text-green-400"/> Previous Financial Return
+                        </label>
+                        <div className="relative">
+                            <span className="absolute left-3 top-2 text-slate-500">{formData.currency === 'EUR' ? '€' : '$'}</span>
+                            <input 
+                                type="number" step="0.01"
+                                value={formData.initialValues?.financialReturn || 0}
+                                onChange={(e) => setFormData({
+                                    ...formData, 
+                                    initialValues: { ...formData.initialValues, financialReturn: parseFloat(e.target.value) }
+                                })}
+                                className="w-full bg-slate-900 border border-slate-600 rounded-lg pl-8 pr-4 py-2 text-white focus:outline-none focus:border-yellow-500"
+                            />
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">
+                            Total value (Saved Grid Costs + Feed-in Rewards) generated before this app was installed. 
+                            This directly fixes the ROI calculation.
+                        </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Total Production</label>
+                            <div className="relative">
+                                <input 
+                                    type="number" step="0.1"
+                                    value={formData.initialValues?.production || 0}
+                                    onChange={(e) => setFormData({
+                                        ...formData, 
+                                        initialValues: { ...formData.initialValues, production: parseFloat(e.target.value) }
+                                    })}
+                                    className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-yellow-500"
+                                />
+                                <span className="absolute right-3 top-2 text-slate-500 text-xs">kWh</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Total Export</label>
+                            <div className="relative">
+                                <input 
+                                    type="number" step="0.1"
+                                    value={formData.initialValues?.export || 0}
+                                    onChange={(e) => setFormData({
+                                        ...formData, 
+                                        initialValues: { ...formData.initialValues, export: parseFloat(e.target.value) }
+                                    })}
+                                    className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-yellow-500"
+                                />
+                                <span className="absolute right-3 top-2 text-slate-500 text-xs">kWh</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Total Import</label>
+                            <div className="relative">
+                                <input 
+                                    type="number" step="0.1"
+                                    value={formData.initialValues?.import || 0}
+                                    onChange={(e) => setFormData({
+                                        ...formData, 
+                                        initialValues: { ...formData.initialValues, import: parseFloat(e.target.value) }
+                                    })}
+                                    className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-yellow-500"
+                                />
+                                <span className="absolute right-3 top-2 text-slate-500 text-xs">kWh</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="pt-4 flex justify-end gap-3">
+                    <button 
+                    type="submit" 
+                    className="flex items-center gap-2 px-6 py-2 bg-yellow-500 text-slate-900 font-bold rounded-lg hover:bg-yellow-400 transition"
+                    >
+                    <Save size={18} />
+                    Save History
+                    </button>
+                </div>
+            </form>
           )}
 
         </div>
