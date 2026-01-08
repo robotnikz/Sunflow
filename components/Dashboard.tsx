@@ -62,12 +62,13 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
       {/* --- ROW 1: Realtime Power Flow & Status --- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Power Flow Diagram */}
-        <div className="lg:col-span-2 bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-xl relative overflow-hidden flex items-center justify-center">
-          <div className="absolute top-4 left-6 flex items-center gap-2 text-slate-300 font-semibold">
+        <div className="lg:col-span-2 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl relative overflow-hidden flex flex-col h-[450px]">
+          <div className="absolute top-4 left-6 flex items-center gap-2 text-slate-300 font-semibold z-10">
              <Zap className="text-yellow-500" size={20} />
              Live Power Flow
           </div>
-          <div className="w-full">
+          {/* Centering Wrapper */}
+          <div className="flex-1 w-full flex items-center justify-center p-4">
              <PowerFlow power={data.power} soc={data.battery.soc} />
           </div>
         </div>

@@ -12,116 +12,182 @@ interface PowerFlowProps {
 }
 
 const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
-  // Normalize grid/battery for visual flow direction
-  // Fronius: +Grid = Import, -Grid = Export
+  // Logic
   const isImporting = power.grid > 0;
   const isExporting = power.grid < 0;
-  const gridPowerAbs = Math.abs(power.grid);
-  
   const isCharging = power.battery > 0;
-  const isDischarging = power.battery < -10; // Threshold
+  const isDischarging = power.battery < -10;
+  
+  const gridPowerAbs = Math.abs(power.grid);
+  const batPowerAbs = Math.abs(power.battery);
 
-  // Calculate line thickness/opacity based on power flow (clamped)
-  const getFlowStyle = (watts: number) => {
-    const absWatts = Math.abs(watts);
-    const active = absWatts > 10;
-    return {
-      strokeWidth: active ? Math.min(Math.max(absWatts / 500, 2), 8) : 1,
-      opacity: active ? 1 : 0.2,
-      animationDuration: active ? `${Math.max(0.5, 3000 / absWatts)}s` : '0s' 
-    };
+  // Helper to determine animation speed based on wattage
+  const getSpeed = (watts: number) => {
+    const val = Math.abs(watts);
+    if (val < 10) return 0; // Stopped
+    if (val < 500) return 3; // Slow
+    if (val < 2000) return 1.5; // Medium
+    return 0.8; // Fast
   };
 
-  const pvStyle = getFlowStyle(power.pv);
-  const gridStyle = getFlowStyle(power.grid);
-  const battStyle = getFlowStyle(power.battery);
-  const loadStyle = getFlowStyle(power.load);
+  const pvSpeed = getSpeed(power.pv);
+  const loadSpeed = getSpeed(power.load);
+  const gridSpeed = getSpeed(power.grid);
+  const batSpeed = getSpeed(power.battery);
+
+  // Colors
+  const cPV = "#EAB308"; // Yellow-500
+  const cLoad = "#3B82F6"; // Blue-500
+  const cGrid = isImporting ? "#EF4444" : "#22C55E"; // Red/Green
+  const cBat = "#A855F7"; // Purple-500
+
+  // SVG Coordinates (Center 300,200)
+  // Top: 300,50
+  // Bottom: 300,350
+  // Left: 50,200
+  // Right: 550,200
+  const cx = 300;
+  const cy = 200;
 
   return (
-    <div className="relative w-full max-w-lg aspect-video flex items-center justify-center select-none">
-      
-      {/* SVG Connections */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 400 250">
+    <div className="relative w-full h-full flex items-center justify-center select-none">
+      <svg className="w-full h-full max-w-2xl max-h-[400px]" viewBox="0 0 600 400" preserveAspectRatio="xMidYMid meet">
         <defs>
-          <linearGradient id="gradSolar" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#EAB308" />
-            <stop offset="100%" stopColor="#EAB308" stopOpacity="0" />
-          </linearGradient>
+            {/* Glow Filters */}
+            <filter id="glow-pv" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+                <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <filter id="glow-load"><feGaussianBlur stdDeviation="4" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <filter id="glow-grid"><feGaussianBlur stdDeviation="4" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <filter id="glow-bat"><feGaussianBlur stdDeviation="4" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+
+            {/* Gradient Masks for Lines */}
+            <linearGradient id="grad-line" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="white" stopOpacity="0.1" />
+                <stop offset="50%" stopColor="white" stopOpacity="0.5" />
+                <stop offset="100%" stopColor="white" stopOpacity="0.1" />
+            </linearGradient>
         </defs>
 
-        {/* Center Hub (Inverter) */}
-        <circle cx="200" cy="125" r="5" fill="#475569" />
+        {/* --- CONNECTING LINES (Background Tracks) --- */}
+        {/* PV to Center */}
+        <path d={`M${cx},65 L${cx},${cy}`} stroke={cPV} strokeWidth="2" strokeOpacity="0.2" fill="none" />
+        {/* Center to Load */}
+        <path d={`M${cx},${cy} L${cx},335`} stroke={cLoad} strokeWidth="2" strokeOpacity="0.2" fill="none" />
+        {/* Bat to Center */}
+        <path d={`M85,${cy} L${cx},${cy}`} stroke={cBat} strokeWidth="2" strokeOpacity="0.2" fill="none" />
+        {/* Center to Grid */}
+        <path d={`M${cx},${cy} L515,${cy}`} stroke={cGrid} strokeWidth="2" strokeOpacity="0.2" fill="none" />
 
-        {/* Solar -> Center */}
-        <line x1="200" y1="40" x2="200" y2="125" stroke="#EAB308" strokeWidth={pvStyle.strokeWidth} opacity={pvStyle.opacity} strokeDasharray="10 5" className={power.pv > 10 ? "animate-pulse-flow" : ""} />
 
-        {/* Center -> Home (Load) */}
-        <line x1="200" y1="125" x2="200" y2="210" stroke="#3B82F6" strokeWidth={loadStyle.strokeWidth} opacity={loadStyle.opacity} strokeDasharray="10 5" className={power.load > 10 ? "animate-pulse-flow-down" : ""} />
+        {/* --- ANIMATED FLOW PARTICLES --- */}
+        
+        {/* PV Flow (Always Source -> Center) */}
+        {power.pv > 10 && (
+            <circle r="4" fill={cPV} filter="url(#glow-pv)">
+                <animateMotion dur={`${pvSpeed}s`} repeatCount="indefinite" path={`M${cx},65 L${cx},${cy}`} keyPoints="0;1" keyTimes="0;1" />
+            </circle>
+        )}
 
-        {/* Grid <-> Center */}
-        <line x1="340" y1="125" x2="200" y2="125" stroke={isImporting ? "#EF4444" : "#22C55E"} strokeWidth={gridStyle.strokeWidth} opacity={gridStyle.opacity} strokeDasharray="10 5" className={power.grid !== 0 ? (isImporting ? "animate-pulse-flow-left" : "animate-pulse-flow-right") : ""} />
+        {/* Load Flow (Always Center -> Sink) */}
+        {power.load > 10 && (
+            <circle r="4" fill={cLoad} filter="url(#glow-load)">
+                <animateMotion dur={`${loadSpeed}s`} repeatCount="indefinite" path={`M${cx},${cy} L${cx},335`} keyPoints="0;1" keyTimes="0;1" />
+            </circle>
+        )}
 
-        {/* Battery <-> Center */}
-        <line x1="60" y1="125" x2="200" y2="125" stroke="#A855F7" strokeWidth={battStyle.strokeWidth} opacity={battStyle.opacity} strokeDasharray="10 5" className={Math.abs(power.battery) > 10 ? (isCharging ? "animate-pulse-flow-right" : "animate-pulse-flow-left") : ""} />
+        {/* Battery Flow */}
+        {batPowerAbs > 10 && (
+            <circle r="4" fill={cBat} filter="url(#glow-bat)">
+                {isCharging ? (
+                     // Center -> Battery
+                     <animateMotion dur={`${batSpeed}s`} repeatCount="indefinite" path={`M${cx},${cy} L85,${cy}`} keyPoints="0;1" keyTimes="0;1" />
+                ) : (
+                     // Battery -> Center
+                     <animateMotion dur={`${batSpeed}s`} repeatCount="indefinite" path={`M85,${cy} L${cx},${cy}`} keyPoints="0;1" keyTimes="0;1" />
+                )}
+            </circle>
+        )}
+
+        {/* Grid Flow */}
+        {gridPowerAbs > 10 && (
+            <circle r="4" fill={cGrid} filter="url(#glow-grid)">
+                {isImporting ? (
+                    // Grid -> Center
+                    <animateMotion dur={`${gridSpeed}s`} repeatCount="indefinite" path={`M515,${cy} L${cx},${cy}`} keyPoints="0;1" keyTimes="0;1" />
+                ) : (
+                    // Center -> Grid
+                    <animateMotion dur={`${gridSpeed}s`} repeatCount="indefinite" path={`M${cx},${cy} L515,${cy}`} keyPoints="0;1" keyTimes="0;1" />
+                )}
+            </circle>
+        )}
+
+        {/* --- NODES --- */}
+
+        {/* CENTER HUB */}
+        <circle cx={cx} cy={cy} r="15" fill="#1e293b" stroke="#64748b" strokeWidth="2" />
+        <circle cx={cx} cy={cy} r="6" fill="#94a3b8" className="animate-pulse" />
+
       </svg>
 
-      {/* Nodes */}
+      {/* --- HTML OVERLAYS FOR ICONS & TEXT (Better Accessibility & sharp text) --- */}
       
-      {/* Solar (Top) */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 flex flex-col items-center">
-        <div className={`p-3 rounded-full bg-slate-800 border-2 ${power.pv > 0 ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)]' : 'border-slate-600'} transition-all duration-500`}>
-          <Sun className="text-yellow-500" size={32} />
+      {/* PV NODE (Top) */}
+      <div className="absolute top-[5%] left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
+        <div className={`p-4 rounded-full bg-slate-800/80 backdrop-blur border border-slate-600 shadow-[0_0_20px_rgba(234,179,8,0.2)] transition-transform duration-300 hover:scale-110`}>
+             <Sun className="text-yellow-500" size={36} fill={power.pv > 0 ? "currentColor" : "none"} fillOpacity={0.2} />
         </div>
-        <span className="mt-2 font-mono text-yellow-400 font-bold">{Math.round(power.pv)} W</span>
-      </div>
-
-      {/* Load (Bottom) */}
-      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex flex-col items-center">
-        <span className="mb-2 font-mono text-blue-400 font-bold">{Math.round(power.load)} W</span>
-        <div className="p-3 rounded-full bg-slate-800 border-2 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.3)]">
-          <Home className="text-blue-500" size={32} />
+        <div className="text-center">
+             <span className="block text-xl font-bold text-yellow-400 drop-shadow-md">{Math.round(power.pv)} W</span>
+             <span className="text-xs text-slate-500 font-medium">SOLAR</span>
         </div>
       </div>
 
-      {/* Grid (Right) */}
-      <div className="absolute right-0 top-1/2 -translate-y-1/2 flex flex-col items-center">
-        <div className={`p-3 rounded-full bg-slate-800 border-2 ${isImporting ? 'border-red-500' : 'border-green-500'} transition-colors duration-500`}>
-          <Zap className={isImporting ? 'text-red-500' : 'text-green-500'} size={32} />
+      {/* LOAD NODE (Bottom) */}
+      <div className="absolute bottom-[5%] left-1/2 -translate-x-1/2 flex flex-col-reverse items-center gap-2">
+        <div className={`p-4 rounded-full bg-slate-800/80 backdrop-blur border border-slate-600 shadow-[0_0_20px_rgba(59,130,246,0.2)] transition-transform duration-300 hover:scale-110`}>
+             <Home className="text-blue-500" size={36} />
         </div>
-        
-        {/* Unambiguous Grid Status */}
-        <div className="flex flex-col items-center mt-2">
-            <span className={`font-mono font-bold text-lg flex items-center gap-1 ${isImporting ? 'text-red-400' : isExporting ? 'text-green-400' : 'text-slate-500'}`}>
+        <div className="text-center">
+             <span className="block text-xl font-bold text-blue-400 drop-shadow-md">{Math.round(power.load)} W</span>
+             <span className="text-xs text-slate-500 font-medium">HOME LOAD</span>
+        </div>
+      </div>
+
+      {/* BATTERY NODE (Left) */}
+      <div className="absolute left-[2%] top-1/2 -translate-y-1/2 flex flex-col items-center gap-2 w-[100px]">
+        <div className={`relative p-4 rounded-full bg-slate-800/80 backdrop-blur border ${isDischarging ? 'border-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.3)]' : 'border-slate-600'} transition-all duration-300 hover:scale-110`}>
+             <Battery className="text-purple-500" size={36} />
+             <div className="absolute -right-1 -top-1 bg-slate-900 text-white text-[10px] font-bold px-1.5 py-0.5 rounded border border-slate-600">
+                {Math.round(soc)}%
+             </div>
+        </div>
+        <div className="text-center">
+             <span className="block text-xl font-bold text-purple-400 drop-shadow-md">{Math.round(batPowerAbs)} W</span>
+             <span className="text-xs text-slate-500 font-medium flex justify-center items-center gap-1">
+                {isCharging ? 'CHARGING' : isDischarging ? 'DRAINING' : 'IDLE'}
+             </span>
+        </div>
+      </div>
+
+      {/* GRID NODE (Right) */}
+      <div className="absolute right-[2%] top-1/2 -translate-y-1/2 flex flex-col items-center gap-2 w-[100px]">
+        <div className={`p-4 rounded-full bg-slate-800/80 backdrop-blur border ${isImporting ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)]' : isExporting ? 'border-green-500 shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'border-slate-600'} transition-all duration-300 hover:scale-110`}>
+             <Zap className={isImporting ? 'text-red-500' : isExporting ? 'text-green-500' : 'text-slate-500'} size={36} fill={power.grid !== 0 ? "currentColor" : "none"} fillOpacity={0.2} />
+        </div>
+        <div className="text-center">
+             <span className={`block text-xl font-bold drop-shadow-md ${isImporting ? 'text-red-400' : isExporting ? 'text-green-400' : 'text-slate-500'}`}>
                 {Math.round(gridPowerAbs)} W
-                {isImporting && <ArrowDown size={18} strokeWidth={3} />}
-                {isExporting && <ArrowUp size={18} strokeWidth={3} />}
-            </span>
-            <span className={`text-xs font-bold uppercase tracking-wide ${isImporting ? 'text-red-500' : isExporting ? 'text-green-500' : 'text-slate-500'}`}>
-                {isImporting ? 'Purchasing' : isExporting ? 'Selling' : 'Grid Idle'}
-            </span>
+             </span>
+             <span className={`text-xs font-medium flex justify-center items-center gap-1 ${isImporting ? 'text-red-500' : isExporting ? 'text-green-500' : 'text-slate-500'}`}>
+                {isImporting && <ArrowDown size={12}/>}
+                {isExporting && <ArrowUp size={12}/>}
+                {isImporting ? 'GRID' : isExporting ? 'GRID' : 'GRID'}
+             </span>
         </div>
       </div>
 
-      {/* Battery (Left) */}
-      <div className="absolute left-0 top-1/2 -translate-y-1/2 flex flex-col items-center">
-        <div className={`relative p-3 rounded-full bg-slate-800 border-2 ${isDischarging ? 'border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.3)]' : isCharging ? 'border-green-500' : 'border-slate-600'}`}>
-          <Battery className="text-purple-500" size={32} />
-          {/* SOC Indicator Overlay */}
-          <div className="absolute -bottom-1 -right-1 bg-slate-900 text-[10px] font-bold text-white px-1 rounded border border-slate-700">
-            {Math.round(soc)}%
-          </div>
-        </div>
-        <span className="mt-2 font-mono text-purple-400 font-bold">{Math.round(Math.abs(power.battery))} W</span>
-      </div>
-
-      <style>{`
-        @keyframes flow { to { stroke-dashoffset: -15; } }
-        @keyframes flow-reverse { to { stroke-dashoffset: 15; } }
-        .animate-pulse-flow { animation: flow 1s linear infinite; }
-        .animate-pulse-flow-down { animation: flow 1s linear infinite; }
-        .animate-pulse-flow-right { animation: flow-reverse 1s linear infinite; }
-        .animate-pulse-flow-left { animation: flow 1s linear infinite; }
-      `}</style>
     </div>
   );
 };
