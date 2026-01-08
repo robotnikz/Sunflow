@@ -17,19 +17,27 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3000;
-const DB_FILE = 'solar_data.db';
-const CONFIG_FILE = 'config.json';
+const PORT = process.env.PORT || 3000;
+
+// Data Directory Setup (Crucial for Docker persistence)
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+if (!fs.existsSync(DATA_DIR)){
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+const DB_FILE = path.join(DATA_DIR, 'solar_data.db');
+const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static('dist'));
+// Serve static files from the React build
+app.use(express.static(path.join(__dirname, 'dist')));
 
 // Database Setup
 const db = new sqlite3.Database(DB_FILE, (err) => {
     if (err) console.error("Error opening database:", err.message);
     else {
-        console.log("Connected to SQLite database.");
+        console.log(`Connected to SQLite database at ${DB_FILE}`);
         db.serialize(() => {
             // Main Log Table
             db.run(`CREATE TABLE IF NOT EXISTS energy_log (
@@ -715,6 +723,8 @@ app.get('/api/history', (req, res) => {
     });
 });
 
+// For any other request, serve the index.html from the dist folder
+// This handles the client-side routing
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
