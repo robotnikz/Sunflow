@@ -68,7 +68,7 @@ const AmortizationWidget: React.FC<AmortizationWidgetProps> = ({ roiData, curren
                 {/* Marker for 100% */}
                 <div className="absolute top-0 bottom-0 left-[100%] w-0.5 bg-white/20"></div>
             </div>
-            <div className="flex justify-between text-xs text-slate-500 mt-2 font-mono">
+            <div className="flex justify-between text-xs text-slate-500 mt-2 font-medium">
                 <span>{symbol}{fmt(roiData.totalReturned)} returned</span>
                 <span>Target: {symbol}{fmt(roiData.totalInvested)}</span>
             </div>
