@@ -40,8 +40,20 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
                 power_grid REAL,
                 power_battery REAL,
                 soc REAL,
-                energy_day_prod REAL
+                energy_day_prod REAL,
+                status_code INTEGER DEFAULT 1
             )`);
+            
+            // Migration: Add status_code column if it doesn't exist (for existing DBs)
+            // SQLite doesn't support "IF NOT EXISTS" in ADD COLUMN, so we catch the error
+            db.run("ALTER TABLE energy_log ADD COLUMN status_code INTEGER DEFAULT 1", (err) => {
+                if (err && !err.message.includes("duplicate column name")) {
+                    console.error("Migration error:", err.message);
+                } else if (!err) {
+                    console.log("Migrated DB: Added status_code column");
+                }
+            });
+
             db.run(`CREATE INDEX IF NOT EXISTS idx_timestamp ON energy_log(timestamp)`);
 
             // Tariffs Table
@@ -51,13 +63,11 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
                 cost_per_kwh REAL NOT NULL,
                 feed_in_tariff REAL NOT NULL
             )`, () => {
-                // Migration: Check if we need to seed initial tariff from old config
                 db.get("SELECT count(*) as count FROM tariffs", (err, row) => {
                     if (row.count === 0) {
                         const oldConfig = getConfig();
                         console.log("Seeding initial tariff from config...");
                         const stmt = db.prepare("INSERT INTO tariffs (valid_from, cost_per_kwh, feed_in_tariff) VALUES (?, ?, ?)");
-                        // Set a date far in the past to ensure all historical data is covered
                         stmt.run("2000-01-01", oldConfig.costPerKwh || 0.30, oldConfig.feedInTariff || 0.08);
                         stmt.finalize();
                     }
@@ -71,12 +81,10 @@ const getConfig = () => {
     if (fs.existsSync(CONFIG_FILE)) {
         return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
     }
-    // Default config (Tariffs are now in DB, so we only strictly need IP and currency here)
     return { inverterIp: '', currency: 'EUR' };
 };
 
 const saveConfig = (cfg) => {
-    // We only save non-tariff data to the file now
     const diskConfig = {
         inverterIp: cfg.inverterIp,
         currency: cfg.currency
@@ -100,22 +108,39 @@ setInterval(async () => {
     if (!config.inverterIp) return;
 
     const rawData = await fetchFroniusData(config.inverterIp);
+    
+    let p_pv = 0, p_load = 0, p_grid = 0, p_batt = 0, soc = 0, e_day = 0;
+    let statusCode = 0; // 0 = Offline
+
     if (rawData && rawData.Body && rawData.Body.Data) {
+        // Check Fronius API Response Code (usually in Head.Status.Code)
+        const apiCode = rawData.Head?.Status?.Code;
+        
+        if (apiCode === 0) {
+            statusCode = 1; // 1 = Running/OK
+        } else {
+            statusCode = 2; // 2 = Error reported by Inverter
+        }
+
         const site = rawData.Body.Data.Site;
         const inverters = rawData.Body.Data.Inverters;
         const inverterKey = Object.keys(inverters)[0];
-        const soc = inverters[inverterKey] ? inverters[inverterKey].SOC : 0;
+        soc = inverters[inverterKey] ? inverters[inverterKey].SOC : 0;
 
-        const p_pv = site.P_PV || 0;
-        const p_load = Math.abs(site.P_Load || 0);
-        const p_grid = site.P_Grid || 0;
-        const p_batt = site.P_Akku || 0;
-        const e_day = site.E_Day || 0;
-
-        const stmt = db.prepare(`INSERT INTO energy_log (power_pv, power_load, power_grid, power_battery, soc, energy_day_prod) VALUES (?, ?, ?, ?, ?, ?)`);
-        stmt.run(p_pv, p_load, p_grid, p_batt, soc, e_day);
-        stmt.finalize();
+        p_pv = site.P_PV || 0;
+        p_load = Math.abs(site.P_Load || 0);
+        p_grid = site.P_Grid || 0;
+        p_batt = site.P_Akku || 0;
+        e_day = site.E_Day || 0;
+    } else {
+        statusCode = 0; // Offline / Network Error
     }
+
+    // Only log if we have data or to log an outage
+    const stmt = db.prepare(`INSERT INTO energy_log (power_pv, power_load, power_grid, power_battery, soc, energy_day_prod, status_code) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+    stmt.run(p_pv, p_load, p_grid, p_batt, soc, e_day, statusCode);
+    stmt.finalize();
+
 }, 5 * 60 * 1000); // 5 Minutes
 
 // --- API ---
@@ -146,10 +171,8 @@ app.post('/api/tariffs', (req, res) => {
 });
 
 app.delete('/api/tariffs/:id', (req, res) => {
-    // Prevent deleting the last remaining tariff
     db.get("SELECT count(*) as count FROM tariffs", (err, row) => {
         if (row.count <= 1) return res.status(400).json({ error: "Cannot delete the last tariff." });
-        
         const stmt = db.prepare("DELETE FROM tariffs WHERE id = ?");
         stmt.run(req.params.id, (err) => {
             if (err) return res.status(500).json({ error: err.message });
@@ -191,24 +214,20 @@ app.get('/api/data', async (req, res) => {
     res.json(responseData);
 });
 
-// Helper to find valid tariff for a timestamp
 const getTariffForTime = (tariffs, timestamp) => {
-    // Tariffs are sorted ASC. We want the latest tariff that has valid_from <= timestamp
-    // Since timestamp in DB is 'YYYY-MM-DD HH:MM:SS' and valid_from is 'YYYY-MM-DD', string comparison works for date part
     let activeTariff = tariffs[0];
-    const datePart = timestamp.substring(0, 10); // Extract YYYY-MM-DD
-    
+    const datePart = timestamp.substring(0, 10);
     for (const t of tariffs) {
         if (t.validFrom <= datePart) {
             activeTariff = t;
         } else {
-            break; // Since sorted, future dates mean we stop
+            break;
         }
     }
     return activeTariff;
 };
 
-// History Endpoint with Accurate Financial Calculation
+// History Endpoint
 app.get('/api/history', (req, res) => {
     const range = req.query.range || 'day'; 
     const config = getConfig();
@@ -224,7 +243,6 @@ app.get('/api/history', (req, res) => {
         case 'day': default: timeFilter = "-24 hours"; groupBy = 1; break;
     }
 
-    // 1. Fetch Tariffs First
     db.all("SELECT * FROM tariffs ORDER BY valid_from ASC", [], (err, tariffRows) => {
         if (err) return res.status(500).json({ error: err.message });
         
@@ -234,11 +252,10 @@ app.get('/api/history', (req, res) => {
             feedInTariff: t.feed_in_tariff
         }));
 
-        // 2. Fetch Data Logs
         const query = `
             SELECT 
                 timestamp,
-                power_pv, power_load, power_grid, power_battery, soc
+                power_pv, power_load, power_grid, power_battery, soc, status_code
             FROM energy_log 
             WHERE timestamp >= datetime('now', '${timeFilter}') 
             ORDER BY timestamp ASC
@@ -247,7 +264,7 @@ app.get('/api/history', (req, res) => {
         db.all(query, [], (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
 
-            const sampleDurationHours = 5 / 60; // 5 minute intervals
+            const sampleDurationHours = 5 / 60; 
 
             let stats = {
                 production: 0, consumption: 0, imported: 0, exported: 0,
@@ -256,9 +273,7 @@ app.get('/api/history', (req, res) => {
             };
 
             rows.forEach(r => {
-                // Determine active tariff for this specific data point
                 const tariff = getTariffForTime(tariffs, r.timestamp);
-
                 const prod = (r.power_pv || 0) * sampleDurationHours / 1000;
                 const cons = (r.power_load || 0) * sampleDurationHours / 1000;
                 let imp = 0;
@@ -275,25 +290,23 @@ app.get('/api/history', (req, res) => {
                 stats.imported += imp;
                 stats.exported += exp;
 
-                // Calculate Financials based on THIS timestamp's tariff
                 const selfPoweredKwh = Math.max(0, cons - imp);
                 stats.costSaved += selfPoweredKwh * tariff.costPerKwh;
                 stats.earnings += exp * tariff.feedInTariff;
             });
 
-            // Percentages (Totals)
             const totalSelfPowered = Math.max(0, stats.consumption - stats.imported);
             stats.autonomy = stats.consumption > 0 ? (totalSelfPowered / stats.consumption) * 100 : 0;
             stats.selfConsumption = stats.production > 0 ? (totalSelfPowered / stats.production) * 100 : 0;
 
-            // Chart Data Downsampling
             const chartData = [];
             for (let i = 0; i < rows.length; i += groupBy) {
                 chartData.push({
                     timestamp: rows[i].timestamp,
                     production: rows[i].power_pv,
                     consumption: rows[i].power_load,
-                    soc: rows[i].soc
+                    soc: rows[i].soc,
+                    status: rows[i].status_code !== undefined ? rows[i].status_code : 1 // Default to 1 (Running) if old data
                 });
             }
 

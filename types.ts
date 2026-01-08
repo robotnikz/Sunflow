@@ -8,9 +8,6 @@ export interface Tariff {
 export interface SystemConfig {
   inverterIp: string;
   currency: string;
-  // Legacy fields are removed in favor of Tariff logic, 
-  // but we keep them optional in type if needed for migration checks, 
-  // though the UI will now rely on the tariff list.
 }
 
 export type TimeRange = 'hour' | 'day' | 'week' | 'month' | 'year';
@@ -53,11 +50,18 @@ export interface HistoryData {
     production: number;
     consumption: number;
     soc: number;
+    status: number; // 0=Offline, 1=Running, 2=Error
   }>;
   stats: EnergyStats;
 }
 
 export interface FroniusRealtimeResponse {
+  Head: {
+    Status: {
+      Code: number;
+      Reason?: string;
+    };
+  };
   Body: {
     Data: {
       Site: {

@@ -4,7 +4,8 @@ import PowerFlow from './PowerFlow';
 import EnergyChart from './EnergyChart';
 import StatsCard from './StatsCard';
 import EnergyDonut from './EnergyDonut';
-import BatteryWidget from './BatteryWidget'; // Import new widget
+import BatteryWidget from './BatteryWidget';
+import StatusTimeline from './StatusTimeline'; // Import new component
 import { getHistory } from '../services/api';
 import { Sun, Zap, Home, PiggyBank, Calendar } from 'lucide-react';
 
@@ -114,85 +115,90 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error }) => {
 
       {/* --- ROW 3: Historical Data & Donuts --- */}
       {history ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
+        <div className="animate-fade-in space-y-6">
             
-            {/* Left: Financials & Meters Grid */}
-            <div className="lg:col-span-1 space-y-6">
-                {/* Financial Card */}
-                <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
-                    <h3 className="text-slate-400 text-sm font-medium mb-4 flex items-center gap-2">
-                        <PiggyBank size={16} /> Estimated Savings
-                    </h3>
-                    <div className="flex flex-col gap-6">
-                        <div>
-                            <span className="text-slate-500 text-xs uppercase tracking-wider">Total Savings</span>
-                            <div className="text-4xl font-bold text-green-400">
-                                {currencySymbol} {(history.stats.costSaved + history.stats.earnings).toFixed(2)}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Left: Financials & Meters Grid */}
+                <div className="lg:col-span-1 space-y-6">
+                    {/* Financial Card */}
+                    <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
+                        <h3 className="text-slate-400 text-sm font-medium mb-4 flex items-center gap-2">
+                            <PiggyBank size={16} /> Estimated Savings
+                        </h3>
+                        <div className="flex flex-col gap-6">
+                            <div>
+                                <span className="text-slate-500 text-xs uppercase tracking-wider">Total Savings</span>
+                                <div className="text-4xl font-bold text-green-400">
+                                    {currencySymbol} {(history.stats.costSaved + history.stats.earnings).toFixed(2)}
+                                </div>
+                                <div className="text-xs text-slate-500 mt-1">Avoided Cost + Feed-in</div>
                             </div>
-                            <div className="text-xs text-slate-500 mt-1">Avoided Cost + Feed-in</div>
+                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-700">
+                                <div>
+                                    <span className="text-slate-500 text-xs">Direct Savings</span>
+                                    <div className="text-lg font-semibold text-slate-200">{currencySymbol} {history.stats.costSaved.toFixed(2)}</div>
+                                </div>
+                                <div>
+                                    <span className="text-slate-500 text-xs">Export Earnings</span>
+                                    <div className="text-lg font-semibold text-slate-200">{currencySymbol} {history.stats.earnings.toFixed(2)}</div>
+                                </div>
+                            </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-700">
-                             <div>
-                                <span className="text-slate-500 text-xs">Direct Savings</span>
-                                <div className="text-lg font-semibold text-slate-200">{currencySymbol} {history.stats.costSaved.toFixed(2)}</div>
-                             </div>
-                             <div>
-                                <span className="text-slate-500 text-xs">Export Earnings</span>
-                                <div className="text-lg font-semibold text-slate-200">{currencySymbol} {history.stats.earnings.toFixed(2)}</div>
-                             </div>
+                    </div>
+
+                    {/* Energy Detail Grid */}
+                    <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
+                        <h3 className="text-slate-400 text-sm font-medium mb-4">Energy Meters ({timeRange})</h3>
+                        <div className="grid grid-cols-2 gap-y-6 gap-x-4">
+                            <div>
+                                <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Sun size={12}/> Solar Yield</div>
+                                <div className="text-xl font-bold text-yellow-400">{history.stats.production.toFixed(1)} <span className="text-xs text-slate-500">kWh</span></div>
+                            </div>
+                            <div>
+                                <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Home size={12}/> Consumption</div>
+                                <div className="text-xl font-bold text-blue-400">{history.stats.consumption.toFixed(1)} <span className="text-xs text-slate-500">kWh</span></div>
+                            </div>
+                            <div>
+                                <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Zap size={12}/> Imported</div>
+                                <div className="text-xl font-bold text-red-400">{history.stats.imported.toFixed(1)} <span className="text-xs text-slate-500">kWh</span></div>
+                            </div>
+                            <div>
+                                <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Zap size={12}/> Exported</div>
+                                <div className="text-xl font-bold text-green-400">{history.stats.exported.toFixed(1)} <span className="text-xs text-slate-500">kWh</span></div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Energy Detail Grid */}
-                <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
-                    <h3 className="text-slate-400 text-sm font-medium mb-4">Energy Meters ({timeRange})</h3>
-                    <div className="grid grid-cols-2 gap-y-6 gap-x-4">
-                        <div>
-                            <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Sun size={12}/> Solar Yield</div>
-                            <div className="text-xl font-bold text-yellow-400">{history.stats.production.toFixed(1)} <span className="text-xs text-slate-500">kWh</span></div>
-                        </div>
-                        <div>
-                            <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Home size={12}/> Consumption</div>
-                            <div className="text-xl font-bold text-blue-400">{history.stats.consumption.toFixed(1)} <span className="text-xs text-slate-500">kWh</span></div>
-                        </div>
-                        <div>
-                            <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Zap size={12}/> Imported</div>
-                            <div className="text-xl font-bold text-red-400">{history.stats.imported.toFixed(1)} <span className="text-xs text-slate-500">kWh</span></div>
-                        </div>
-                        <div>
-                            <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Zap size={12}/> Exported</div>
-                            <div className="text-xl font-bold text-green-400">{history.stats.exported.toFixed(1)} <span className="text-xs text-slate-500">kWh</span></div>
-                        </div>
+                {/* Middle: Donuts */}
+                <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg">
+                        <EnergyDonut 
+                            percentage={history.stats.autonomy} 
+                            label="Autonomy" 
+                            subLabel="Self-powered vs. Grid"
+                            color="#3b82f6" // blue
+                        />
+                    </div>
+                    <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg">
+                        <EnergyDonut 
+                            percentage={history.stats.selfConsumption} 
+                            label="Self Consumption" 
+                            subLabel="Consumed vs. Exported"
+                            color="#22c55e" // green
+                        />
+                    </div>
+                    
+                    {/* Chart spanning full width of this column section */}
+                    <div className="md:col-span-2 bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[350px]">
+                        <h3 className="text-slate-400 text-sm font-medium mb-4">Power History</h3>
+                        <EnergyChart history={history.chart} />
                     </div>
                 </div>
             </div>
 
-            {/* Middle: Donuts */}
-            <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg">
-                    <EnergyDonut 
-                        percentage={history.stats.autonomy} 
-                        label="Autonomy" 
-                        subLabel="Self-powered vs. Grid"
-                        color="#3b82f6" // blue
-                    />
-                </div>
-                <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg">
-                     <EnergyDonut 
-                        percentage={history.stats.selfConsumption} 
-                        label="Self Consumption" 
-                        subLabel="Consumed vs. Exported"
-                        color="#22c55e" // green
-                    />
-                </div>
-                
-                {/* Chart spanning full width of this column section */}
-                <div className="md:col-span-2 bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[350px]">
-                     <h3 className="text-slate-400 text-sm font-medium mb-4">Power History</h3>
-                     <EnergyChart history={history.chart} />
-                </div>
-            </div>
+            {/* NEW STATUS TIMELINE (Full Width below everything) */}
+            <StatusTimeline history={history.chart} />
 
         </div>
       ) : (
