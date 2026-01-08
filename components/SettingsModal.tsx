@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { SystemConfig, Tariff, Expense } from '../types';
 import { X, Save, Plus, Trash2, Calendar, DollarSign, PenTool, MapPin, Zap, History, HelpCircle, Calculator, CheckCircle2, AlertTriangle, ArrowRight, TrendingUp } from 'lucide-react';
@@ -14,7 +15,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
   const [tariffs, setTariffs] = useState<Tariff[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   
-  // Initialize initialValues if undefined
+  // Sync prop changes to state (important if config is loaded async after modal is ready)
+  useEffect(() => {
+    setFormData(prev => ({
+        ...currentConfig,
+        // Ensure initialValues is populated if missing in props but present in state
+        initialValues: currentConfig.initialValues || prev.initialValues || {
+            production: 0,
+            import: 0,
+            export: 0,
+            financialReturn: 0
+        }
+    }));
+  }, [currentConfig]);
+
+  // Initialize defaults if missing
   useEffect(() => {
     if (!formData.initialValues) {
         setFormData(prev => ({
@@ -71,7 +86,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
   // Auto-Calculate History Estimation
   const handleEstimateFinancials = () => {
     const vals = formData.initialValues;
-    if (!vals) return;
+    if (!vals) {
+        alert("Please ensure the values below are entered correctly.");
+        return;
+    }
 
     // Use most recent tariff or default
     const latestTariff = tariffs.length > 0 ? tariffs[tariffs.length - 1] : { costPerKwh: 0.30, feedInTariff: 0.08 };
@@ -79,6 +97,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
     const totalProd = vals.production || 0;
     const totalExport = vals.export || 0;
     
+    if (totalProd === 0 && totalExport === 0) {
+        alert("Please enter at least Production and Export values from your inverter history.");
+        return;
+    }
+
     // Self Consumption = Production - Export (simplified, assuming all non-export is self consumed or battery loss)
     const selfConsumed = Math.max(0, totalProd - totalExport);
     
@@ -110,12 +133,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
   };
 
   const handleDeleteTariff = async (id: number) => {
-    if (confirm("Are you sure?")) {
+    if (confirm("Are you sure you want to delete this price entry?")) {
       try {
         await deleteTariff(id);
         loadData();
-      } catch (e) {
-        alert("Cannot delete the last remaining tariff.");
+      } catch (e: any) {
+        // More user friendly error handling
+        alert("Could not delete tariff. You must have at least one tariff entry remaining.");
       }
     }
   };

@@ -269,12 +269,20 @@ app.post('/api/tariffs', (req, res) => {
 });
 
 app.delete('/api/tariffs/:id', (req, res) => {
-    db.get("SELECT count(*) as count FROM tariffs", (err, row) => {
-        if (row.count <= 1) return res.status(400).json({ error: "Cannot delete the last tariff." });
-        const stmt = db.prepare("DELETE FROM tariffs WHERE id = ?");
-        stmt.run(req.params.id, (err) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+
+    db.serialize(() => {
+        db.get("SELECT count(*) as count FROM tariffs", (err, row) => {
             if (err) return res.status(500).json({ error: err.message });
-            res.json({ success: true });
+            if (row.count <= 1) return res.status(400).json({ error: "Cannot delete the last tariff." });
+
+            // Use db.run directly instead of prepare/run/finalize to ensure it executes immediately in the serialized queue
+            db.run("DELETE FROM tariffs WHERE id = ?", id, function(err) {
+                if (err) return res.status(500).json({ error: err.message });
+                if (this.changes === 0) return res.status(404).json({ error: "Tariff not found" });
+                res.json({ success: true });
+            });
         });
     });
 });
@@ -331,7 +339,7 @@ app.get('/api/data', async (req, res) => {
             grid: Math.round(site.P_Grid || 0),
             battery: Math.round(site.P_Akku || 0)
         };
-        const soc = inverters[invKey]?.SOC || 0;
+        const soc = inverters[inverterKey]?.SOC || 0;
         responseData.battery = {
             soc: soc,
             state: (site.P_Akku > 5) ? 'charging' : (site.P_Akku < -5) ? 'discharging' : 'idle'
