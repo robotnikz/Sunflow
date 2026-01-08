@@ -50,7 +50,7 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
     const { payload } = props;
     
     return (
-      <div className="flex flex-wrap justify-center gap-6 mt-4 select-none">
+      <div className="flex flex-wrap justify-center gap-6 mt-6 select-none">
         {payload.map((entry: any, index: number) => {
           let textColorClass = "text-slate-400";
           if (entry.value === 'Production') textColorClass = "text-yellow-400";
@@ -76,7 +76,7 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
 
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <AreaChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
+      <AreaChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
         <defs>
           <linearGradient id="colorProd" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="#EAB308" stopOpacity={0.8}/>

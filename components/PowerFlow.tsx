@@ -138,9 +138,9 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
         <div className={`p-4 rounded-full bg-slate-800/80 backdrop-blur border border-slate-600 shadow-[0_0_20px_rgba(234,179,8,0.2)] transition-transform duration-300 hover:scale-110`}>
              <Sun className="text-yellow-500" size={36} fill={power.pv > 0 ? "currentColor" : "none"} fillOpacity={0.2} />
         </div>
-        <div className="text-center mb-1">
-             <span className="block text-xl font-bold text-yellow-400 drop-shadow-md">{Math.round(power.pv)} W</span>
-             <span className="text-xs text-slate-500 font-medium">SOLAR</span>
+        <div className="text-center mb-1 flex flex-col">
+             <span className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-0.5">SOLAR</span>
+             <span className="block text-xl font-bold text-yellow-400 drop-shadow-md leading-none">{Math.round(power.pv)} W</span>
         </div>
       </div>
 
