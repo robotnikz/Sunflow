@@ -1,3 +1,4 @@
+
 /**
  * Backend Server for SunFlow
  */
@@ -12,12 +13,16 @@ import { fileURLToPath } from 'url';
 
 const require = createRequire(import.meta.url);
 const sqlite3 = require('sqlite3').verbose();
+const semver = require('semver');
+const packageJson = require('./package.json');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const REPO_OWNER = 'robotnikz';
+const REPO_NAME = 'Sunflow';
 
 // Data Directory Setup (Crucial for Docker persistence)
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -177,6 +182,60 @@ setInterval(async () => {
 
 }, 60 * 1000); // 1 Minute
 
+// --- Version & Update Check Cache ---
+let versionCache = {
+    lastCheck: 0,
+    data: { latestVersion: packageJson.version, updateAvailable: false, releaseUrl: '' }
+};
+
+const getVersionInfo = async () => {
+    const now = Date.now();
+    const CACHE_DURATION = 60 * 60 * 1000; // Check GitHub every hour
+    
+    // Return cached if fresh
+    if (now - versionCache.lastCheck < CACHE_DURATION) {
+        return {
+            version: packageJson.version,
+            ...versionCache.data
+        };
+    }
+
+    try {
+        // Check GitHub Latest Release
+        const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
+        const response = await axios.get(url, { 
+            headers: { 'User-Agent': 'Sunflow-Dashboard' },
+            timeout: 5000 
+        });
+        
+        const latestTag = response.data.tag_name; // e.g., "v1.0.1"
+        const releaseUrl = response.data.html_url;
+        const cleanLatest = semver.clean(latestTag); // "1.0.1"
+        const current = packageJson.version; // "1.0.0"
+
+        const updateAvailable = cleanLatest && semver.gt(cleanLatest, current);
+
+        versionCache = {
+            lastCheck: now,
+            data: {
+                latestVersion: cleanLatest || current,
+                updateAvailable: !!updateAvailable,
+                releaseUrl: releaseUrl
+            }
+        };
+    } catch (e) {
+        console.error("Failed to check for updates:", e.message);
+        // On error, keep old cache but update timestamp to retry later (e.g. 5 mins)
+        versionCache.lastCheck = now - (CACHE_DURATION - 5 * 60 * 1000);
+    }
+
+    return {
+        version: packageJson.version,
+        ...versionCache.data
+    };
+};
+
+
 // --- API ---
 
 app.get('/api/config', (req, res) => res.json(getConfig()));
@@ -184,6 +243,11 @@ app.get('/api/config', (req, res) => res.json(getConfig()));
 app.post('/api/config', (req, res) => {
     saveConfig(req.body);
     res.json({ success: true });
+});
+
+app.get('/api/info', async (req, res) => {
+    const info = await getVersionInfo();
+    res.json(info);
 });
 
 // TARIFFS

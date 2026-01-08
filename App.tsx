@@ -1,13 +1,15 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
-import { Settings, RefreshCw, AlertCircle, Sun, Battery, Zap, Home } from 'lucide-react';
+import { Settings, RefreshCw, AlertCircle, Sun, Battery, Zap, Home, Download } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import SettingsModal from './components/SettingsModal';
-import { InverterData, SystemConfig } from './types';
-import { getRealtimeData, getConfig, saveConfig } from './services/api';
+import { InverterData, SystemConfig, SystemInfo } from './types';
+import { getRealtimeData, getConfig, saveConfig, getSystemInfo } from './services/api';
 
 const App: React.FC = () => {
   const [data, setData] = useState<InverterData | null>(null);
   const [config, setConfig] = useState<SystemConfig | null>(null);
+  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -36,7 +38,7 @@ const App: React.FC = () => {
     }
   }, [config]);
 
-  // Initial Config Load
+  // Initial Config & System Info Load
   useEffect(() => {
     const loadConfig = async () => {
       try {
@@ -50,7 +52,18 @@ const App: React.FC = () => {
         setError("Could not load system configuration.");
       }
     };
+    
+    const loadSystemInfo = async () => {
+      try {
+        const info = await getSystemInfo();
+        setSystemInfo(info);
+      } catch (e) {
+        console.error("Failed to load system info", e);
+      }
+    };
+
     loadConfig();
+    loadSystemInfo();
   }, []);
 
   // Polling Interval
@@ -89,10 +102,27 @@ const App: React.FC = () => {
                 <Sun size={24} strokeWidth={2.5} />
               </div>
               <div>
-                <h1 className="text-xl font-bold tracking-tight">SunFlow <span className="text-slate-500 font-normal">Gen24</span></h1>
+                <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
+                    SunFlow <span className="text-slate-500 font-normal">Gen24</span>
+                    {systemInfo && (
+                         <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700">v{systemInfo.version}</span>
+                    )}
+                </h1>
                 <div className="flex items-center gap-2 text-xs text-slate-400">
                   <span className={`inline-block w-2 h-2 rounded-full ${error ? 'bg-red-500' : 'bg-green-500'}`}></span>
                   {error ? 'System Offline' : 'System Operational'}
+                  
+                  {systemInfo?.updateAvailable && (
+                    <a 
+                        href={systemInfo.releaseUrl || '#'} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="ml-2 flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors bg-blue-900/30 px-2 py-0.5 rounded-full border border-blue-800/50"
+                    >
+                        <Download size={10} />
+                        New: v{systemInfo.latestVersion}
+                    </a>
+                  )}
                 </div>
               </div>
             </div>

@@ -31,6 +31,13 @@ export interface SystemConfig {
   };
 }
 
+export interface SystemInfo {
+  version: string;
+  updateAvailable: boolean;
+  latestVersion: string;
+  releaseUrl?: string;
+}
+
 export type TimeRange = 'hour' | 'day' | 'week' | 'month' | 'year' | 'custom';
 
 export interface EnergyStats {

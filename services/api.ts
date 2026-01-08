@@ -1,4 +1,5 @@
-import { InverterData, SystemConfig, HistoryData, TimeRange, Tariff, Expense, RoiData } from '../types';
+
+import { InverterData, SystemConfig, HistoryData, TimeRange, Tariff, Expense, RoiData, SystemInfo } from '../types';
 
 const API_BASE = ''; 
 
@@ -38,6 +39,12 @@ export const saveConfig = async (config: SystemConfig): Promise<void> => {
     body: JSON.stringify(config)
   });
   if (!res.ok) throw new Error("API call failed");
+};
+
+export const getSystemInfo = async (): Promise<SystemInfo> => {
+  const res = await fetch(`${API_BASE}/api/info`);
+  if (!res.ok) throw new Error("Failed to fetch system info");
+  return res.json();
 };
 
 // --- Tariff API ---
