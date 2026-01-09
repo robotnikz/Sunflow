@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { InverterData, SystemConfig, TimeRange, HistoryData, RoiData, ForecastData } from '../types';
+import { InverterData, SystemConfig, TimeRange, HistoryData, RoiData, ForecastData, BatteryHealthData } from '../types';
 import PowerFlow from './PowerFlow';
 import EnergyChart from './EnergyChart';
 import BatteryChart from './BatteryChart';
@@ -12,7 +12,8 @@ import StatusTimeline from './StatusTimeline';
 import AmortizationWidget from './AmortizationWidget';
 import WeatherWidget from './WeatherWidget';
 import SmartRecommendations from './SmartRecommendations';
-import { getHistory, getRoiData, getForecast } from '../services/api';
+import BatteryHealthWidget from './BatteryHealthWidget';
+import { getHistory, getRoiData, getForecast, getBatteryHealth } from '../services/api';
 import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp, ShieldCheck, Download } from 'lucide-react';
 
 interface DashboardProps {
@@ -50,6 +51,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
   const [roiData, setRoiData] = useState<RoiData | null>(null);
   const [forecast, setForecast] = useState<ForecastData | null>(null);
   const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [batteryHealth, setBatteryHealth] = useState<BatteryHealthData | null>(null);
   const [loadingHist, setLoadingHist] = useState(false);
   
   // Rate Limit Flag for UI Hint
@@ -84,17 +86,22 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
     return () => clearInterval(interval);
   }, [refreshTrigger]);
 
-  // Fetch ROI Data (Expensive calculation)
+  // Fetch ROI & Battery Health Data (Expensive calculation)
   useEffect(() => {
-    const fetchRoi = async () => {
+    const fetchExpensiveData = async () => {
         try {
             const rData = await getRoiData();
             setRoiData(rData);
         } catch(e) { console.error("ROI Fetch Error", e); }
+        
+        try {
+             const bData = await getBatteryHealth();
+             setBatteryHealth(bData);
+        } catch(e) { console.error("Battery Health Fetch Error", e); }
     };
     
-    fetchRoi(); 
-    const interval = setInterval(fetchRoi, 10 * 60 * 1000); 
+    fetchExpensiveData(); 
+    const interval = setInterval(fetchExpensiveData, 10 * 60 * 1000); 
     return () => clearInterval(interval);
   }, [refreshTrigger]); 
 
@@ -287,7 +294,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
       </div>
 
       {/* --- SECTION 2: SYSTEM HEALTH & FORECAST --- */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in">
+      {/* Reverted to 3 Columns for cleaner look. Battery Health moved to History Section. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
           {/* ROI Widget */}
           <AmortizationWidget roiData={roiData} currency={config.currency} />
 
@@ -484,6 +492,14 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                             </div>
                         </div>
                     </div>
+
+                    {/* Battery Health Widget (Moved Here for Flush Layout) */}
+                    <div className="h-[300px]">
+                         <BatteryHealthWidget 
+                            data={batteryHealth} 
+                            nominalCapacity={config.batteryCapacity || 10} 
+                        />
+                    </div>
                 </div>
 
                 {/* Right Column: Charts */}
@@ -500,8 +516,9 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                             <EnergyChart history={history.chart} timeRange={timeRange} />
                         </div>
                     </div>
-                    {/* Battery SOC Chart */}
-                    <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[250px] flex flex-col">
+
+                    {/* Battery SOC Chart - Restored to Full Width */}
+                    <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[300px] flex flex-col">
                         <h3 className="text-slate-400 text-sm font-medium mb-6 flex items-center gap-2 shrink-0">
                             <Battery size={16}/> Battery State of Charge
                         </h3>
@@ -509,6 +526,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                             <BatteryChart history={history.chart} timeRange={timeRange} />
                         </div>
                     </div>
+
                     {/* Efficiency Chart */}
                     <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[250px] flex flex-col">
                         <h3 className="text-slate-400 text-sm font-medium mb-6 flex items-center gap-2 shrink-0">

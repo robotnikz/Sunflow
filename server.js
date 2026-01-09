@@ -162,9 +162,12 @@ const getConfig = () => {
                 errors: true,
                 batteryFull: true,
                 batteryEmpty: true,
+                batteryHealth: false,
                 smartAdvice: true
             },
-            smartAdviceCooldownMinutes: 120 // Default 2 hours cooldown
+            smartAdviceCooldownMinutes: 120,
+            sohThreshold: 75,
+            minCyclesForSoh: 50
         };
     }
     return config;
@@ -206,6 +209,7 @@ const notifyState = {
     previousStatus: 1, 
     smartAdviceCounters: {}, 
     lastSmartAdviceSent: 0, 
+    lastSohCheck: 0, // Track when we last checked battery health
 };
 
 const sendDiscordNotification = async (webhookUrl, title, description, color, fields = []) => {
@@ -226,6 +230,84 @@ const sendDiscordNotification = async (webhookUrl, title, description, color, fi
     } catch (e) {
         console.error("Failed to send Discord notification:", e.message);
     }
+};
+
+// Helper function to check health status (Heavy query, run infrequently)
+const checkBatteryHealthNotification = (config, nominalCapacity) => {
+    return new Promise((resolve, reject) => {
+        if (!config.notifications?.triggers?.batteryHealth) return resolve();
+        if (Date.now() - notifyState.lastSohCheck < 24 * 60 * 60 * 1000) return resolve(); // Check once per 24h
+
+        // Query only what we need to estimate latest capacity and total cycles
+        const query = `
+            SELECT
+                strftime('%Y-%m-%d', timestamp) as date,
+                SUM(CASE WHEN power_battery < -10 THEN ABS(power_battery) ELSE 0 END) as total_charge_w,
+                SUM(CASE WHEN power_battery > 10 THEN power_battery ELSE 0 END) as total_discharge_w,
+                MIN(soc) as min_soc,
+                MAX(soc) as max_soc
+            FROM energy_log
+            WHERE power_battery != 0
+            GROUP BY date
+            ORDER BY date DESC
+            LIMIT 365 -- Look back 1 year max for calculation efficiency
+        `;
+
+        db.all(query, [], async (err, rows) => {
+            if (err) return resolve();
+
+            let totalCycles = 0;
+            let latestCapacityEst = 0;
+            let validSamples = 0;
+
+            rows.forEach(r => {
+                const chargedKwh = (r.total_charge_w / 60) / 1000;
+                const dischargedKwh = (r.total_discharge_w / 60) / 1000;
+                
+                // Estimate Cycles
+                const cycles = (chargedKwh + dischargedKwh) / 2 / (nominalCapacity || 10);
+                totalCycles += cycles;
+
+                // Estimate Capacity if huge swing
+                const socDelta = r.max_soc - r.min_soc;
+                if (socDelta > 50 && chargedKwh > 1) {
+                    const cap = (chargedKwh / socDelta) * 100;
+                    // Taking the average of the last few valid samples would be better, 
+                    // but taking the latest valid one is acceptable for alert logic
+                    if (validSamples < 5) { // Weight recent samples
+                        latestCapacityEst = cap; 
+                        validSamples++;
+                    }
+                }
+            });
+
+            // Update state time
+            notifyState.lastSohCheck = Date.now();
+
+            const minCycles = config.notifications.minCyclesForSoh || 50;
+            const threshold = config.notifications.sohThreshold || 75;
+
+            // Only alert if we have enough data (cycles) to be sure
+            if (totalCycles > minCycles && latestCapacityEst > 0) {
+                const soh = (latestCapacityEst / nominalCapacity) * 100;
+                
+                if (soh < threshold) {
+                     await sendDiscordNotification(
+                        config.notifications.discordWebhook,
+                        "⚠️ Battery Health Alert",
+                        `Battery State of Health (SOH) has dropped to **${soh.toFixed(1)}%**.`,
+                        15158332, // Red
+                        [
+                            { name: "Current SOH", value: `${soh.toFixed(1)}%`, inline: true },
+                            { name: "Threshold", value: `${threshold}%`, inline: true },
+                            { name: "Est. Cycles", value: `${Math.round(totalCycles)}`, inline: true }
+                        ]
+                    );
+                }
+            }
+            resolve();
+        });
+    });
 };
 
 // Polling Job - 1 Minute Interval
@@ -293,7 +375,11 @@ setInterval(async () => {
         }
         notifyState.previousSoc = soc;
 
-        // 3. Smart Advice
+        // 3. Battery Health (Async Check)
+        // Fire and forget, don't await blocking the main loop
+        checkBatteryHealthNotification(config, config.batteryCapacity || 10).catch(err => console.error("Health Check Error", err));
+
+        // 4. Smart Advice
         if (nConfig.triggers.smartAdvice && statusCode === 1) {
             const now = Date.now();
             const cooldownMs = (nConfig.smartAdviceCooldownMinutes || 60) * 60 * 1000;
@@ -581,6 +667,80 @@ app.get('/api/data', async (req, res) => {
         responseData.selfConsumption = Math.round(site.rel_SelfConsumption || 0);
     }
     res.json(responseData);
+});
+
+// BATTERY HEALTH
+app.get('/api/battery-health', (req, res) => {
+    const query = `
+        SELECT
+            strftime('%Y-%m-%d', timestamp) as date,
+            SUM(CASE WHEN power_battery < -10 THEN ABS(power_battery) ELSE 0 END) as total_charge_w,
+            SUM(CASE WHEN power_battery > 10 THEN power_battery ELSE 0 END) as total_discharge_w,
+            MIN(soc) as min_soc,
+            MAX(soc) as max_soc,
+            COUNT(*) as samples
+        FROM energy_log
+        WHERE power_battery != 0
+        GROUP BY date
+        ORDER BY date ASC
+    `;
+
+    db.all(query, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        let totalCycles = 0;
+        let weightedEffSum = 0;
+        let totalEffSamples = 0;
+        let latestCapacity = 0;
+
+        const dataPoints = rows.map(r => {
+            // Normalize: We log roughly every minute. 
+            // W -> kWh:  (Watts / 60min) / 1000
+            // But if samples are erratic, we should divide by samples/hours. 
+            // Simplified approximation: Assuming 1 min interval average power.
+            const chargedKwh = (r.total_charge_w / 60) / 1000;
+            const dischargedKwh = (r.total_discharge_w / 60) / 1000;
+
+            let efficiency = 0;
+            if (chargedKwh > 0.5) { // Filter out low usage days
+                efficiency = (dischargedKwh / chargedKwh) * 100;
+                // Cap efficiency at 99% to hide measurement noise
+                if (efficiency > 99) efficiency = 99;
+                
+                weightedEffSum += efficiency;
+                totalEffSamples++;
+            }
+
+            // Estimate Capacity based on large charge cycles
+            // If battery went from 10% to 90% (80% delta) and took 8kWh, then 100% = 10kWh.
+            const socDelta = r.max_soc - r.min_soc;
+            let estCapacity = 0;
+            
+            // Only calculate if we saw a significant swing (e.g. > 50%) to ensure accuracy
+            if (socDelta > 50 && chargedKwh > 1) {
+                estCapacity = (chargedKwh / socDelta) * 100;
+                latestCapacity = estCapacity;
+            }
+
+            // Approx Cycles
+            const cycles = (chargedKwh + dischargedKwh) / 2 / 10; // Assuming 10kWh roughly, refined later
+            totalCycles += cycles;
+
+            return {
+                date: r.date,
+                efficiency: parseFloat(efficiency.toFixed(1)),
+                estimatedCapacity: parseFloat(estCapacity.toFixed(2)),
+                chargeCycles: parseFloat(cycles.toFixed(2))
+            };
+        });
+
+        res.json({
+            dataPoints,
+            averageEfficiency: totalEffSamples > 0 ? parseFloat((weightedEffSum / totalEffSamples).toFixed(1)) : 0,
+            latestCapacityEst: parseFloat(latestCapacity.toFixed(2)),
+            totalCycles: Math.round(totalCycles)
+        });
+    });
 });
 
 const getTariffForTime = (tariffs, timestamp) => {
