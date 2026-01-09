@@ -21,8 +21,11 @@ export interface SystemConfig {
   latitude?: string;
   longitude?: string;
   systemCapacity?: number; // kWp
+  batteryCapacity?: number; // kWh (Total capacity of the stack)
   degradationRate?: number; // % per year (default 0.5)
   inflationRate?: number; // % per year (default 2.0)
+  solcastApiKey?: string;
+  solcastSiteId?: string;
   initialValues?: {
     production?: number; // kWh
     import?: number; // kWh
@@ -95,6 +98,13 @@ export interface RoiData {
   roiPercent: number;
   breakEvenDate: string | null; // ISO Date or null if calculated in past/infinite
   expenses: Expense[];
+}
+
+export interface ForecastData {
+  forecasts: Array<{
+    period_end: string;
+    pv_estimate: number; // kW
+  }>;
 }
 
 export interface FroniusRealtimeResponse {

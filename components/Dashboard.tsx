@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { InverterData, SystemConfig, TimeRange, HistoryData, RoiData } from '../types';
+import { InverterData, SystemConfig, TimeRange, HistoryData, RoiData, ForecastData } from '../types';
 import PowerFlow from './PowerFlow';
 import EnergyChart from './EnergyChart';
 import BatteryChart from './BatteryChart';
@@ -12,7 +12,7 @@ import StatusTimeline from './StatusTimeline';
 import AmortizationWidget from './AmortizationWidget';
 import WeatherWidget from './WeatherWidget';
 import SmartRecommendations from './SmartRecommendations';
-import { getHistory, getRoiData } from '../services/api';
+import { getHistory, getRoiData, getForecast } from '../services/api';
 import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp } from 'lucide-react';
 
 interface DashboardProps {
@@ -26,6 +26,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
   const [timeRange, setTimeRange] = useState<TimeRange>('day');
   const [history, setHistory] = useState<HistoryData | null>(null);
   const [roiData, setRoiData] = useState<RoiData | null>(null);
+  const [forecast, setForecast] = useState<ForecastData | null>(null);
   const [loadingHist, setLoadingHist] = useState(false);
   
   // Custom Date Range State
@@ -38,10 +39,9 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
     // Refresh history every 60s (Standard monitoring interval)
     const interval = setInterval(fetchHistory, 60000); 
     return () => clearInterval(interval);
-  }, [timeRange, startDate, endDate, refreshTrigger]); // Added refreshTrigger to dependency
+  }, [timeRange, startDate, endDate, refreshTrigger]); 
 
   // Fetch ROI Data (Expensive calculation)
-  // Refreshes every 10 minutes OR when refreshTrigger changes (Settings Saved)
   useEffect(() => {
     const fetchRoi = async () => {
         try {
@@ -50,12 +50,25 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
         } catch(e) { console.error("ROI Fetch Error", e); }
     };
     
-    fetchRoi(); // Initial fetch
-    
-    // Poll every 10 minutes
+    fetchRoi(); 
     const interval = setInterval(fetchRoi, 10 * 60 * 1000); 
     return () => clearInterval(interval);
-  }, [refreshTrigger]); // Added refreshTrigger to dependency
+  }, [refreshTrigger]); 
+
+  // Fetch Forecast (Solcast)
+  useEffect(() => {
+    if (!config.solcastApiKey) return;
+    const fetchFC = async () => {
+        try {
+            const fc = await getForecast();
+            setForecast(fc);
+        } catch(e) { console.error("Forecast Fetch Error", e); }
+    };
+    fetchFC();
+    // Refresh forecast every 60 mins (handled by backend cache too)
+    const interval = setInterval(fetchFC, 60 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [config.solcastApiKey, refreshTrigger]);
 
   const fetchHistory = async () => {
     if (timeRange === 'custom' && (!startDate || !endDate)) return;
@@ -135,6 +148,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                 gridPower={data.power.grid} 
                 soc={data.battery.soc}
                 pvPower={data.power.pv}
+                forecast={forecast}
+                batteryCapacity={config.batteryCapacity || 10}
             />
           </div>
 
@@ -189,6 +204,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
       </div>
 
       {/* --- SECTION 4: HISTORICAL ANALYSIS CONTROLS --- */}
+      {/* ... (Existing History Control code preserved) ... */}
       <div className="flex flex-col bg-slate-800/60 backdrop-blur p-2 rounded-xl border border-slate-700/50 mt-4 gap-4 sticky top-[70px] z-20 shadow-lg">
         
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -241,6 +257,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
       </div>
 
       {/* --- SECTION 5: HISTORICAL DATA GRIDS --- */}
+      {/* ... (Existing History Grids preserved) ... */}
       {history && !loadingHist ? (
         <div className="animate-fade-in space-y-6">
             
@@ -323,7 +340,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
 
                 {/* Right Column: Charts */}
                 <div className="lg:col-span-2 flex flex-col gap-6">
-                    
                     {/* Main Power Chart */}
                     <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[400px] flex flex-col relative overflow-hidden group">
                         <div className="absolute top-0 right-0 p-6 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -336,7 +352,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                             <EnergyChart history={history.chart} />
                         </div>
                     </div>
-
                     {/* Battery SOC Chart */}
                     <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[250px] flex flex-col">
                         <h3 className="text-slate-400 text-sm font-medium mb-6 flex items-center gap-2 shrink-0">
@@ -346,7 +361,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                             <BatteryChart history={history.chart} />
                         </div>
                     </div>
-
                     {/* Efficiency Chart */}
                     <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[250px] flex flex-col">
                         <h3 className="text-slate-400 text-sm font-medium mb-6 flex items-center gap-2 shrink-0">
