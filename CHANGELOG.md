@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/robotnikz/Sunflow/compare/v1.2.1...v1.3.0) (2026-01-09)
+
+
+### Features
+
+* added Battery Health widget and also notification option for Battery Health. You can define a threshold and amount of cycles before notified when battery health is low ([a95e40b](https://github.com/robotnikz/Sunflow/commit/a95e40b7131af2395b34573ac2f0709f2b350d76))
+
 ## [1.2.1](https://github.com/robotnikz/Sunflow/compare/v1.2.0...v1.2.1) (2026-01-09)
 
 
