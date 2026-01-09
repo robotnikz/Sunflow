@@ -202,6 +202,12 @@ const getLocalTimestamp = (date = new Date()) => {
     return date.toLocaleString('sv-SE', { timeZone }).replace('T', ' ');
 };
 
+// --- GLOBAL SOLCAST CACHE (Shared between API and Notification Logic) ---
+let solcastCache = {
+    timestamp: 0,
+    data: null
+};
+
 
 // --- NOTIFICATION LOGIC ---
 const notifyState = {
@@ -379,23 +385,68 @@ setInterval(async () => {
         // Fire and forget, don't await blocking the main loop
         checkBatteryHealthNotification(config, config.batteryCapacity || 10).catch(err => console.error("Health Check Error", err));
 
-        // 4. Smart Advice
+        // 4. Smart Advice (Matching Frontend Logic)
         if (nConfig.triggers.smartAdvice && statusCode === 1) {
             const now = Date.now();
             const cooldownMs = (nConfig.smartAdviceCooldownMinutes || 60) * 60 * 1000;
             
             if (now - notifyState.lastSmartAdviceSent > cooldownMs) {
+                // --- INTELLIGENT FORECAST LOGIC (Mirrors Frontend) ---
+                
+                // A) Get Remaining Solar Forecast from Cache
+                let forecastRemainingKwh = 0;
+                if (solcastCache.data && solcastCache.data.forecasts) {
+                    const nowDate = new Date();
+                    const currentDay = nowDate.getDate();
+                    
+                    solcastCache.data.forecasts.forEach(f => {
+                        const fDate = new Date(f.period_end);
+                        // Sum only future intervals for TODAY
+                        if (fDate > nowDate && fDate.getDate() === currentDay) {
+                            forecastRemainingKwh += (f.pv_estimate * 0.5); // 30min slots
+                        }
+                    });
+                }
+
+                // B) Calculate Battery Needs
+                const batteryCapacity = config.batteryCapacity || 10;
+                const socMissingPct = Math.max(0, 100 - soc);
+                const kwhToFill = (socMissingPct / 100) * batteryCapacity;
+
+                // C) Calculate "Safe Buffer" (Forecast - Fill Need - 10% Margin)
+                const energyBufferKwh = forecastRemainingKwh - (kwhToFill * 1.1);
+
+                // D) Determine if it's safe to divert battery charge
+                const isBatterySafe = (energyBufferKwh > 0) || (soc > 95);
+
+                // E) Calculate Total "Smart Surplus"
                 const gridExport = p_grid < -10 ? Math.abs(p_grid) : 0;
                 const battCharging = p_batt < -10 ? Math.abs(p_batt) : 0;
-                const totalSurplus = gridExport + battCharging;
+                
+                let totalSurplus = 0;
 
+                if (isBatterySafe) {
+                    // Safe: We can use grid export AND steal the battery charging power
+                    totalSurplus = gridExport + battCharging;
+                } else {
+                    // Not Safe: We strictly only use grid export. Leave battery alone.
+                    totalSurplus = gridExport;
+                }
+
+                // --- APPLIANCE MATCHING ---
                 let bestAppliance = null;
 
                 (config.appliances || []).forEach(app => {
                     if (!notifyState.smartAdviceCounters[app.id]) notifyState.smartAdviceCounters[app.id] = 0;
-                    if (totalSurplus >= app.watts) notifyState.smartAdviceCounters[app.id]++;
-                    else notifyState.smartAdviceCounters[app.id] = 0;
+                    
+                    // Check if appliance fits in the SMART surplus
+                    if (totalSurplus >= app.watts) {
+                        notifyState.smartAdviceCounters[app.id]++;
+                    } else {
+                        notifyState.smartAdviceCounters[app.id] = 0;
+                    }
 
+                    // Trigger if condition met for 3 consecutive checks (3 minutes)
                     if (notifyState.smartAdviceCounters[app.id] >= 3) {
                         if (!bestAppliance || app.watts > bestAppliance.watts) bestAppliance = app;
                     }
@@ -408,8 +459,9 @@ setInterval(async () => {
                         `Excess solar power available (${Math.round(totalSurplus)}W). You can run the **${bestAppliance.name}** now for free!`, 
                         3447003, 
                         [
-                            { name: "Surplus", value: `${Math.round(totalSurplus)} W`, inline: true },
-                            { name: "Device", value: `${bestAppliance.watts} W`, inline: true }
+                            { name: "Available Surplus", value: `${Math.round(totalSurplus)} W`, inline: true },
+                            { name: "Device Power", value: `${bestAppliance.watts} W`, inline: true },
+                            { name: "Strategy", value: isBatterySafe ? "Battery Safe (Diverting Charge)" : "Battery Priority (Grid Only)", inline: false }
                         ]
                     );
                     notifyState.lastSmartAdviceSent = now;
@@ -500,10 +552,7 @@ app.get('/api/info', async (req, res) => {
 });
 
 // --- SOLCAST PROXY WITH CACHING ---
-let solcastCache = {
-    timestamp: 0,
-    data: null
-};
+// Cache variable is now defined globally above to be accessible by notification logic
 
 app.get('/api/forecast', async (req, res) => {
     const config = getConfig();
