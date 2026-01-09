@@ -1,3 +1,21 @@
+# [1.1.0](https://github.com/robotnikz/Sunflow/compare/v1.0.3...v1.1.0) (2026-01-09)
+
+
+### Bug Fixes
+
+* added SOC charging to power history ([b023096](https://github.com/robotnikz/Sunflow/commit/b023096879c53aab9f23d4db5d659f6c91efc9b8))
+* battery charging/discharging in live power view ([d45106e](https://github.com/robotnikz/Sunflow/commit/d45106ed2a6b8704a95dc88a243c17ca7f745324))
+* fixed energy donuts visuals ([7f1ab17](https://github.com/robotnikz/Sunflow/commit/7f1ab17df6dbe4b1f0f80fd1f12fe4be189a6003))
+* improved break even calculation, added invested to date and estimated total cost at break even ([711d8c4](https://github.com/robotnikz/Sunflow/commit/711d8c44747fcc509c078ccb5fa6c65142339db0))
+* improved smart use logic, fallback to open-meteo for pv forecast in case solcast settings are missing or api limit reached. ([e8e232b](https://github.com/robotnikz/Sunflow/commit/e8e232b479f5eb7c3de70ebf1fafbe60d537f7e8))
+
+
+### Features
+
+* added option to export data as .csv ([ab9dc4b](https://github.com/robotnikz/Sunflow/commit/ab9dc4bf195a763f001d9342c55dee60b7e2b3f6))
+* added smart usage predictions, battery min 30% + rough >1h forecast to determine best usage time for your devices (testing stage) ([3e298fa](https://github.com/robotnikz/Sunflow/commit/3e298fa6c02c4f5675888cb37cadb046bba4a11f))
+* added solcast API in settings for forecast used in smart predictions ([de44743](https://github.com/robotnikz/Sunflow/commit/de44743f011d12351ba56afb6c9dbb5dc1cb4e58))
+
 ## [1.0.3](https://github.com/robotnikz/Sunflow/compare/v1.0.2...v1.0.3) (2026-01-08)
 
 
