@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/robotnikz/Sunflow/compare/v1.2.0...v1.2.1) (2026-01-09)
+
+
+### Bug Fixes
+
+* refactoring ([81e5ff9](https://github.com/robotnikz/Sunflow/commit/81e5ff9444cb60ecf8d4ffebe07df1f5b6e50abb))
+
 # [1.2.0](https://github.com/robotnikz/Sunflow/compare/v1.1.0...v1.2.0) (2026-01-09)
 
 
