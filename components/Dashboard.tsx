@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { InverterData, SystemConfig, TimeRange, HistoryData, RoiData } from '../types';
 import PowerFlow from './PowerFlow';
@@ -10,6 +11,7 @@ import BatteryWidget from './BatteryWidget';
 import StatusTimeline from './StatusTimeline'; 
 import AmortizationWidget from './AmortizationWidget';
 import WeatherWidget from './WeatherWidget';
+import SmartRecommendations from './SmartRecommendations';
 import { getHistory, getRoiData } from '../services/api';
 import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp } from 'lucide-react';
 
@@ -111,7 +113,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
       {/* --- SECTION 1: LIVE MONITORING --- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Power Flow Diagram (Takes 2/3 width) */}
-        <div className="lg:col-span-2 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl relative overflow-hidden flex flex-col h-[520px]">
+        {/* Removed fixed height so it grows with content, but set min-height for consistent look */}
+        <div className="lg:col-span-2 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl relative overflow-hidden flex flex-col min-h-[500px]">
           <div className="absolute top-6 left-6 flex items-center gap-2 text-slate-300 font-semibold z-10">
              <div className="p-1.5 bg-slate-700/50 rounded-lg backdrop-blur">
                 <Zap className="text-yellow-500" size={18} />
@@ -125,53 +128,58 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
         </div>
 
         {/* Right: Widgets Column (Takes 1/3 width) */}
-        <div className="flex flex-col gap-6 h-[520px]">
+        <div className="flex flex-col gap-6 min-h-[500px]">
+          {/* Smart Recommendations - High Priority */}
+          <div className="flex-1 min-h-[220px]">
+            <SmartRecommendations 
+                gridPower={data.power.grid} 
+                soc={data.battery.soc}
+                pvPower={data.power.pv}
+            />
+          </div>
+
           {/* Battery Widget */}
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-[220px]">
              <BatteryWidget 
                 soc={data.battery.soc}
                 power={data.power.battery}
                 state={data.battery.state}
              />
           </div>
-          
-          {/* Weather Widget */}
-          <div className="flex-1 min-h-0">
-             <WeatherWidget config={config} />
-          </div>
         </div>
       </div>
 
-      {/* --- SECTION 2: SYSTEM HEALTH & LONG TERM METRICS --- */}
-      {/* These are separated from the time-range selector to indicate they are global/current states */}
+      {/* --- SECTION 2: SYSTEM HEALTH & FORECAST --- */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in">
           {/* ROI Widget */}
           <AmortizationWidget roiData={roiData} currency={config.currency} />
 
-          {/* Realtime Efficiency Donuts */}
-          <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg flex items-center justify-center relative">
-               <div className="absolute top-4 left-4 text-slate-400 text-sm font-medium flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-blue-500"></span> Live Autonomy
-               </div>
-               <div className="h-40 w-full mt-4">
-                <EnergyDonut 
-                    percentage={data.autonomy} 
-                    label="" 
-                    color="#3b82f6" 
-                />
-               </div>
+          {/* Weather / Solar Forecast (Moved here from top section) */}
+          <div className="h-full">
+             <WeatherWidget config={config} />
           </div>
-          <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg flex items-center justify-center relative">
-               <div className="absolute top-4 left-4 text-slate-400 text-sm font-medium flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-green-500"></span> Live Self Consumption
-               </div>
-               <div className="h-40 w-full mt-4">
-                <EnergyDonut 
-                    percentage={data.selfConsumption} 
-                    label="" 
-                    color="#22c55e" 
-                />
-               </div>
+
+          {/* Realtime Efficiency Donuts (Combined into one column stack for space, or kept side-by-side if enough room) */}
+          {/* We'll use a flex container to stack them vertically on mobile, but here they are in a grid cell */}
+          <div className="grid grid-rows-2 gap-4 h-full">
+            <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg flex items-center justify-between relative overflow-hidden">
+                <div className="z-10 pl-2">
+                    <div className="text-slate-400 text-xs font-bold uppercase mb-1">Live Autonomy</div>
+                    <div className="text-2xl font-bold text-blue-400">{data.autonomy}%</div>
+                </div>
+                <div className="h-16 w-16 mr-2">
+                    <EnergyDonut percentage={data.autonomy} label="" color="#3b82f6" small />
+                </div>
+            </div>
+            <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg flex items-center justify-between relative overflow-hidden">
+                <div className="z-10 pl-2">
+                    <div className="text-slate-400 text-xs font-bold uppercase mb-1">Self Consumption</div>
+                    <div className="text-2xl font-bold text-green-400">{data.selfConsumption}%</div>
+                </div>
+                <div className="h-16 w-16 mr-2">
+                    <EnergyDonut percentage={data.selfConsumption} label="" color="#22c55e" small />
+                </div>
+            </div>
           </div>
       </div>
 
