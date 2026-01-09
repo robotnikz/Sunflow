@@ -181,7 +181,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
 
   if (!data) return null;
 
-  const currencySymbol = config.currency === 'EUR' ? '€' : '$';
+  const currencySymbol = config.currency === 'EUR' ? '€' : config.currency === 'GBP' ? '£' : '$';
   const peaks = history ? getPeaks(history.chart) : { maxPv: 0, maxLoad: 0 };
 
   // SKELETON LOADER COMPONENT

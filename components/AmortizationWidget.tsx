@@ -23,7 +23,7 @@ const AmortizationWidget: React.FC<AmortizationWidgetProps> = ({ roiData, curren
     );
   }
 
-  const symbol = currency === 'EUR' ? '€' : '$';
+  const symbol = currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : '$';
   const percent = Math.min(100, Math.max(0, roiData.roiPercent));
   
   // Format large numbers

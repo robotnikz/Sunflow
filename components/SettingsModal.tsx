@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { SystemConfig, Tariff, Expense, Appliance } from '../types';
-import { X, Save, Plus, Trash2, Calendar, DollarSign, PenTool, MapPin, Zap, History, HelpCircle, Calculator, CheckCircle2, AlertTriangle, ArrowRight, TrendingUp, SunMedium, Battery, Edit, Smartphone, Laptop, Tv, Gamepad2, Coffee, Utensils, Shirt, Car, Wind, Monitor, Lightbulb, Speaker, Refrigerator, Fan, Clock, ArrowDownUp, Bell, Link2, Send } from 'lucide-react';
+import { X, Save, Plus, Trash2, Calendar, DollarSign, Euro, PoundSterling, PenTool, MapPin, Zap, History, HelpCircle, Calculator, CheckCircle2, AlertTriangle, ArrowRight, TrendingUp, SunMedium, Battery, Edit, Smartphone, Laptop, Tv, Gamepad2, Coffee, Utensils, Shirt, Car, Wind, Monitor, Lightbulb, Speaker, Refrigerator, Fan, Clock, ArrowDownUp, Bell, Link2, Send, Sliders, Plug } from 'lucide-react';
 import { getTariffs, addTariff, deleteTariff, getExpenses, addExpense, deleteExpense } from '../services/api';
 import { ICON_MAP } from './SmartRecommendations';
 
@@ -195,6 +195,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
       });
   };
 
+  // Helper to get currency symbol
+  const getCurrencySymbol = () => {
+      switch(formData.currency) {
+          case 'EUR': return '€';
+          case 'GBP': return '£';
+          default: return '$';
+      }
+  };
+
+  const getCurrencyIcon = (size: number) => {
+      switch(formData.currency) {
+          case 'EUR': return <Euro size={size} />;
+          case 'GBP': return <PoundSterling size={size} />;
+          default: return <DollarSign size={size} />;
+      }
+  };
+
   // Auto-Calculate History Estimation
   const handleEstimateFinancials = () => {
     const vals = formData.initialValues;
@@ -222,8 +239,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
     const earned = totalExport * latestTariff.feedInTariff;
     
     const total = saved + earned;
+    const sym = getCurrencySymbol();
 
-    if (confirm(`Estimate based on current/latest prices:\n\nSelf-Consumed (${selfConsumed.toFixed(0)} kWh) × ${latestTariff.costPerKwh} = ${formData.currency === 'EUR' ? '€' : '$'}${saved.toFixed(2)}\nExported (${totalExport.toFixed(0)} kWh) × ${latestTariff.feedInTariff} = ${formData.currency === 'EUR' ? '€' : '$'}${earned.toFixed(2)}\n\nTotal Estimate: ${formData.currency === 'EUR' ? '€' : '$'}${total.toFixed(2)}\n\nApply this value?`)) {
+    if (confirm(`Estimate based on current/latest prices:\n\nSelf-Consumed (${selfConsumed.toFixed(0)} kWh) × ${latestTariff.costPerKwh} = ${sym}${saved.toFixed(2)}\nExported (${totalExport.toFixed(0)} kWh) × ${latestTariff.feedInTariff} = ${sym}${earned.toFixed(2)}\n\nTotal Estimate: ${sym}${total.toFixed(2)}\n\nApply this value?`)) {
         setFormData({
             ...formData,
             initialValues: { ...vals, financialReturn: parseFloat(total.toFixed(2)) }
@@ -356,7 +374,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         
         {/* Header */}
         <div className="p-6 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
@@ -370,9 +388,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
         <div className="flex border-b border-slate-700 bg-slate-900/30 overflow-x-auto">
           <button 
             onClick={() => setActiveTab('general')}
-            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors ${activeTab === 'general' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors flex items-center justify-center gap-2 ${activeTab === 'general' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
           >
-            General
+            <Sliders size={16} /> General
           </button>
           <button 
             onClick={() => setActiveTab('notifications')}
@@ -382,27 +400,27 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
           </button>
           <button 
             onClick={() => setActiveTab('appliances')}
-            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors ${activeTab === 'appliances' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors flex items-center justify-center gap-2 ${activeTab === 'appliances' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
           >
-            Appliances
+            <Plug size={16} /> Appliances
           </button>
           <button 
             onClick={() => setActiveTab('tariffs')}
-            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors ${activeTab === 'tariffs' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors flex items-center justify-center gap-2 ${activeTab === 'tariffs' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
           >
-            Prices
+            {getCurrencyIcon(16)} Prices
           </button>
           <button 
             onClick={() => setActiveTab('expenses')}
-            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors ${activeTab === 'expenses' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors flex items-center justify-center gap-2 ${activeTab === 'expenses' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
           >
-            ROI
+            <TrendingUp size={16} /> ROI
           </button>
           <button 
             onClick={() => setActiveTab('history')}
-            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors ${activeTab === 'history' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors flex items-center justify-center gap-2 ${activeTab === 'history' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
           >
-            Calibration
+            <History size={16} /> Calibration
           </button>
         </div>
         
@@ -453,6 +471,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                   </div>
               </div>
 
+              {/* ... (Rest of General Tab unchanged) ... */}
               <div className="space-y-4 pt-4">
                  <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2 flex items-center gap-2">
                     <MapPin size={18}/> Location & Capacity
@@ -563,7 +582,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
             </form>
           )}
 
-          {/* TAB: Notifications */}
+          {/* ... (Notifications & Appliances Tabs unchanged) ... */}
           {activeTab === 'notifications' && (
             <form onSubmit={handleConfigSubmit} className="space-y-6">
                 
@@ -720,7 +739,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
             </form>
           )}
 
-          {/* TAB: Appliances */}
           {activeTab === 'appliances' && (
               <div className="space-y-6">
                   {isEditingAppliance ? (
@@ -989,8 +1007,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                                         <Calendar size={14} className="text-slate-500"/>
                                         {t.validFrom}
                                     </td>
-                                    <td className="px-4 py-3 text-red-300">{t.costPerKwh.toFixed(3)}</td>
-                                    <td className="px-4 py-3 text-green-300">{t.feedInTariff.toFixed(3)}</td>
+                                    <td className="px-4 py-3 text-red-300">{getCurrencySymbol()} {t.costPerKwh.toFixed(3)}</td>
+                                    <td className="px-4 py-3 text-green-300">{getCurrencySymbol()} {t.feedInTariff.toFixed(3)}</td>
                                     <td className="px-4 py-3 text-right">
                                         <button 
                                             type="button"
@@ -1130,7 +1148,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                                     </td>
                                     <td className="px-4 py-3 text-slate-400">{e.date}</td>
                                     <td className="px-4 py-3 text-right text-red-300">
-                                        {currentConfig.currency === 'EUR' ? '€' : '$'}{e.amount.toLocaleString()}
+                                        {getCurrencySymbol()}{e.amount.toLocaleString()}
                                     </td>
                                     <td className="px-4 py-3 text-right">
                                         <button 
@@ -1228,7 +1246,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                         <div className="flex gap-2">
                             <div className="flex-1 flex items-center bg-slate-900 border border-slate-600 rounded-lg overflow-hidden focus-within:border-yellow-500 transition-colors">
                                 <div className="shrink-0 pl-3 pr-2 text-slate-400 font-bold border-r border-slate-700/50">
-                                    {formData.currency === 'EUR' ? '€' : '$'}
+                                    {getCurrencySymbol()}
                                 </div>
                                 <input 
                                     type="number" step="0.01"
