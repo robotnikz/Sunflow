@@ -1,3 +1,10 @@
+## [1.3.4](https://github.com/robotnikz/Sunflow/compare/v1.3.3...v1.3.4) (2026-01-09)
+
+
+### Bug Fixes
+
+* battery widget charging animation changed from radar animation to a slight pulse ([7efcee1](https://github.com/robotnikz/Sunflow/commit/7efcee186cc3fe23e32dbed59a4cc950338debb3))
+
 ## [1.3.3](https://github.com/robotnikz/Sunflow/compare/v1.3.2...v1.3.3) (2026-01-09)
 
 
