@@ -1,3 +1,10 @@
+## [1.3.1](https://github.com/robotnikz/Sunflow/compare/v1.3.0...v1.3.1) (2026-01-09)
+
+
+### Bug Fixes
+
+* **tests:** Resolve test suite failures and warnings ([7cb00c1](https://github.com/robotnikz/Sunflow/commit/7cb00c12ea06bdaa276914b58bdc399c9300565e))
+
 # [1.3.0](https://github.com/robotnikz/Sunflow/compare/v1.2.1...v1.3.0) (2026-01-09)
 
 
