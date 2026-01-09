@@ -1,3 +1,4 @@
+
 /// <reference types="vitest" />
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
@@ -19,7 +20,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    setupFiles: './setupTests.ts',
+    setupFiles: './tests/setup.ts', // Point to the new location inside tests folder
     css: false,
   },
 });

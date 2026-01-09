@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import App from './App';
-import * as api from './services/api';
+import App from '../App';
+import * as api from '../services/api';
 
 // 1. Wir mocken das ganze API-Modul, damit wir keine echten Netzwerk-Requests machen
 vi.mock('./services/api');
