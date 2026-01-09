@@ -4,14 +4,14 @@ import App from '../App';
 import * as api from '../services/api';
 
 // 1. Wir mocken das ganze API-Modul, damit wir keine echten Netzwerk-Requests machen
-vi.mock('./services/api');
+vi.mock('../services/api');
 
 describe('SunFlow App Integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('zeigt den Ladebildschirm beim Start', () => {
+  it('zeigt den Ladebildschirm beim Start', async () => {
     // Wir lassen die Promises ungelöst oder lösen sie langsam auf,
     // um den initialen Zustand zu sehen
     (api.getConfig as any).mockResolvedValue({}); 
@@ -20,7 +20,7 @@ describe('SunFlow App Integration', () => {
     render(<App />);
     
     // Prüfen auf Text, der nur im Ladezustand da ist
-    expect(screen.getByText(/Connecting to Fronius Inverter/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Connecting to Fronius Inverter/i)).toBeInTheDocument();
   });
 
   it('lädt das Dashboard, wenn Konfiguration vorhanden ist', async () => {

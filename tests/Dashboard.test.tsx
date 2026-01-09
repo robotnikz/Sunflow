@@ -33,7 +33,7 @@ describe('Dashboard Component', () => {
     (api.getBatteryHealth as any).mockResolvedValue({ dataPoints: [], totalCycles: 0 });
   });
 
-  it('zeigt Skeleton Loader, solange Historie lädt', () => {
+  it('zeigt Skeleton Loader, solange Historie lädt', async () => {
     // Wir lassen getHistory hängen (Promise ohne Resolve), um den Loading State zu erzwingen
     (api.getHistory as any).mockReturnValue(new Promise(() => {}));
 
@@ -43,9 +43,10 @@ describe('Dashboard Component', () => {
     expect(screen.getByText(/Live Power Flow/i)).toBeInTheDocument();
     
     // Die Charts warten auf History -> Skeleton sollte da sein. 
-    // SkeletonCard hat die Klasse 'animate-pulse'
-    const skeletons = document.querySelectorAll('.animate-pulse');
-    expect(skeletons.length).toBeGreaterThan(0);
+    await waitFor(() => {
+      const skeletons = document.querySelectorAll('.animate-pulse');
+      expect(skeletons.length).toBeGreaterThan(0);
+    });
   });
 
   it('zeigt Widget-Inhalte korrekt an, wenn Daten geladen sind', async () => {
@@ -60,8 +61,10 @@ describe('Dashboard Component', () => {
     expect(screen.getByText('5000 W')).toBeInTheDocument();
   });
 
-  it('zeigt Fehlermeldung oben an, wenn prop error gesetzt ist', () => {
+  it('zeigt Fehlermeldung oben an, wenn prop error gesetzt ist', async () => {
     render(<Dashboard data={mockData} config={mockConfig} error="Connection Lost" refreshTrigger={0} />);
-    expect(screen.getByText('Connection Lost')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Connection Lost')).toBeInTheDocument();
+    });
   });
 });

@@ -11,13 +11,13 @@ vi.mock('recharts', async () => {
     return {
         ...Original,
         ResponsiveContainer: ({ children }: any) => <div style={{ width: 500, height: 300 }}>{children}</div>,
-        AreaChart: ({ children }: any) => <div>{children}</div>,
-        Area: () => <div></div>,
-        XAxis: () => <div></div>,
-        YAxis: () => <div></div>,
-        CartesianGrid: () => <div></div>,
-        Tooltip: () => <div></div>,
-        ReferenceLine: () => <div></div>
+        AreaChart: () => <div>Mocked Chart</div>, // Prevents rendering of SVG children
+        Area: () => null,
+        XAxis: () => null,
+        YAxis: () => null,
+        CartesianGrid: () => null,
+        Tooltip: () => null,
+        ReferenceLine: () => null
     };
 });
 

@@ -88,11 +88,12 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
 
   // Fallback if strictly NO data at all
   if (!hasAnyForecastData) {
-      if (soc > 80) { 
+      if (soc >= 80) { 
           divertableAmount = batteryCharging;
           totalAvailablePower = gridExport + batteryCharging;
       } else {
-          totalAvailablePower = gridExport;
+          divertableAmount = 0;
+          totalAvailablePower = 0;
       }
   }
 

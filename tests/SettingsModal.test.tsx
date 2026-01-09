@@ -34,7 +34,9 @@ describe('SettingsModal Interaction', () => {
 
   it('lädt mit korrekten Initialwerten', async () => {
     render(<SettingsModal currentConfig={mockConfig} onSave={onSaveMock} onClose={onCloseMock} />);
-    expect(screen.getByDisplayValue('1.2.3.4')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('1.2.3.4')).toBeInTheDocument();
+    });
     expect(screen.getByText(/Notifications/i)).toBeInTheDocument();
   });
 
@@ -42,7 +44,9 @@ describe('SettingsModal Interaction', () => {
     render(<SettingsModal currentConfig={mockConfig} onSave={onSaveMock} onClose={onCloseMock} />);
     const notifTab = screen.getByText(/Notifications/i);
     fireEvent.click(notifTab);
-    expect(screen.getByText(/Discord Integration/i)).toBeInTheDocument();
+    await waitFor(() => {
+        expect(screen.getByText(/Discord Integration/i)).toBeInTheDocument();
+    });
   });
 
   it('ruft onSave mit aktualisierten Daten auf', async () => {
@@ -51,7 +55,9 @@ describe('SettingsModal Interaction', () => {
     fireEvent.change(ipInput, { target: { value: '192.168.1.100' } });
     const saveBtn = screen.getByRole('button', { name: /Save Settings/i });
     fireEvent.click(saveBtn);
-    expect(onSaveMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+        expect(onSaveMock).toHaveBeenCalledTimes(1);
+    });
     expect(onSaveMock.mock.calls[0][0].inverterIp).toBe('192.168.1.100');
   });
 
