@@ -1,3 +1,10 @@
+## [1.3.3](https://github.com/robotnikz/Sunflow/compare/v1.3.2...v1.3.3) (2026-01-09)
+
+
+### Bug Fixes
+
+* changed Dockerfile to Debian:slim ([60f87e3](https://github.com/robotnikz/Sunflow/commit/60f87e3f0759c0851935831483576da7f225ec01))
+
 ## [1.3.2](https://github.com/robotnikz/Sunflow/compare/v1.3.1...v1.3.2) (2026-01-09)
 
 
