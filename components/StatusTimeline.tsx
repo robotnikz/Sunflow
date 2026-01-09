@@ -1,9 +1,10 @@
+
 import React from 'react';
 
 interface StatusTimelineProps {
   history: Array<{
     timestamp: string;
-    status?: number; // 0=Offline, 1=Running, 2=Error
+    status?: number; // 0=Offline, 1=Running, 2=Error, 3=Idle
     soc: number;
   }>;
 }
@@ -27,6 +28,14 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
   const startTime = new Date(history[0].timestamp).getTime();
   const endTime = new Date(history[history.length - 1].timestamp).getTime();
   const durationHours = (endTime - startTime) / (1000 * 60 * 60);
+  
+  // Title Logic based on duration
+  let timeframeLabel = 'Long Term';
+  if (durationHours <= 1.2) timeframeLabel = '1h'; // Tolerance for gaps
+  else if (durationHours <= 25) timeframeLabel = '24h';
+  else if (durationHours <= 180) timeframeLabel = '7 Days';
+  else if (durationHours <= 750) timeframeLabel = '30 Days';
+
   const showDate = durationHours > 24;
 
   const formatTime = (ts: string) => {
@@ -81,9 +90,24 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
   );
 
   const statusSegments = createSegments(
-    (p) => (p.status === 0) ? 'offline' : 'running',
-    (val) => val === 'offline' ? 'Offline' : 'Running',
-    (val) => val === 'offline' ? 'bg-slate-600' : 'bg-emerald-600/80'
+    (p) => {
+        if (p.status === 0) return 'offline';
+        if (p.status === 3) return 'idle';
+        if (p.status === 2) return 'error';
+        return 'running';
+    },
+    (val) => {
+        if (val === 'offline') return 'Offline';
+        if (val === 'idle') return 'Idle';
+        if (val === 'error') return 'Error';
+        return 'Running';
+    },
+    (val) => {
+        if (val === 'offline') return 'bg-slate-600';
+        if (val === 'idle') return 'bg-blue-900/60'; // Dark Blue for Idle/Standby
+        if (val === 'error') return 'bg-red-500';
+        return 'bg-emerald-600/80';
+    }
   );
 
   const batterySegments = createSegments(
@@ -120,7 +144,7 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
 
   return (
     <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg">
-      <h3 className="text-slate-200 text-lg font-semibold mb-6">Inverter Status ({showDate ? 'Long Term' : '24h'})</h3>
+      <h3 className="text-slate-200 text-lg font-semibold mb-6">Inverter Status ({timeframeLabel})</h3>
       
       <div className="grid grid-cols-[80px_1fr] gap-y-4 gap-x-4 items-center">
         <Row label="Errors" segments={errorSegments} />
@@ -140,7 +164,11 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
       <div className="flex gap-6 mt-6 justify-center border-t border-slate-700/50 pt-4 flex-wrap">
             <div className="flex items-center gap-2">
                 <div className="w-4 h-1 bg-emerald-600 rounded"></div>
-                <span className="text-xs text-slate-400">Flawless / Running</span>
+                <span className="text-xs text-slate-400">Running / OK</span>
+            </div>
+            <div className="flex items-center gap-2">
+                <div className="w-4 h-1 bg-blue-900/60 rounded"></div>
+                <span className="text-xs text-slate-400">Standby / Idle</span>
             </div>
             <div className="flex items-center gap-2">
                 <div className="w-4 h-1 bg-red-500 rounded"></div>
@@ -149,10 +177,6 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
             <div className="flex items-center gap-2">
                 <div className="w-4 h-1 bg-slate-600 rounded"></div>
                 <span className="text-xs text-slate-400">Offline</span>
-            </div>
-            <div className="flex items-center gap-2">
-                <div className="w-4 h-1 bg-slate-700 rounded"></div>
-                <span className="text-xs text-slate-400">Idle</span>
             </div>
         </div>
     </div>

@@ -10,25 +10,39 @@ interface EnergyChartProps {
     grid?: number;
     battery?: number;
   }>;
+  timeRange: string;
 }
 
-const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
+const EnergyChart: React.FC<EnergyChartProps> = ({ history, timeRange }) => {
   if (history.length === 0) {
     return <div className="flex items-center justify-center h-full text-slate-500">No historical data available yet.</div>;
   }
 
-  // Smart Date Formatting
-  const startTime = new Date(history[0].timestamp).getTime();
-  const endTime = new Date(history[history.length - 1].timestamp).getTime();
-  const durationHours = (endTime - startTime) / (1000 * 60 * 60);
-  const showDate = durationHours > 24;
-
+  // Dynamic Tick Formatting based on selected timeRange
   const formatTick = (ts: string) => {
     const d = new Date(ts);
-    if (showDate) {
-      return `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth()+1).toString().padStart(2, '0')} ${d.getHours().toString().padStart(2, '0')}:00`;
+    
+    switch(timeRange) {
+        case 'hour':
+            // 14:05
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        case 'day':
+            // 14:00
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        case 'week':
+            // Mon 10 (Short Day, Date)
+            return d.toLocaleDateString([], { weekday: 'short', day: '2-digit' });
+        case 'month':
+            // 12.05 (Day.Month)
+            return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
+        case 'year':
+            // Jan 24 (Month Year)
+            return d.toLocaleDateString([], { month: 'short', year: '2-digit' });
+        case 'custom':
+            return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        default:
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   const data = history.map(h => ({
@@ -48,7 +62,7 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
   else if (gridMin >= 0) gridOff = 1;
   else gridOff = gridMax / (gridMax - gridMin);
 
-  // Calculate gradient offset for Battery (Positive = Discharge, Negative = Charge)
+  // Calculate gradient offset for Battery
   const batMax = Math.max(...data.map((i) => i.Battery));
   const batMin = Math.min(...data.map((i) => i.Battery));
   
@@ -57,10 +71,62 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
   else if (batMin >= 0) batOff = 1;
   else batOff = batMax / (batMax - batMin);
 
-  // Custom Legend to allow colored text
+  // --- CUSTOM TOOLTIP COMPONENT ---
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload || !payload.length) return null;
+
+    const d = new Date(label);
+    const dateStr = d.toLocaleString();
+
+    return (
+      <div className="bg-slate-900 border border-slate-600 p-3 rounded-lg shadow-2xl antialiased" style={{ boxShadow: '0 10px 30px -10px rgba(0,0,0,0.8)' }}>
+        <p className="text-slate-400 font-semibold mb-2 border-b border-slate-700 pb-1 text-xs tracking-wide">
+          {dateStr}
+        </p>
+        <div className="flex flex-col gap-1.5">
+          {payload.map((entry: any, index: number) => {
+            const val = entry.value;
+            const name = entry.name;
+            const absVal = Math.round(Math.abs(val) * 100) / 100;
+            
+            let labelText = name;
+            let textColor = '#e2e8f0';
+
+            if (name === 'Production') {
+              textColor = '#FACC15'; // Yellow-400
+            } else if (name === 'Consumption') {
+              textColor = '#60A5FA'; // Blue-400
+            } else if (name === 'Battery') {
+              textColor = '#C084FC'; // Purple-400
+              labelText = val > 0 ? "Discharging" : "Charging";
+            } else if (name === 'Grid') {
+              if (val > 0) {
+                 textColor = '#F87171'; // Red-400
+                 labelText = "Importing";
+              } else {
+                 textColor = '#34D399'; // Emerald-400
+                 labelText = "Exporting";
+              }
+            }
+
+            return (
+              <div key={index} className="flex items-center justify-between gap-6 text-xs">
+                 <span style={{ color: textColor }} className="font-bold">
+                    {labelText}:
+                 </span>
+                 <span className="text-slate-100 font-mono font-bold tracking-tight">
+                    {absVal} W
+                 </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const renderLegend = (props: any) => {
     const { payload } = props;
-    
     return (
       <div className="flex flex-wrap justify-center gap-6 mt-6 select-none">
         {payload.map((entry: any, index: number) => {
@@ -129,30 +195,19 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
         />
         
         <Tooltip 
-          contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#e2e8f0', borderRadius: '8px' }}
-          itemStyle={{ color: '#e2e8f0' }}
-          labelFormatter={(label) => new Date(label).toLocaleString()}
-          formatter={(value: number, name: string) => {
-              // Round to max 2 decimals
-              const rounded = Math.round(value * 100) / 100;
-              if (name === 'Grid') {
-                  return [`${Math.abs(rounded)} W`, value > 0 ? "Importing" : "Exporting"];
-              }
-              if (name === 'Battery') {
-                  return [`${Math.abs(rounded)} W`, value > 0 ? "Discharging" : "Charging"];
-              }
-              return [`${rounded} W`, name];
-          }}
+          content={<CustomTooltip />} 
+          cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4' }} 
+          isAnimationActive={false}
         />
         
         <Legend content={renderLegend} />
         
         <ReferenceLine y={0} stroke="#475569" strokeDasharray="3 3" />
 
-        <Area type="monotone" dataKey="Battery" stroke="#A855F7" fillOpacity={0.6} fill="url(#colorBat)" dot={false} activeDot={{ r: 5 }} />
-        <Area type="monotone" dataKey="Production" stroke="#EAB308" fillOpacity={1} fill="url(#colorProd)" dot={false} activeDot={{ r: 5 }} />
-        <Area type="monotone" dataKey="Consumption" stroke="#3B82F6" fillOpacity={1} fill="url(#colorCons)" dot={false} activeDot={{ r: 5 }} />
-        <Area type="monotone" dataKey="Grid" stroke="url(#colorGrid)" fillOpacity={1} fill="url(#colorGrid)" dot={false} activeDot={{ r: 5 }} />
+        <Area type="monotone" dataKey="Battery" stroke="#A855F7" fillOpacity={0.6} fill="url(#colorBat)" dot={false} activeDot={{ r: 5, strokeWidth: 0 }} />
+        <Area type="monotone" dataKey="Production" stroke="#EAB308" fillOpacity={1} fill="url(#colorProd)" dot={false} activeDot={{ r: 5, strokeWidth: 0 }} />
+        <Area type="monotone" dataKey="Consumption" stroke="#3B82F6" fillOpacity={1} fill="url(#colorCons)" dot={false} activeDot={{ r: 5, strokeWidth: 0 }} />
+        <Area type="monotone" dataKey="Grid" stroke="url(#colorGrid)" fillOpacity={1} fill="url(#colorGrid)" dot={false} activeDot={{ r: 5, strokeWidth: 0 }} />
       </AreaChart>
     </ResponsiveContainer>
   );

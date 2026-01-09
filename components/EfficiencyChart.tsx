@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
@@ -7,22 +8,32 @@ interface EfficiencyChartProps {
     autonomy: number;
     selfConsumption: number;
   }>;
+  timeRange: string;
 }
 
-const EfficiencyChart: React.FC<EfficiencyChartProps> = ({ history }) => {
+const EfficiencyChart: React.FC<EfficiencyChartProps> = ({ history, timeRange }) => {
   if (history.length === 0) return null;
 
-  const startTime = new Date(history[0].timestamp).getTime();
-  const endTime = new Date(history[history.length - 1].timestamp).getTime();
-  const durationHours = (endTime - startTime) / (1000 * 60 * 60);
-  const showDate = durationHours > 24;
-
+  // Dynamic Tick Formatting based on selected timeRange
   const formatTick = (ts: string) => {
     const d = new Date(ts);
-    if (showDate) {
-      return `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth()+1).toString().padStart(2, '0')} ${d.getHours().toString().padStart(2, '0')}:00`;
+    
+    switch(timeRange) {
+        case 'hour':
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        case 'day':
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        case 'week':
+            return d.toLocaleDateString([], { weekday: 'short', day: '2-digit' });
+        case 'month':
+            return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
+        case 'year':
+            return d.toLocaleDateString([], { month: 'short', year: '2-digit' });
+        case 'custom':
+            return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        default:
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   const renderLegend = (props: any) => {
@@ -39,6 +50,38 @@ const EfficiencyChart: React.FC<EfficiencyChartProps> = ({ history }) => {
             </span>
           </div>
         ))}
+      </div>
+    );
+  };
+
+  // Consistent Tooltip
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload || !payload.length) return null;
+    const d = new Date(label);
+    const dateStr = d.toLocaleString();
+
+    return (
+      <div className="bg-slate-900 border border-slate-600 p-3 rounded-lg shadow-2xl antialiased" style={{ boxShadow: '0 10px 30px -10px rgba(0,0,0,0.8)' }}>
+        <p className="text-slate-400 font-semibold mb-2 border-b border-slate-700 pb-1 text-xs tracking-wide">
+          {dateStr}
+        </p>
+        <div className="flex flex-col gap-1.5">
+          {payload.map((entry: any, index: number) => {
+             const isAutonomy = entry.name === 'Autonomy';
+             const textColor = isAutonomy ? '#60A5FA' : '#4ADE80'; // Blue-400 : Green-400
+             
+             return (
+                <div key={index} className="flex items-center justify-between gap-6 text-xs">
+                    <span style={{ color: textColor }} className="font-bold">
+                        {entry.name}:
+                    </span>
+                    <span className="text-slate-100 font-mono font-bold tracking-tight">
+                        {entry.value}%
+                    </span>
+                </div>
+             );
+          })}
+        </div>
       </div>
     );
   };
@@ -63,8 +106,9 @@ const EfficiencyChart: React.FC<EfficiencyChartProps> = ({ history }) => {
           unit="%"
         />
         <Tooltip 
-          contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#e2e8f0', borderRadius: '8px' }}
-          labelFormatter={(label) => new Date(label).toLocaleString()}
+          content={<CustomTooltip />} 
+          cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4' }} 
+          isAnimationActive={false}
         />
         <Legend content={renderLegend} />
         
@@ -75,7 +119,7 @@ const EfficiencyChart: React.FC<EfficiencyChartProps> = ({ history }) => {
             stroke="#3B82F6" 
             strokeWidth={2}
             dot={false} 
-            activeDot={{ r: 5 }} 
+            activeDot={{ r: 5, strokeWidth: 0 }} 
         />
         <Line 
             type="monotone" 
@@ -84,7 +128,7 @@ const EfficiencyChart: React.FC<EfficiencyChartProps> = ({ history }) => {
             stroke="#22C55E" 
             strokeWidth={2}
             dot={false} 
-            activeDot={{ r: 5 }} 
+            activeDot={{ r: 5, strokeWidth: 0 }} 
         />
       </LineChart>
     </ResponsiveContainer>

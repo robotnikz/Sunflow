@@ -14,10 +14,17 @@ import { fileURLToPath } from 'url';
 const require = createRequire(import.meta.url);
 const sqlite3 = require('sqlite3').verbose();
 const semver = require('semver');
-const packageJson = require('./package.json');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Robust package.json loading
+let packageJson = { version: "0.0.0" };
+try {
+    packageJson = require(path.join(__dirname, 'package.json'));
+} catch (e) {
+    console.error("Failed to load package.json:", e.message);
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -113,11 +120,32 @@ const DEFAULT_APPLIANCES = [
 const getConfig = () => {
     let config = { inverterIp: '', currency: 'EUR', systemStartDate: new Date().toISOString().split('T')[0] };
     if (fs.existsSync(CONFIG_FILE)) {
-        config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+        try {
+            const raw = fs.readFileSync(CONFIG_FILE, 'utf8');
+            if (raw.trim()) {
+                config = JSON.parse(raw);
+            }
+        } catch (e) {
+            console.error("Error parsing config.json:", e.message);
+        }
     }
     // Ensure default appliances exist if not present
     if (!config.appliances || config.appliances.length === 0) {
         config.appliances = DEFAULT_APPLIANCES;
+    }
+    // Ensure default notifications
+    if (!config.notifications) {
+        config.notifications = {
+            enabled: false,
+            discordWebhook: '',
+            triggers: {
+                errors: true,
+                batteryFull: true,
+                batteryEmpty: true,
+                smartAdvice: true
+            },
+            smartAdviceCooldownMinutes: 120 // Default 2 hours cooldown
+        };
     }
     return config;
 };
@@ -143,13 +171,41 @@ const fetchFroniusData = async (ip) => {
 };
 
 // Helper: Get Local SQLite-compatible Timestamp (YYYY-MM-DD HH:MM:SS)
-const getLocalTimestamp = () => {
-    const now = new Date();
-    // Adjust to local time by subtracting the timezone offset
-    const offsetMs = now.getTimezoneOffset() * 60 * 1000;
-    const local = new Date(now.getTime() - offsetMs);
-    // Slice ISO string to get YYYY-MM-DDTHH:MM:SS and replace T with space
-    return local.toISOString().slice(0, 19).replace('T', ' ');
+// Fixed: Explicitly use the configured Timezone (Europe/Berlin default) using sv-SE locale (ISO-like format)
+const getLocalTimestamp = (date = new Date()) => {
+    const timeZone = process.env.TZ || 'Europe/Berlin';
+    // 'sv-SE' locale formats as YYYY-MM-DD HH:mm:ss, which is SQL friendly
+    return date.toLocaleString('sv-SE', { timeZone }).replace('T', ' ');
+};
+
+
+// --- NOTIFICATION LOGIC ---
+// State to track between polling intervals
+const notifyState = {
+    previousSoc: 0,
+    previousStatus: 1, // 1=OK
+    smartAdviceCounters: {}, // Map<applianceId, countMinutes>
+    lastSmartAdviceSent: 0, // Timestamp ms
+};
+
+const sendDiscordNotification = async (webhookUrl, title, description, color, fields = []) => {
+    if (!webhookUrl) return;
+
+    try {
+        await axios.post(webhookUrl, {
+            embeds: [{
+                title: title,
+                description: description,
+                color: color, // Decimal color
+                fields: fields,
+                footer: { text: "SunFlow Gen24" },
+                timestamp: new Date().toISOString()
+            }]
+        });
+        console.log(`Notification sent: ${title}`);
+    } catch (e) {
+        console.error("Failed to send Discord notification:", e.message);
+    }
 };
 
 // Polling Job - 1 Minute Interval
@@ -166,27 +222,125 @@ setInterval(async () => {
         // Check Fronius API Response Code
         const apiCode = rawData.Head?.Status?.Code;
         
-        if (apiCode === 0) {
-            statusCode = 1; // 1 = Running/OK
-        } else {
-            statusCode = 2; // 2 = Error reported by Inverter
-        }
-
         const site = rawData.Body.Data.Site;
         const inverters = rawData.Body.Data.Inverters;
-        const inverterKey = Object.keys(inverters)[0];
-        soc = inverters[inverterKey] ? inverters[inverterKey].SOC : 0;
+        const inverterKey = Object.keys(inverters)[0]; // Assume 1 inverter
+        const inverterData = inverters[inverterKey];
 
+        soc = inverterData ? inverterData.SOC : 0;
         p_pv = site.P_PV || 0;
         p_load = Math.abs(site.P_Load || 0);
         p_grid = site.P_Grid || 0;
         p_batt = site.P_Akku || 0;
         e_day = site.E_Day || 0;
+
+        if (apiCode === 0) {
+            // Parse Device Status Code
+            // Fronius Codes: 
+            // 7 = Running
+            // 8 = Standby (Night)
+            // 9 = Bootloading
+            // 10 = Error
+            const deviceStatus = inverterData?.StatusCode;
+            
+            if (deviceStatus === 7) {
+                statusCode = 1; // Running
+            } else if (deviceStatus === 8 || deviceStatus === 9) {
+                statusCode = 3; // Idle / Standby (NEW)
+            } else if (deviceStatus >= 10) {
+                statusCode = 2; // Error
+            } else {
+                // Fallback Logic if StatusCode missing
+                // If PV is 0 and Battery is idle, assume Idle
+                if (Math.abs(p_pv) < 5 && Math.abs(p_batt) < 10) {
+                    statusCode = 3;
+                } else {
+                    statusCode = 1;
+                }
+            }
+        } else {
+            statusCode = 2; // API Reported Error
+        }
+
     } else {
         statusCode = 0; // Offline / Network Error
     }
 
+    // --- NOTIFICATION CHECKS ---
+    if (config.notifications?.enabled && config.notifications?.discordWebhook) {
+        const nConfig = config.notifications;
+        
+        // 1. Error Status (Only trigger on explicit error status 2, ignore Offline for now)
+        if (nConfig.triggers.errors) {
+            if (statusCode === 2 && notifyState.previousStatus !== 2) {
+                await sendDiscordNotification(nConfig.discordWebhook, "⚠️ Inverter Error", "The inverter is reporting an error state.", 15158332); // Red
+            }
+        }
+        notifyState.previousStatus = statusCode;
+
+        // 2. Battery SOC Triggers
+        if (nConfig.triggers.batteryFull) {
+            if (soc === 100 && notifyState.previousSoc < 100) {
+                await sendDiscordNotification(nConfig.discordWebhook, "🔋 Battery Full", "Storage has reached 100% capacity.", 5763719); // Green
+            }
+        }
+        if (nConfig.triggers.batteryEmpty) {
+            // Trigger at 7% or lower (assuming user wants to know when reserve is hit)
+            // Only trigger if we crossed the threshold downwards
+            if (soc <= 7 && notifyState.previousSoc > 7) {
+                await sendDiscordNotification(nConfig.discordWebhook, "🪫 Battery Low", `Storage level dropped to ${Math.round(soc)}%.`, 15105570); // Orange
+            }
+        }
+        notifyState.previousSoc = soc;
+
+        // 3. Smart Advice (Debounced) - Only if Running (1)
+        if (nConfig.triggers.smartAdvice && statusCode === 1) {
+            const now = Date.now();
+            const cooldownMs = (nConfig.smartAdviceCooldownMinutes || 60) * 60 * 1000;
+            
+            if (now - notifyState.lastSmartAdviceSent > cooldownMs) {
+                const gridExport = p_grid < -10 ? Math.abs(p_grid) : 0;
+                const battCharging = p_batt < -10 ? Math.abs(p_batt) : 0;
+                const totalSurplus = gridExport + battCharging;
+
+                let bestAppliance = null;
+
+                (config.appliances || []).forEach(app => {
+                    if (!notifyState.smartAdviceCounters[app.id]) notifyState.smartAdviceCounters[app.id] = 0;
+
+                    if (totalSurplus >= app.watts) {
+                        notifyState.smartAdviceCounters[app.id]++;
+                    } else {
+                        notifyState.smartAdviceCounters[app.id] = 0;
+                    }
+
+                    if (notifyState.smartAdviceCounters[app.id] >= 3) {
+                        if (!bestAppliance || app.watts > bestAppliance.watts) {
+                            bestAppliance = app;
+                        }
+                    }
+                });
+
+                if (bestAppliance) {
+                    await sendDiscordNotification(
+                        nConfig.discordWebhook, 
+                        "💡 Smart Suggestion", 
+                        `Excess solar power available (${Math.round(totalSurplus)}W). You can run the **${bestAppliance.name}** now for free!`, 
+                        3447003, 
+                        [
+                            { name: "Surplus", value: `${Math.round(totalSurplus)} W`, inline: true },
+                            { name: "Device", value: `${bestAppliance.watts} W`, inline: true }
+                        ]
+                    );
+                    notifyState.lastSmartAdviceSent = now;
+                    notifyState.smartAdviceCounters = {}; 
+                }
+            }
+        }
+    }
+
     // Insert with Explicit LOCAL TIMESTAMP
+    // Now uses getLocalTimestamp which respects TZ env var correctly
     const timestamp = getLocalTimestamp();
     const stmt = db.prepare(`INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, energy_day_prod, status_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
     stmt.run(timestamp, p_pv, p_load, p_grid, p_batt, soc, e_day, statusCode);
@@ -220,21 +374,23 @@ const getVersionInfo = async () => {
             timeout: 5000 
         });
         
-        const latestTag = response.data.tag_name; // e.g., "v1.0.1"
-        const releaseUrl = response.data.html_url;
-        const cleanLatest = semver.clean(latestTag); // "1.0.1"
-        const current = packageJson.version; // "1.0.0"
+        const latestTag = response.data?.tag_name; // e.g., "v1.0.1"
+        if (latestTag) {
+            const releaseUrl = response.data.html_url;
+            const cleanLatest = semver.clean(latestTag); // "1.0.1"
+            const current = packageJson.version; // "1.0.0"
 
-        const updateAvailable = cleanLatest && semver.gt(cleanLatest, current);
+            const updateAvailable = cleanLatest && semver.gt(cleanLatest, current);
 
-        versionCache = {
-            lastCheck: now,
-            data: {
-                latestVersion: cleanLatest || current,
-                updateAvailable: !!updateAvailable,
-                releaseUrl: releaseUrl
-            }
-        };
+            versionCache = {
+                lastCheck: now,
+                data: {
+                    latestVersion: cleanLatest || current,
+                    updateAvailable: !!updateAvailable,
+                    releaseUrl: releaseUrl
+                }
+            };
+        }
     } catch (e) {
         console.error("Failed to check for updates:", e.message);
         // On error, keep old cache but update timestamp to retry later (e.g. 5 mins)
@@ -257,14 +413,28 @@ app.post('/api/config', (req, res) => {
     res.json({ success: true });
 });
 
+// Test Notification Endpoint
+app.post('/api/test-notification', async (req, res) => {
+    const { webhookUrl } = req.body;
+    if (!webhookUrl) return res.status(400).json({ error: "Missing webhook URL" });
+    
+    try {
+        await sendDiscordNotification(webhookUrl, "🔔 Test Notification", "SunFlow notifications are working correctly!", 16776960);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.get('/api/info', async (req, res) => {
     const info = await getVersionInfo();
     res.json(info);
 });
 
 // --- SOLCAST PROXY WITH CACHING ---
-// Solcast Free Tier allows ~10 calls per day.
-// We strictly limit calls to daylight hours (05:00 - 22:00) to optimize usage.
+// Solcast Free Tier allows 10 calls per day.
+// We strictly limit calls to daylight hours (05:00 - 21:00) to optimize usage.
+// 16 hours window = 960 minutes. 960 / 10 calls = 96 minutes interval.
 let solcastCache = {
     timestamp: 0,
     data: null
@@ -278,11 +448,10 @@ app.get('/api/forecast', async (req, res) => {
 
     const now = Date.now();
     const currentHour = new Date().getHours();
-    const isDaytime = currentHour >= 5 && currentHour < 22;
+    const isDaytime = currentHour >= 5 && currentHour < 21; // 05:00 to 21:00
 
-    // Cache Duration: 2 Hours (120 mins)
-    // Daylight window is 17 hours. 17 / 2 = 8.5 calls per day (Safe < 10).
-    const CACHE_DURATION = 120 * 60 * 1000;
+    // Cache Duration: 96 Minutes (to fit 10 calls in 16h)
+    const CACHE_DURATION = 96 * 60 * 1000;
 
     // 1. Return fresh cache if available
     if (solcastCache.data && (now - solcastCache.timestamp < CACHE_DURATION)) {
@@ -290,7 +459,7 @@ app.get('/api/forecast', async (req, res) => {
         return res.json(solcastCache.data);
     }
 
-    // 2. If it is NIGHT TIME (outside 05:00-22:00), do NOT fetch new data.
+    // 2. If it is NIGHT TIME (outside 05:00-21:00), do NOT fetch new data.
     // Return stale cache if available, else empty structure.
     if (!isDaytime) {
          console.log(`Night time (${currentHour}:00). Skipping Solcast update to save API limit.`);
@@ -311,16 +480,17 @@ app.get('/api/forecast', async (req, res) => {
         };
         res.json(response.data);
     } catch (error) {
-        // Handle Rate Limiting (429) gracefully
+        // Handle Rate Limiting (429) explicitly
         if (error.response && error.response.status === 429) {
-            console.error("Solcast Rate Limit Reached (429). Serving stale cache if available.");
-        } else {
-            console.error("Solcast API Error:", error.message);
+            console.error("Solcast Rate Limit Reached (429). Returning error to trigger UI hint.");
+            return res.status(429).json({ error: "Solcast Rate Limit Reached" });
         }
+        
+        console.error("Solcast API Error:", error.message);
 
-        // If API fails (e.g. rate limit), try to serve stale cache
+        // For other errors (e.g. timeout, network), serve stale cache if available
         if (solcastCache.data) {
-            console.log("Serving stale Solcast cache due to error");
+            console.log("Serving stale Solcast cache due to network error");
             return res.json(solcastCache.data);
         }
         res.status(502).json({ error: "Failed to fetch forecast from Solcast" });
@@ -421,9 +591,10 @@ app.get('/api/data', async (req, res) => {
         const soc = inverters[inverterKey]?.SOC || 0;
         
         // Correct battery state logic (Negative is Charging)
+        // Widen gap to 10W to capture real idle state better
         let batState = 'idle';
-        if (site.P_Akku < -5) batState = 'charging';
-        else if (site.P_Akku > 5) batState = 'discharging';
+        if (site.P_Akku < -10) batState = 'charging';
+        else if (site.P_Akku > 10) batState = 'discharging';
         
         responseData.battery = {
             soc: soc,
@@ -675,9 +846,6 @@ app.get('/api/roi', (req, res) => {
 
 // HISTORY
 app.get('/api/history', (req, res) => {
-    // ... (Existing history logic)
-    // Preserving logic to avoid file bloat in this response, 
-    // assuming no changes needed to existing history endpoint structure.
     const range = req.query.range || 'day'; 
     const startDate = req.query.start; 
     const endDate = req.query.end;     
@@ -691,19 +859,50 @@ app.get('/api/history', (req, res) => {
         const d1 = new Date(startDate);
         const d2 = new Date(endDate);
         const diffDays = Math.ceil(Math.abs(d2 - d1) / (1000 * 60 * 60 * 24));
-        if (diffDays <= 1) groupBy = 1; 
-        else if (diffDays <= 7) groupBy = 15;
-        else if (diffDays <= 30) groupBy = 60; 
-        else if (diffDays <= 90) groupBy = 120; 
-        else groupBy = 1440; 
+        // High resolution custom logic
+        if (diffDays <= 2) groupBy = 1;       // 1 Minute for up to 2 days
+        else if (diffDays <= 7) groupBy = 5;  // 5 Mins for up to a week
+        else if (diffDays <= 31) groupBy = 30; // 30 Mins for up to a month
+        else groupBy = 1440;                  // 1 Day otherwise
     } else {
+        // Strict Rolling Windows
+        const now = new Date();
+        
         switch(range) {
-            case 'hour': queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of day', '+' || strftime('%H', 'now', 'localtime') || ' hours')"; break;
-            case 'day': queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of day')"; break;
-            case 'week': queryTimeClause = "timestamp >= datetime('now', 'localtime', '-6 days')"; groupBy = 12; break;
-            case 'month': queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of month')"; groupBy = 60; break;
-            case 'year': queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of year')"; groupBy = 1440; break;
-            default: queryTimeClause = "timestamp >= datetime('now', 'localtime', '-24 hours')";
+            case 'hour':
+                // Last 60 Minutes
+                const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+                queryTimeClause = `timestamp >= '${getLocalTimestamp(oneHourAgo)}'`;
+                groupBy = 1; 
+                break;
+            case 'day': 
+                // Last 24 Hours
+                const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                queryTimeClause = `timestamp >= '${getLocalTimestamp(yesterday)}'`; 
+                groupBy = 1; 
+                break;
+            case 'week': 
+                // Last 7 Days (Strict 168 Hours)
+                const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                queryTimeClause = `timestamp >= '${getLocalTimestamp(lastWeek)}'`; 
+                groupBy = 5; // 5 Minute Intervals
+                break;
+            case 'month': 
+                // Last 30 Days
+                const lastMonth = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                queryTimeClause = `timestamp >= '${getLocalTimestamp(lastMonth)}'`; 
+                groupBy = 30; // 30 Minute Intervals
+                break;
+            case 'year': 
+                // Last 365 Days
+                const lastYear = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+                queryTimeClause = `timestamp >= '${getLocalTimestamp(lastYear)}'`; 
+                groupBy = 1440; // 1 Day Intervals
+                break;
+            default: 
+                const defaultYesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                queryTimeClause = `timestamp >= '${getLocalTimestamp(defaultYesterday)}'`;
+                groupBy = 1;
         }
     }
 
@@ -737,18 +936,58 @@ app.get('/api/history', (req, res) => {
             stats.selfConsumption = stats.production > 0 ? (totalSelfPowered / stats.production) * 100 : 0;
 
             const chartData = [];
+            
+            // AGGREGATION LOGIC (Averaging instead of skipping)
             for (let i = 0; i < rows.length; i += groupBy) {
-                const row = rows[i];
-                const pProd = row.power_pv || 0; const pCons = row.power_load || 0; const pGrid = row.power_grid || 0;
-                let pImp = pGrid > 0 ? pGrid : 0; let pExp = pGrid < 0 ? Math.abs(pGrid) : 0;
-                let pointAutonomy = pCons > 0 ? ((pCons - pImp) / pCons) * 100 : 0;
-                if (pointAutonomy < 0) pointAutonomy = 0; 
-                let pointSelfCon = pProd > 0 ? ((pProd - pExp) / pProd) * 100 : 0;
-                chartData.push({
-                    timestamp: row.timestamp, production: row.power_pv, consumption: row.power_load, soc: row.soc, grid: row.power_grid, battery: row.power_battery || 0,
-                    autonomy: Math.round(pointAutonomy), selfConsumption: Math.round(pointSelfCon), status: row.status_code !== undefined ? row.status_code : 1 
-                });
+                let chunkPv = 0, chunkCons = 0, chunkGrid = 0, chunkBatt = 0, chunkSoc = 0;
+                let chunkAutonomy = 0, chunkSelfCon = 0;
+                let count = 0;
+                const startTime = rows[i].timestamp;
+                const status = rows[i].status_code !== undefined ? rows[i].status_code : 1;
+
+                // Loop through the chunk to calculate average
+                for (let j = 0; j < groupBy && (i + j) < rows.length; j++) {
+                    const r = rows[i + j];
+                    
+                    const pProd = r.power_pv || 0; 
+                    const pCons = r.power_load || 0; 
+                    const pGrid = r.power_grid || 0;
+                    
+                    chunkPv += pProd;
+                    chunkCons += pCons;
+                    chunkGrid += pGrid;
+                    chunkBatt += r.power_battery || 0;
+                    chunkSoc += r.soc || 0;
+
+                    let pImp = pGrid > 0 ? pGrid : 0;
+                    let pExp = pGrid < 0 ? Math.abs(pGrid) : 0;
+                    
+                    let ptAuto = pCons > 0 ? ((pCons - pImp) / pCons) * 100 : 0;
+                    if (ptAuto < 0) ptAuto = 0;
+                    
+                    let ptSelf = pProd > 0 ? ((pProd - pExp) / pProd) * 100 : 0;
+                    
+                    chunkAutonomy += ptAuto;
+                    chunkSelfCon += ptSelf;
+                    
+                    count++;
+                }
+
+                if (count > 0) {
+                    chartData.push({
+                        timestamp: startTime,
+                        production: Math.round(chunkPv / count),
+                        consumption: Math.round(chunkCons / count),
+                        grid: Math.round(chunkGrid / count),
+                        battery: Math.round(chunkBatt / count),
+                        soc: Math.round(chunkSoc / count),
+                        autonomy: Math.round(chunkAutonomy / count),
+                        selfConsumption: Math.round(chunkSelfCon / count),
+                        status: status
+                    });
+                }
             }
+            
             res.json({ chart: chartData, stats });
         });
     });

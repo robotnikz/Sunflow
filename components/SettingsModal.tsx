@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { SystemConfig, Tariff, Expense, Appliance } from '../types';
-import { X, Save, Plus, Trash2, Calendar, DollarSign, PenTool, MapPin, Zap, History, HelpCircle, Calculator, CheckCircle2, AlertTriangle, ArrowRight, TrendingUp, SunMedium, Battery, Edit, Smartphone, Laptop, Tv, Gamepad2, Coffee, Utensils, Shirt, Car, Wind, Monitor, Lightbulb, Speaker, Refrigerator, Fan, Clock, ArrowDownUp } from 'lucide-react';
+import { X, Save, Plus, Trash2, Calendar, DollarSign, Euro, PoundSterling, PenTool, MapPin, Zap, History, HelpCircle, Calculator, CheckCircle2, AlertTriangle, ArrowRight, TrendingUp, SunMedium, Battery, Edit, Smartphone, Laptop, Tv, Gamepad2, Coffee, Utensils, Shirt, Car, Wind, Monitor, Lightbulb, Speaker, Refrigerator, Fan, Clock, ArrowDownUp, Bell, Link2, Send, Sliders, Plug } from 'lucide-react';
 import { getTariffs, addTariff, deleteTariff, getExpenses, addExpense, deleteExpense } from '../services/api';
 import { ICON_MAP } from './SmartRecommendations';
 
@@ -12,43 +12,94 @@ interface SettingsModalProps {
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, onClose }) => {
-  const [formData, setFormData] = useState<SystemConfig>(currentConfig);
+  // Initialize state robustly immediately to prevent crashes on first render
+  const [formData, setFormData] = useState<SystemConfig>(() => {
+      // Define defaults
+      const defaultTriggers = {
+          errors: true,
+          batteryFull: true,
+          batteryEmpty: true,
+          smartAdvice: true
+      };
+      
+      const config = { ...currentConfig };
+      
+      // Ensure notifications object exists
+      if (!config.notifications) {
+          config.notifications = {
+              enabled: false,
+              discordWebhook: '',
+              triggers: defaultTriggers,
+              smartAdviceCooldownMinutes: 120
+          };
+      } else {
+          // Ensure triggers exist and merge with defaults
+          config.notifications.triggers = {
+              ...defaultTriggers,
+              ...(config.notifications.triggers || {})
+          };
+      }
+
+      // Ensure other critical objects exist
+      if (!config.appliances) config.appliances = [];
+      if (!config.initialValues) {
+          config.initialValues = { production: 0, import: 0, export: 0, financialReturn: 0 };
+      }
+
+      return config;
+  });
+
   const [tariffs, setTariffs] = useState<Tariff[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   
-  // Sync prop changes to state (important if config is loaded async after modal is ready)
+  // Sync prop changes to state safely if config updates from parent
   useEffect(() => {
-    setFormData(prev => ({
-        ...currentConfig,
-        // Ensure initialValues is populated if missing in props but present in state
-        initialValues: currentConfig.initialValues || prev.initialValues || {
-            production: 0,
-            import: 0,
-            export: 0,
-            financialReturn: 0
-        },
-        appliances: currentConfig.appliances || prev.appliances || []
-    }));
-  }, [currentConfig]);
+    setFormData(prev => {
+        const baseNotifs = currentConfig.notifications || {
+            enabled: false,
+            discordWebhook: '',
+            triggers: { errors: true, batteryFull: true, batteryEmpty: true, smartAdvice: true },
+            smartAdviceCooldownMinutes: 120
+        };
 
-  // Initialize defaults if missing
-  useEffect(() => {
-    if (!formData.initialValues) {
-        setFormData(prev => ({
-            ...prev,
-            initialValues: {
+        const defaultTriggers = {
+            errors: true,
+            batteryFull: true,
+            batteryEmpty: true,
+            smartAdvice: true
+        };
+
+        // Clean merge to avoid TS "overwritten property" warning
+        const robustNotifs = {
+            ...baseNotifs,
+            triggers: {
+                ...defaultTriggers,
+                ...(baseNotifs.triggers || {})
+            }
+        };
+
+        return {
+            ...currentConfig,
+            initialValues: currentConfig.initialValues || prev.initialValues || {
                 production: 0,
                 import: 0,
                 export: 0,
                 financialReturn: 0
-            }
-        }));
-    }
-    // Set defaults for new fields if not present
-    if (formData.degradationRate === undefined) setFormData(prev => ({ ...prev, degradationRate: 0.5 }));
-    if (formData.inflationRate === undefined) setFormData(prev => ({ ...prev, inflationRate: 2.0 }));
-    if (formData.batteryCapacity === undefined) setFormData(prev => ({ ...prev, batteryCapacity: 10.0 })); // Default 10kWh
-    if (!formData.appliances) setFormData(prev => ({ ...prev, appliances: [] }));
+            },
+            appliances: currentConfig.appliances || prev.appliances || [],
+            notifications: robustNotifs
+        };
+    });
+  }, [currentConfig]);
+
+  // Set defaults for optional fields if missing (run once)
+  useEffect(() => {
+    setFormData(prev => ({
+        ...prev,
+        degradationRate: prev.degradationRate !== undefined ? prev.degradationRate : 0.5,
+        inflationRate: prev.inflationRate !== undefined ? prev.inflationRate : 2.0,
+        batteryCapacity: prev.batteryCapacity !== undefined ? prev.batteryCapacity : 10.0
+    }));
   }, []);
 
   // New Tariff State
@@ -73,7 +124,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
   const [isEditingAppliance, setIsEditingAppliance] = useState(false);
 
 
-  const [activeTab, setActiveTab] = useState<'general' | 'tariffs' | 'expenses' | 'appliances' | 'history'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'notifications' | 'tariffs' | 'expenses' | 'appliances' | 'history'>('general');
 
   useEffect(() => {
     loadData();
@@ -104,6 +155,63 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
     onSave(cleanedConfig);
   };
 
+  const handleTestNotification = async () => {
+      const webhookUrl = formData.notifications?.discordWebhook;
+      if (!webhookUrl) return alert("Please enter a Discord Webhook URL first.");
+      
+      try {
+          const res = await fetch('/api/test-notification', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ webhookUrl })
+          });
+          if(res.ok) alert("Test notification sent! Check your Discord channel.");
+          else throw new Error("Failed");
+      } catch(e) {
+          alert("Failed to send test notification. Check the URL and server logs.");
+      }
+  };
+
+  // Helper to safely update notification settings
+  const updateNotification = (updates: any) => {
+      const current = formData.notifications || { 
+          enabled: false, 
+          discordWebhook: '', 
+          triggers: { errors: false, batteryFull: false, batteryEmpty: false, smartAdvice: false }, 
+          smartAdviceCooldownMinutes: 120 
+      };
+      const triggers = current.triggers || { errors: false, batteryFull: false, batteryEmpty: false, smartAdvice: false };
+      
+      setFormData({
+          ...formData,
+          notifications: {
+              ...current,
+              ...updates,
+              triggers: {
+                  ...triggers,
+                  ...(updates.triggers || {})
+              }
+          }
+      });
+  };
+
+  // Helper to get currency symbol
+  const getCurrencySymbol = () => {
+      switch(formData.currency) {
+          case 'EUR': return '€';
+          case 'GBP': return '£';
+          default: return '$';
+      }
+  };
+
+  const getCurrencyIcon = (size: number) => {
+      switch(formData.currency) {
+          case 'EUR': return <Euro size={size} />;
+          case 'GBP': return <PoundSterling size={size} />;
+          default: return <DollarSign size={size} />;
+      }
+  };
+
   // Auto-Calculate History Estimation
   const handleEstimateFinancials = () => {
     const vals = formData.initialValues;
@@ -131,8 +239,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
     const earned = totalExport * latestTariff.feedInTariff;
     
     const total = saved + earned;
+    const sym = getCurrencySymbol();
 
-    if (confirm(`Estimate based on current/latest prices:\n\nSelf-Consumed (${selfConsumed.toFixed(0)} kWh) × ${latestTariff.costPerKwh} = ${formData.currency === 'EUR' ? '€' : '$'}${saved.toFixed(2)}\nExported (${totalExport.toFixed(0)} kWh) × ${latestTariff.feedInTariff} = ${formData.currency === 'EUR' ? '€' : '$'}${earned.toFixed(2)}\n\nTotal Estimate: ${formData.currency === 'EUR' ? '€' : '$'}${total.toFixed(2)}\n\nApply this value?`)) {
+    if (confirm(`Estimate based on current/latest prices:\n\nSelf-Consumed (${selfConsumed.toFixed(0)} kWh) × ${latestTariff.costPerKwh} = ${sym}${saved.toFixed(2)}\nExported (${totalExport.toFixed(0)} kWh) × ${latestTariff.feedInTariff} = ${sym}${earned.toFixed(2)}\n\nTotal Estimate: ${sym}${total.toFixed(2)}\n\nApply this value?`)) {
         setFormData({
             ...formData,
             initialValues: { ...vals, financialReturn: parseFloat(total.toFixed(2)) }
@@ -265,7 +374,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         
         {/* Header */}
         <div className="p-6 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
@@ -279,33 +388,39 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
         <div className="flex border-b border-slate-700 bg-slate-900/30 overflow-x-auto">
           <button 
             onClick={() => setActiveTab('general')}
-            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors ${activeTab === 'general' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors flex items-center justify-center gap-2 ${activeTab === 'general' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
           >
-            General
+            <Sliders size={16} /> General
+          </button>
+          <button 
+            onClick={() => setActiveTab('notifications')}
+            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors flex items-center justify-center gap-2 ${activeTab === 'notifications' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
+          >
+            <Bell size={16} /> Notifications
           </button>
           <button 
             onClick={() => setActiveTab('appliances')}
-            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors ${activeTab === 'appliances' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors flex items-center justify-center gap-2 ${activeTab === 'appliances' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
           >
-            Appliances
+            <Plug size={16} /> Appliances
           </button>
           <button 
             onClick={() => setActiveTab('tariffs')}
-            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors ${activeTab === 'tariffs' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors flex items-center justify-center gap-2 ${activeTab === 'tariffs' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
           >
-            Prices
+            {getCurrencyIcon(16)} Prices
           </button>
           <button 
             onClick={() => setActiveTab('expenses')}
-            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors ${activeTab === 'expenses' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors flex items-center justify-center gap-2 ${activeTab === 'expenses' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
           >
-            ROI & Expenses
+            <TrendingUp size={16} /> ROI
           </button>
           <button 
             onClick={() => setActiveTab('history')}
-            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors ${activeTab === 'history' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors flex items-center justify-center gap-2 ${activeTab === 'history' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}
           >
-            Calibration
+            <History size={16} /> Calibration
           </button>
         </div>
         
@@ -356,6 +471,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                   </div>
               </div>
 
+              {/* ... (Rest of General Tab unchanged) ... */}
               <div className="space-y-4 pt-4">
                  <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2 flex items-center gap-2">
                     <MapPin size={18}/> Location & Capacity
@@ -466,7 +582,163 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
             </form>
           )}
 
-          {/* TAB: Appliances */}
+          {/* ... (Notifications & Appliances Tabs unchanged) ... */}
+          {activeTab === 'notifications' && (
+            <form onSubmit={handleConfigSubmit} className="space-y-6">
+                
+                <div className="flex items-center justify-between">
+                    <h3 className="text-slate-300 font-bold flex items-center gap-2">
+                        <Link2 size={18} className="text-blue-400"/> Discord Integration
+                    </h3>
+                    <div className="flex items-center gap-2">
+                         <span className="text-sm text-slate-400">Enable</span>
+                         <button 
+                            type="button"
+                            role="switch"
+                            onClick={() => updateNotification({ enabled: !formData.notifications?.enabled })}
+                            className={`w-11 h-6 flex items-center rounded-full transition-colors ${formData.notifications?.enabled ? 'bg-green-500' : 'bg-slate-700'}`}
+                         >
+                             <div className={`w-4 h-4 rounded-full bg-white shadow-md transform transition-transform ${formData.notifications?.enabled ? 'translate-x-6' : 'translate-x-1'}`}></div>
+                         </button>
+                    </div>
+                </div>
+
+                <div className={`space-y-6 transition-opacity ${formData.notifications?.enabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+                    
+                    <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-2">Webhook URL</label>
+                        <div className="flex gap-2">
+                            <input 
+                                type="text" 
+                                value={formData.notifications?.discordWebhook || ''}
+                                onChange={(e) => updateNotification({ discordWebhook: e.target.value })}
+                                placeholder="https://discord.com/api/webhooks/..."
+                                className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500 text-sm font-mono"
+                            />
+                            <button 
+                                type="button"
+                                onClick={handleTestNotification}
+                                className="px-3 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg border border-slate-600 flex items-center gap-2 transition-colors"
+                                title="Send Test Message"
+                            >
+                                <Send size={16} /> <span className="text-xs font-bold hidden sm:inline">Test</span>
+                            </button>
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-1">
+                            Paste the full Webhook URL from your Discord Server settings (Integrations → Webhooks).
+                        </p>
+                    </div>
+
+                    <div>
+                        <h4 className="text-sm font-bold text-slate-300 mb-3 border-b border-slate-700 pb-1">Triggers</h4>
+                        <div className="space-y-3">
+                            
+                            {/* Inverter Error */}
+                            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                                <div className="flex items-center gap-3">
+                                    <AlertTriangle size={18} className="text-red-500" />
+                                    <div>
+                                        <div className="text-sm font-medium text-slate-200">Inverter Errors</div>
+                                        <div className="text-[10px] text-slate-400">Notify when inverter reports a fault code.</div>
+                                    </div>
+                                </div>
+                                <input 
+                                    type="checkbox" 
+                                    checked={formData.notifications?.triggers?.errors ?? false}
+                                    onChange={(e) => updateNotification({ triggers: { errors: e.target.checked } })}
+                                    className="w-5 h-5 accent-yellow-500 rounded bg-slate-700 border-slate-500"
+                                />
+                            </div>
+
+                            {/* Battery Full */}
+                            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                                <div className="flex items-center gap-3">
+                                    <Battery size={18} className="text-green-500" />
+                                    <div>
+                                        <div className="text-sm font-medium text-slate-200">Battery Full (100%)</div>
+                                        <div className="text-[10px] text-slate-400">Notify when storage reaches full capacity.</div>
+                                    </div>
+                                </div>
+                                <input 
+                                    type="checkbox" 
+                                    checked={formData.notifications?.triggers?.batteryFull ?? false}
+                                    onChange={(e) => updateNotification({ triggers: { batteryFull: e.target.checked } })}
+                                    className="w-5 h-5 accent-yellow-500 rounded bg-slate-700 border-slate-500"
+                                />
+                            </div>
+
+                             {/* Battery Empty */}
+                             <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                                <div className="flex items-center gap-3">
+                                    <div className="relative">
+                                        <Battery size={18} className="text-red-500" />
+                                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1px] h-3 bg-slate-900 -rotate-45"></div>
+                                    </div>
+                                    <div>
+                                        <div className="text-sm font-medium text-slate-200">Battery Low (≤ 7%)</div>
+                                        <div className="text-[10px] text-slate-400">Notify when storage is nearly empty.</div>
+                                    </div>
+                                </div>
+                                <input 
+                                    type="checkbox" 
+                                    checked={formData.notifications?.triggers?.batteryEmpty ?? false}
+                                    onChange={(e) => updateNotification({ triggers: { batteryEmpty: e.target.checked } })}
+                                    className="w-5 h-5 accent-yellow-500 rounded bg-slate-700 border-slate-500"
+                                />
+                            </div>
+
+                            {/* Smart Advice */}
+                            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                                <div className="flex items-center gap-3">
+                                    <Zap size={18} className="text-blue-400 fill-blue-400" />
+                                    <div>
+                                        <div className="text-sm font-medium text-slate-200">Smart Usage Suggestions</div>
+                                        <div className="text-[10px] text-slate-400">Notify when excess solar power is available for specific devices (min. 3 mins).</div>
+                                    </div>
+                                </div>
+                                <input 
+                                    type="checkbox" 
+                                    checked={formData.notifications?.triggers?.smartAdvice ?? false}
+                                    onChange={(e) => updateNotification({ triggers: { smartAdvice: e.target.checked } })}
+                                    className="w-5 h-5 accent-yellow-500 rounded bg-slate-700 border-slate-500"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Cooldown Settings */}
+                     <div className={`transition-all ${formData.notifications?.triggers?.smartAdvice ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
+                        <label className="block text-xs font-bold text-slate-400 mb-2 flex items-center gap-2">
+                             <Clock size={12}/> Smart Suggestion Cooldown
+                        </label>
+                        <div className="flex items-center bg-slate-900 border border-slate-600 rounded-lg overflow-hidden focus-within:border-yellow-500 transition-colors w-full sm:w-1/2">
+                            <input 
+                                type="number" step="1" min="15"
+                                value={formData.notifications?.smartAdviceCooldownMinutes || 120}
+                                onChange={(e) => updateNotification({ smartAdviceCooldownMinutes: parseInt(e.target.value) })}
+                                className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0"
+                            />
+                            <div className="shrink-0 px-3 py-2 bg-slate-700 text-slate-200 text-xs font-bold border-l border-slate-600">Minutes</div>
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-1">
+                            Don't send another Smart Suggestion for this long after a notification.
+                        </p>
+                    </div>
+
+                </div>
+
+                <div className="pt-4 flex justify-end gap-3 border-t border-slate-700 mt-4">
+                    <button 
+                    type="submit" 
+                    className="flex items-center gap-2 px-6 py-2 bg-yellow-500 text-slate-900 font-bold rounded-lg hover:bg-yellow-400 transition shadow-lg shadow-yellow-500/20"
+                    >
+                    <Save size={18} />
+                    Save Notifications
+                    </button>
+                </div>
+            </form>
+          )}
+
           {activeTab === 'appliances' && (
               <div className="space-y-6">
                   {isEditingAppliance ? (
@@ -735,8 +1007,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                                         <Calendar size={14} className="text-slate-500"/>
                                         {t.validFrom}
                                     </td>
-                                    <td className="px-4 py-3 text-red-300">{t.costPerKwh.toFixed(3)}</td>
-                                    <td className="px-4 py-3 text-green-300">{t.feedInTariff.toFixed(3)}</td>
+                                    <td className="px-4 py-3 text-red-300">{getCurrencySymbol()} {t.costPerKwh.toFixed(3)}</td>
+                                    <td className="px-4 py-3 text-green-300">{getCurrencySymbol()} {t.feedInTariff.toFixed(3)}</td>
                                     <td className="px-4 py-3 text-right">
                                         <button 
                                             type="button"
@@ -876,7 +1148,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                                     </td>
                                     <td className="px-4 py-3 text-slate-400">{e.date}</td>
                                     <td className="px-4 py-3 text-right text-red-300">
-                                        {currentConfig.currency === 'EUR' ? '€' : '$'}{e.amount.toLocaleString()}
+                                        {getCurrencySymbol()}{e.amount.toLocaleString()}
                                     </td>
                                     <td className="px-4 py-3 text-right">
                                         <button 
@@ -974,7 +1246,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                         <div className="flex gap-2">
                             <div className="flex-1 flex items-center bg-slate-900 border border-slate-600 rounded-lg overflow-hidden focus-within:border-yellow-500 transition-colors">
                                 <div className="shrink-0 pl-3 pr-2 text-slate-400 font-bold border-r border-slate-700/50">
-                                    {formData.currency === 'EUR' ? '€' : '$'}
+                                    {getCurrencySymbol()}
                                 </div>
                                 <input 
                                     type="number" step="0.01"

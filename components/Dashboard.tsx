@@ -26,29 +26,55 @@ export interface WeatherData {
     current: {
       temp: number;
       weatherCode: number;
+      isDay: boolean; 
     };
-    dailyYield: number; // Calculated kWh from Open-Meteo radiation
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigger }) => {
   const [timeRange, setTimeRange] = useState<TimeRange>('day');
+  
+  // Main History State (for Charts & Stats) - Controlled by TimeRange selector
   const [history, setHistory] = useState<HistoryData | null>(null);
+  
+  // Status History State (ALWAYS 24h) - Independent of TimeRange selector
+  const [statusHistory, setStatusHistory] = useState<HistoryData | null>(null);
+
   const [roiData, setRoiData] = useState<RoiData | null>(null);
   const [forecast, setForecast] = useState<ForecastData | null>(null);
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loadingHist, setLoadingHist] = useState(false);
   
+  // Rate Limit Flag for UI Hint
+  const [solcastRateLimited, setSolcastRateLimited] = useState(false);
+  
   // Custom Date Range State
   const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
-  // Fetch History (Charts, Stats)
+  // 1. Fetch Main History (Charts, Stats)
   useEffect(() => {
     fetchHistory();
     // Refresh history every 60s (Standard monitoring interval)
     const interval = setInterval(fetchHistory, 60000); 
     return () => clearInterval(interval);
   }, [timeRange, startDate, endDate, refreshTrigger]); 
+
+  // 2. Fetch Status History (Fixed 24h for Timeline)
+  useEffect(() => {
+    const fetchStatusHistory = async () => {
+        try {
+            // Always request 'day' to get the rolling 24h window
+            const hist = await getHistory('day');
+            setStatusHistory(hist);
+        } catch (e) {
+            console.error("Status history fetch failed", e);
+        }
+    };
+    
+    fetchStatusHistory();
+    const interval = setInterval(fetchStatusHistory, 60000); 
+    return () => clearInterval(interval);
+  }, [refreshTrigger]);
 
   // Fetch ROI Data (Expensive calculation)
   useEffect(() => {
@@ -64,22 +90,41 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
     return () => clearInterval(interval);
   }, [refreshTrigger]); 
 
-  // Fetch Forecast (Solcast)
+  // --- STRICT FORECAST LOGIC ---
+  // Mode: Solcast ONLY for Yield. OpenMeteo ONLY for Weather Icon.
+  // Interval: 96 Minutes (matches backend cache to stay within 10 reqs/16h window)
+
+  const POLL_INTERVAL = 96 * 60 * 1000; 
+
+  // 1. SOLCAST LOGIC (Only if Key exists)
   useEffect(() => {
-    if (!config.solcastApiKey) return;
+    if (!config.solcastApiKey) {
+        setForecast(null);
+        return;
+    }
+
     const fetchFC = async () => {
         try {
             const fc = await getForecast();
             setForecast(fc);
-        } catch(e) { console.error("Forecast Fetch Error", e); }
+            setSolcastRateLimited(false);
+        } catch(e: any) { 
+            // If 429, we set the flag to show a warning, but we DO NOT clear the old data if it exists.
+            if (e.message && e.message.includes('429')) {
+                console.warn("Solcast Rate Limit hit. Keeping old data if available.");
+                setSolcastRateLimited(true);
+            } else {
+                 console.error("Solcast Fetch Failed", e);
+            }
+        }
     };
+    
     fetchFC();
-    // Refresh forecast every 60 mins (handled by backend cache too)
-    const interval = setInterval(fetchFC, 60 * 60 * 1000);
+    const interval = setInterval(fetchFC, POLL_INTERVAL);
     return () => clearInterval(interval);
   }, [config.solcastApiKey, refreshTrigger]);
 
-  // Fetch Weather (Open-Meteo) - Fallback Logic
+  // 2. OPEN METEO LOGIC (Weather Conditions ONLY)
   useEffect(() => {
     if (!config.latitude || !config.longitude) return;
 
@@ -87,37 +132,31 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
       try {
         const lat = config.latitude;
         const lon = config.longitude;
-        // Fetch current weather + Daily Shortwave Radiation Sum (MJ/m²)
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,is_day&daily=weather_code,shortwave_radiation_sum&timezone=auto&forecast_days=1`;
+        // Fetch current weather ONLY. No radiation/yield calculation.
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,is_day&timezone=auto&forecast_days=1`;
         
         const res = await fetch(url);
         if (!res.ok) throw new Error("Weather API failed");
         
         const wData = await res.json();
         
-        // Calculate Fallback Yield: Capacity * (Radiation_MJ / 3.6) * PR(0.85)
-        const radiationMJ = wData.daily?.shortwave_radiation_sum?.[0] || 0;
-        const radiationKWh = radiationMJ / 3.6;
-        const capacity = config.systemCapacity || 0; 
-        const pr = 0.85; 
-        const estimatedYield = capacity * radiationKWh * pr;
-
         setWeather({
             current: {
                 temp: wData.current.temperature_2m,
-                weatherCode: wData.current.weather_code
-            },
-            dailyYield: estimatedYield
+                weatherCode: wData.current.weather_code,
+                isDay: wData.current.is_day === 1
+            }
         });
       } catch (err) {
-        console.error("Failed to load weather/fallback forecast", err);
+        console.error("Failed to load weather", err);
       }
     };
 
     fetchWeather();
-    const interval = setInterval(fetchWeather, 30 * 60 * 1000);
+    // Use same polling interval for consistency
+    const interval = setInterval(fetchWeather, POLL_INTERVAL);
     return () => clearInterval(interval);
-  }, [config.latitude, config.longitude, config.systemCapacity]);
+  }, [config.latitude, config.longitude]);
 
 
   const fetchHistory = async () => {
@@ -181,7 +220,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
 
   if (!data) return null;
 
-  const currencySymbol = config.currency === 'EUR' ? '€' : '$';
+  const currencySymbol = config.currency === 'EUR' ? '€' : config.currency === 'GBP' ? '£' : '$';
   const peaks = history ? getPeaks(history.chart) : { maxPv: 0, maxLoad: 0 };
 
   // SKELETON LOADER COMPONENT
@@ -226,10 +265,12 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                 power={data.power}
                 soc={data.battery.soc}
                 forecast={forecast}
+                solcastRateLimited={solcastRateLimited}
                 todayProduction={data.energy.today.production}
-                fallbackDailyYield={weather?.dailyYield}
+                isDay={weather?.current.isDay ?? true} // Fallback to true if loading
                 batteryCapacity={config.batteryCapacity || 10}
                 appliances={config.appliances || []}
+                hasSolcastKey={!!config.solcastApiKey}
             />
           </div>
 
@@ -256,7 +297,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                 config={config} 
                 forecast={forecast}
                 weatherData={weather}
-                actualProduction={data.energy.today.production}
+                solcastRateLimited={solcastRateLimited}
              />
           </div>
 
@@ -298,7 +339,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
 
       {/* --- SECTION 3: TIMELINE --- */}
       <div className="animate-fade-in">
-        <StatusTimeline history={history?.chart || []} />
+        {/* Pass statusHistory (fixed 24h) instead of variable history */}
+        <StatusTimeline history={statusHistory?.chart || []} />
       </div>
 
       {/* --- SECTION 4: HISTORICAL ANALYSIS CONTROLS --- */}
@@ -455,7 +497,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                              <Zap size={16}/> Power History
                         </h3>
                         <div className="flex-1 min-h-0 w-full">
-                            <EnergyChart history={history.chart} />
+                            <EnergyChart history={history.chart} timeRange={timeRange} />
                         </div>
                     </div>
                     {/* Battery SOC Chart */}
@@ -464,7 +506,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                             <Battery size={16}/> Battery State of Charge
                         </h3>
                         <div className="flex-1 min-h-0 w-full">
-                            <BatteryChart history={history.chart} />
+                            <BatteryChart history={history.chart} timeRange={timeRange} />
                         </div>
                     </div>
                     {/* Efficiency Chart */}
@@ -473,7 +515,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                             <BarChart3 size={16}/> Efficiency History
                         </h3>
                         <div className="flex-1 min-h-0 w-full">
-                            <EfficiencyChart history={history.chart} />
+                            <EfficiencyChart history={history.chart} timeRange={timeRange} />
                         </div>
                     </div>
                 </div>

@@ -24,6 +24,18 @@ export interface Appliance {
   color: string;       // Tailwind text color class
 }
 
+export interface NotificationConfig {
+  enabled: boolean;
+  discordWebhook: string;
+  triggers: {
+    errors: boolean;
+    batteryFull: boolean;
+    batteryEmpty: boolean; // Triggers at <= 7%
+    smartAdvice: boolean;
+  };
+  smartAdviceCooldownMinutes: number;
+}
+
 export interface SystemConfig {
   inverterIp: string;
   currency: string;
@@ -43,6 +55,7 @@ export interface SystemConfig {
     financialReturn?: number; // Money amount already saved/earned before app installation
   };
   appliances?: Appliance[]; // Custom list of user devices
+  notifications?: NotificationConfig;
 }
 
 export interface SystemInfo {
@@ -98,7 +111,7 @@ export interface HistoryData {
     battery: number; // Positive = Discharging, Negative = Charging
     autonomy: number; // %
     selfConsumption: number; // %
-    status: number; // 0=Offline, 1=Running, 2=Error
+    status: number; // 0=Offline, 1=Running, 2=Error, 3=Idle
   }>;
   stats: EnergyStats;
 }
