@@ -13,7 +13,7 @@ import AmortizationWidget from './AmortizationWidget';
 import WeatherWidget from './WeatherWidget';
 import SmartRecommendations from './SmartRecommendations';
 import { getHistory, getRoiData, getForecast } from '../services/api';
-import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp } from 'lucide-react';
+import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp, ShieldCheck } from 'lucide-react';
 
 interface DashboardProps {
   data: InverterData | null;
@@ -233,22 +233,35 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
 
           {/* Realtime Efficiency Donuts */}
           <div className="grid grid-rows-2 gap-4 h-full">
-            <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg flex items-center justify-between relative overflow-hidden">
-                <div className="z-10 pl-2">
-                    <div className="text-slate-400 text-xs font-bold uppercase mb-1">Live Autonomy</div>
-                    <div className="text-2xl font-bold text-blue-400">{data.autonomy}%</div>
+            {/* Autonomy */}
+            <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg flex items-center justify-between relative overflow-hidden group hover:border-blue-500/30 transition-colors">
+                <div className="z-10 pl-2 flex flex-col justify-center">
+                    <div className="flex items-center gap-2 mb-1">
+                        <div className="p-1.5 bg-blue-500/10 rounded-lg text-blue-400">
+                             <ShieldCheck size={18} />
+                        </div>
+                        <span className="text-slate-300 font-bold text-sm tracking-wide">AUTONOMY</span>
+                    </div>
+                    <div className="text-xs text-slate-500 pl-1">Grid Independence</div>
                 </div>
-                <div className="h-16 w-16 mr-2">
-                    <EnergyDonut percentage={data.autonomy} label="" color="#3b82f6" small />
+                <div className="h-24 w-24 mr-2">
+                    <EnergyDonut percentage={data.autonomy} color="#3b82f6" />
                 </div>
             </div>
-            <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg flex items-center justify-between relative overflow-hidden">
-                <div className="z-10 pl-2">
-                    <div className="text-slate-400 text-xs font-bold uppercase mb-1">Self Consumption</div>
-                    <div className="text-2xl font-bold text-green-400">{data.selfConsumption}%</div>
+
+            {/* Self Consumption */}
+            <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg flex items-center justify-between relative overflow-hidden group hover:border-emerald-500/30 transition-colors">
+                <div className="z-10 pl-2 flex flex-col justify-center">
+                    <div className="flex items-center gap-2 mb-1">
+                         <div className="p-1.5 bg-emerald-500/10 rounded-lg text-emerald-400">
+                             <Leaf size={18} />
+                        </div>
+                        <span className="text-slate-300 font-bold text-sm tracking-wide">USAGE</span>
+                    </div>
+                    <div className="text-xs text-slate-500 pl-1">Solar Utilization</div>
                 </div>
-                <div className="h-16 w-16 mr-2">
-                    <EnergyDonut percentage={data.selfConsumption} label="" color="#22c55e" small />
+                <div className="h-24 w-24 mr-2">
+                    <EnergyDonut percentage={data.selfConsumption} color="#22c55e" />
                 </div>
             </div>
           </div>
