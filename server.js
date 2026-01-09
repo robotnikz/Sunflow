@@ -745,7 +745,7 @@ app.get('/api/history', (req, res) => {
                 if (pointAutonomy < 0) pointAutonomy = 0; 
                 let pointSelfCon = pProd > 0 ? ((pProd - pExp) / pProd) * 100 : 0;
                 chartData.push({
-                    timestamp: row.timestamp, production: row.power_pv, consumption: row.power_load, soc: row.soc, grid: row.power_grid, 
+                    timestamp: row.timestamp, production: row.power_pv, consumption: row.power_load, soc: row.soc, grid: row.power_grid, battery: row.power_battery || 0,
                     autonomy: Math.round(pointAutonomy), selfConsumption: Math.round(pointSelfCon), status: row.status_code !== undefined ? row.status_code : 1 
                 });
             }

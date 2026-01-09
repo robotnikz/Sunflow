@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from 'recharts';
 
@@ -7,6 +8,7 @@ interface EnergyChartProps {
     production: number;
     consumption: number;
     grid?: number;
+    battery?: number;
   }>;
 }
 
@@ -33,7 +35,8 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
     rawTime: h.timestamp,
     Production: h.production,
     Consumption: h.consumption,
-    Grid: h.grid || 0
+    Grid: h.grid || 0,
+    Battery: h.battery || 0
   }));
 
   // Calculate gradient offset for Grid
@@ -45,6 +48,15 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
   else if (gridMin >= 0) gridOff = 1;
   else gridOff = gridMax / (gridMax - gridMin);
 
+  // Calculate gradient offset for Battery (Positive = Discharge, Negative = Charge)
+  const batMax = Math.max(...data.map((i) => i.Battery));
+  const batMin = Math.min(...data.map((i) => i.Battery));
+  
+  let batOff = 0;
+  if (batMax <= 0) batOff = 0;
+  else if (batMin >= 0) batOff = 1;
+  else batOff = batMax / (batMax - batMin);
+
   // Custom Legend to allow colored text
   const renderLegend = (props: any) => {
     const { payload } = props;
@@ -55,6 +67,7 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
           let textColorClass = "text-slate-400";
           if (entry.value === 'Production') textColorClass = "text-yellow-400";
           if (entry.value === 'Consumption') textColorClass = "text-blue-400";
+          if (entry.value === 'Battery') textColorClass = "text-purple-400";
           
           const isGrid = entry.value === 'Grid';
 
@@ -90,6 +103,10 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
             <stop offset={gridOff} stopColor="#EF4444" stopOpacity={0.8} />
             <stop offset={gridOff} stopColor="#10B981" stopOpacity={0.8} />
           </linearGradient>
+          <linearGradient id="colorBat" x1="0" y1="0" x2="0" y2="1">
+            <stop offset={batOff} stopColor="#A855F7" stopOpacity={0.8} />
+            <stop offset={batOff} stopColor="#A855F7" stopOpacity={0.8} />
+          </linearGradient>
         </defs>
         
         <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
@@ -121,6 +138,9 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
               if (name === 'Grid') {
                   return [`${Math.abs(rounded)} W`, value > 0 ? "Importing" : "Exporting"];
               }
+              if (name === 'Battery') {
+                  return [`${Math.abs(rounded)} W`, value > 0 ? "Discharging" : "Charging"];
+              }
               return [`${rounded} W`, name];
           }}
         />
@@ -129,6 +149,7 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
         
         <ReferenceLine y={0} stroke="#475569" strokeDasharray="3 3" />
 
+        <Area type="monotone" dataKey="Battery" stroke="#A855F7" fillOpacity={0.6} fill="url(#colorBat)" dot={false} activeDot={{ r: 5 }} />
         <Area type="monotone" dataKey="Production" stroke="#EAB308" fillOpacity={1} fill="url(#colorProd)" dot={false} activeDot={{ r: 5 }} />
         <Area type="monotone" dataKey="Consumption" stroke="#3B82F6" fillOpacity={1} fill="url(#colorCons)" dot={false} activeDot={{ r: 5 }} />
         <Area type="monotone" dataKey="Grid" stroke="url(#colorGrid)" fillOpacity={1} fill="url(#colorGrid)" dot={false} activeDot={{ r: 5 }} />

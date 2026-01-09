@@ -1,4 +1,5 @@
 
+
 export interface Tariff {
   id?: number;
   validFrom: string; // ISO Date string (YYYY-MM-DD)
@@ -94,6 +95,7 @@ export interface HistoryData {
     consumption: number;
     soc: number;
     grid: number;   // Positive = Import, Negative = Export
+    battery: number; // Positive = Discharging, Negative = Charging
     autonomy: number; // %
     selfConsumption: number; // %
     status: number; // 0=Offline, 1=Running, 2=Error
