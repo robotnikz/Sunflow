@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FCD34D;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#D97706;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Sun Rays -->
+  <path d="M32 4 V10 M32 54 V60 M4 32 H10 M54 32 H60 M12 12 L16 16 M48 48 L52 52 M12 52 L16 48 M48 16 L52 12" 
+        stroke="#F59E0B" stroke-width="4" stroke-linecap="round" />
+  <!-- Sun Body -->
+  <circle cx="32" cy="32" r="18" fill="url(#grad)" stroke="#B45309" stroke-width="2" />
+</svg>

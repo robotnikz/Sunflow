@@ -1,5 +1,5 @@
 
-import { InverterData, SystemConfig, HistoryData, TimeRange, Tariff, Expense, RoiData, SystemInfo } from '../types';
+import { InverterData, SystemConfig, HistoryData, TimeRange, Tariff, Expense, RoiData, SystemInfo, ForecastData } from '../types';
 
 const API_BASE = ''; 
 
@@ -45,6 +45,13 @@ export const getSystemInfo = async (): Promise<SystemInfo> => {
   const res = await fetch(`${API_BASE}/api/info`);
   if (!res.ok) throw new Error("Failed to fetch system info");
   return res.json();
+};
+
+// --- Forecast API ---
+export const getForecast = async (): Promise<ForecastData> => {
+    const res = await fetch(`${API_BASE}/api/forecast`);
+    if (!res.ok) throw new Error("Failed to fetch forecast");
+    return res.json();
 };
 
 // --- Tariff API ---

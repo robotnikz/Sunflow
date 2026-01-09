@@ -1,15 +1,13 @@
+
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Label } from 'recharts';
 
 interface EnergyDonutProps {
   percentage: number;
-  label: string;
-  subLabel?: string;
   color: string;
-  small?: boolean;
 }
 
-const EnergyDonut: React.FC<EnergyDonutProps> = ({ percentage, label, subLabel, color, small }) => {
+const EnergyDonut: React.FC<EnergyDonutProps> = ({ percentage, color }) => {
   // Ensure percentage is 0-100
   const val = Math.min(Math.max(percentage, 0), 100);
   
@@ -18,52 +16,48 @@ const EnergyDonut: React.FC<EnergyDonutProps> = ({ percentage, label, subLabel, 
     { name: 'Remaining', value: 100 - val }
   ];
 
-  const innerRadius = small ? 35 : 60;
-  const outerRadius = small ? 50 : 80;
-  const fontSize = small ? '1.25rem' : '1.875rem';
-
   return (
-    <div className="flex flex-col items-center justify-center h-full">
-      <div className={`${small ? 'h-[100px]' : 'h-[200px]'} w-full relative`}>
+    <div className="w-full h-full relative flex items-center justify-center">
         <ResponsiveContainer width="100%" height="100%">
             <PieChart>
             <Pie
                 data={data}
                 cx="50%"
                 cy="50%"
-                innerRadius={innerRadius}
-                outerRadius={outerRadius}
+                innerRadius="75%"
+                outerRadius="100%"
                 startAngle={90}
                 endAngle={-270}
                 dataKey="value"
                 stroke="none"
+                cornerRadius={4}
+                paddingAngle={5}
             >
                 <Cell key="cell-val" fill={color} />
-                <Cell key="cell-rem" fill="#1e293b" />
+                <Cell key="cell-rem" fill="#1e293b" /> {/* slate-800 darker */}
                 <Label
                     value={`${val.toFixed(0)}%`}
                     position="center"
-                    className="fill-slate-100 font-bold"
-                    style={{ fontSize }}
+                    className="font-bold fill-slate-100"
+                    style={{ 
+                        fontSize: '1.2rem', 
+                        filter: 'drop-shadow(0px 2px 2px rgba(0,0,0,0.5))',
+                        fontWeight: 700
+                    }}
                 />
             </Pie>
             </PieChart>
         </ResponsiveContainer>
-        {/* Decorative inner glow */}
+        
+        {/* Subtle glow behind the ring */}
         <div 
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none opacity-20"
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none opacity-20 blur-md"
             style={{ 
                 backgroundColor: color, 
-                filter: 'blur(15px)',
-                width: small ? '70px' : '110px',
-                height: small ? '70px' : '110px'
+                width: '70%',
+                height: '70%'
             }}
         ></div>
-      </div>
-      <div className="text-center mt-0">
-        <h3 className={`text-slate-200 font-medium ${small ? 'text-xs' : 'text-lg'}`}>{label}</h3>
-        {subLabel && <p className="text-slate-500 text-sm">{subLabel}</p>}
-      </div>
     </div>
   );
 };

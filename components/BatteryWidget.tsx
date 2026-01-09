@@ -1,13 +1,15 @@
+
 import React from 'react';
-import { BatteryCharging, Zap } from 'lucide-react';
+import { BatteryCharging, Zap, Clock } from 'lucide-react';
 
 interface BatteryWidgetProps {
   soc: number;
-  power: number; // Used for status calculation only now
+  power: number; // Used for status calculation
   state: 'charging' | 'discharging' | 'idle';
+  capacity?: number; // Total Capacity in kWh
 }
 
-const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, state }) => {
+const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state, capacity = 10 }) => {
   // Determine Color based on SOC
   const getColor = () => {
     if (soc <= 20) return 'from-red-500 to-red-600';
@@ -22,6 +24,32 @@ const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, state }) => {
   };
 
   const isCharging = state === 'charging';
+  const isDischarging = state === 'discharging';
+  const powerAbs = Math.abs(power);
+
+  // Time Calculation Logic
+  const calculateTimeRemaining = () => {
+      if (!powerAbs || powerAbs < 100) return null; // Too slow to calc
+      
+      let hours = 0;
+      if (isCharging) {
+          // Time to Full: (Capacity * (100-SOC)%) / PowerkW
+          const neededKwh = capacity * ((100 - soc) / 100);
+          hours = neededKwh / (powerAbs / 1000);
+      } else if (isDischarging) {
+          // Time to Empty: (Capacity * SOC%) / PowerkW
+          const remainingKwh = capacity * (soc / 100);
+          hours = remainingKwh / (powerAbs / 1000);
+      }
+      
+      if (hours > 24) return "> 24h";
+      
+      const h = Math.floor(hours);
+      const m = Math.round((hours - h) * 60);
+      return `${h}h ${m}m`;
+  };
+
+  const timeString = calculateTimeRemaining();
 
   return (
     <div className={`relative overflow-hidden bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-xl transition-all duration-500 flex flex-col items-center justify-center min-h-[200px] h-full`}>
@@ -73,13 +101,26 @@ const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, state }) => {
             </div>
 
             {/* Status Text below */}
-            <div className="flex items-center gap-2 mt-2">
-                 {isCharging ? <BatteryCharging size={16} className="text-emerald-400 animate-pulse"/> : <Zap size={16} className="text-slate-500"/>}
-                 <span className={`text-sm font-bold uppercase tracking-widest ${
-                        state === 'charging' ? 'text-emerald-400' : state === 'discharging' ? 'text-amber-400' : 'text-slate-500'
-                    }`}>
-                        {state === 'idle' ? 'Standby' : state}
-                 </span>
+            <div className="flex flex-col items-center gap-1 mt-2">
+                 <div className="flex items-center gap-2">
+                    {isCharging ? <BatteryCharging size={16} className="text-emerald-400 animate-pulse"/> : <Zap size={16} className="text-slate-500"/>}
+                    <span className={`text-sm font-bold uppercase tracking-widest ${
+                            state === 'charging' ? 'text-emerald-400' : state === 'discharging' ? 'text-amber-400' : 'text-slate-500'
+                        }`}>
+                            {state === 'idle' ? 'Standby' : state}
+                    </span>
+                 </div>
+                 
+                 {/* Smart Time Calculation Display */}
+                 {timeString && (state !== 'idle') && (
+                     <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-900/50 px-2 py-1 rounded-full border border-slate-700/50">
+                        <Clock size={10} />
+                        <span>
+                            {isCharging ? 'Full in ' : 'Empty in '} 
+                            <span className="text-slate-200 font-mono font-bold">{timeString}</span>
+                        </span>
+                     </div>
+                 )}
             </div>
         </div>
 

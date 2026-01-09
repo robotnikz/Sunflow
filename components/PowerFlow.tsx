@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Sun, Home, Zap, Battery, ArrowDown, ArrowUp } from 'lucide-react';
 
@@ -15,8 +16,10 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
   // Logic
   const isImporting = power.grid > 0;
   const isExporting = power.grid < 0;
-  const isCharging = power.battery > 0;
-  const isDischarging = power.battery < -10;
+  
+  // FIXED LOGIC: Fronius P_Akku is Negative when Charging, Positive when Discharging
+  const isCharging = power.battery < -10; 
+  const isDischarging = power.battery > 10;
   
   const gridPowerAbs = Math.abs(power.grid);
   const batPowerAbs = Math.abs(power.battery);
@@ -98,8 +101,10 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
         {batPowerAbs > 10 && (
             <circle r="4" fill={cBat} filter="url(#glow-bat)">
                 {isCharging ? (
+                     // Charging: Center -> Battery (Left)
                      <animateMotion dur={`${batSpeed}s`} repeatCount="indefinite" path={`M${cx},${cy} L${leftX},${cy}`} keyPoints="0;1" keyTimes="0;1" />
                 ) : (
+                     // Discharging: Battery (Left) -> Center
                      <animateMotion dur={`${batSpeed}s`} repeatCount="indefinite" path={`M${leftX},${cy} L${cx},${cy}`} keyPoints="0;1" keyTimes="0;1" />
                 )}
             </circle>
@@ -124,16 +129,9 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
 
       </svg>
 
-      {/* --- HTML OVERLAYS FOR ICONS & TEXT --- 
-          Using percentages to match SVG coordinates:
-          Canvas 600x400.
-          CX (300) = 50% left
-          CY (200) = 50% top
-      */}
+      {/* --- HTML OVERLAYS --- */}
       
-      {/* PV NODE (Top) 
-          Centered at 15% Top. Flex-col-reverse pushes text upwards.
-      */}
+      {/* PV NODE */}
       <div 
         className="absolute flex flex-col-reverse items-center gap-4"
         style={{ top: '15%', left: '50%', transform: 'translate(-50%, -50%)' }}
@@ -147,9 +145,7 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
         </div>
       </div>
 
-      {/* LOAD NODE (Bottom) 
-          Centered at 85% Top. Flex-col pushes text downwards.
-      */}
+      {/* LOAD NODE */}
       <div 
         className="absolute flex flex-col items-center gap-4"
         style={{ top: '85%', left: '50%', transform: 'translate(-50%, -50%)' }}
@@ -163,9 +159,7 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
         </div>
       </div>
 
-      {/* BATTERY NODE (Left) 
-          Centered at 15% Left.
-      */}
+      {/* BATTERY NODE */}
       <div 
         className="absolute flex flex-col items-center gap-4 w-[140px]"
         style={{ top: '50%', left: '15%', transform: 'translate(-50%, -50%)' }}
@@ -181,9 +175,7 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
         </div>
       </div>
 
-      {/* GRID NODE (Right) 
-          Centered at 85% Left.
-      */}
+      {/* GRID NODE */}
       <div 
         className="absolute flex flex-col items-center gap-4 w-[140px]"
         style={{ top: '50%', left: '85%', transform: 'translate(-50%, -50%)' }}

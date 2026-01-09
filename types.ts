@@ -1,4 +1,5 @@
 
+
 export interface Tariff {
   id?: number;
   validFrom: string; // ISO Date string (YYYY-MM-DD)
@@ -14,6 +15,15 @@ export interface Expense {
   date: string; // Date incurred or start date for yearly
 }
 
+export interface Appliance {
+  id: string;
+  name: string;
+  watts: number;
+  kwhEstimate: number; // calculated from watts * duration or manual
+  iconName: string;    // String reference to Lucide icon key
+  color: string;       // Tailwind text color class
+}
+
 export interface SystemConfig {
   inverterIp: string;
   currency: string;
@@ -21,14 +31,18 @@ export interface SystemConfig {
   latitude?: string;
   longitude?: string;
   systemCapacity?: number; // kWp
+  batteryCapacity?: number; // kWh (Total capacity of the stack)
   degradationRate?: number; // % per year (default 0.5)
   inflationRate?: number; // % per year (default 2.0)
+  solcastApiKey?: string;
+  solcastSiteId?: string;
   initialValues?: {
     production?: number; // kWh
     import?: number; // kWh
     export?: number; // kWh
     financialReturn?: number; // Money amount already saved/earned before app installation
   };
+  appliances?: Appliance[]; // Custom list of user devices
 }
 
 export interface SystemInfo {
@@ -81,6 +95,7 @@ export interface HistoryData {
     consumption: number;
     soc: number;
     grid: number;   // Positive = Import, Negative = Export
+    battery: number; // Positive = Discharging, Negative = Charging
     autonomy: number; // %
     selfConsumption: number; // %
     status: number; // 0=Offline, 1=Running, 2=Error
@@ -94,7 +109,15 @@ export interface RoiData {
   netValue: number;
   roiPercent: number;
   breakEvenDate: string | null; // ISO Date or null if calculated in past/infinite
+  projectedBreakEvenCost?: number; // Total cost calculated at the future date
   expenses: Expense[];
+}
+
+export interface ForecastData {
+  forecasts: Array<{
+    period_end: string;
+    pv_estimate: number; // kW
+  }>;
 }
 
 export interface FroniusRealtimeResponse {

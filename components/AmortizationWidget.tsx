@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { RoiData } from '../types';
 import { TrendingUp, CalendarCheck, AlertCircle } from 'lucide-react';
@@ -70,7 +71,7 @@ const AmortizationWidget: React.FC<AmortizationWidgetProps> = ({ roiData, curren
             </div>
             <div className="flex justify-between text-xs text-slate-500 mt-2 font-medium">
                 <span>{symbol}{fmt(roiData.totalReturned)} returned</span>
-                <span>Target: {symbol}{fmt(roiData.totalInvested)}</span>
+                <span>Invested to date: {symbol}{fmt(roiData.totalInvested)}</span>
             </div>
         </div>
 
@@ -89,17 +90,21 @@ const AmortizationWidget: React.FC<AmortizationWidgetProps> = ({ roiData, curren
                     </div>
                 </div>
             ) : breakEvenDate ? (
-                <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-500/10 text-blue-400 rounded-lg">
-                        <CalendarCheck size={20} />
-                    </div>
-                    <div>
-                        <div className="text-xs text-slate-500 uppercase font-bold">Estimated Break-even</div>
-                        <div className="text-slate-200 font-bold">
-                            {breakEvenDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-500/10 text-blue-400 rounded-lg self-start">
+                            <CalendarCheck size={20} />
                         </div>
-                        <div className="text-[10px] text-slate-500">
-                            Based on historical average & future tariffs
+                        <div>
+                            <div className="text-xs text-slate-500 uppercase font-bold">Estimated Break-even</div>
+                            <div className="text-slate-200 font-bold">
+                                {breakEvenDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                            </div>
+                            {roiData.projectedBreakEvenCost && (
+                                <div className="text-[10px] text-slate-400 mt-1">
+                                    Total Cost at Break-even: <span className="font-mono text-slate-300 font-bold">{symbol}{fmt(roiData.projectedBreakEvenCost)}</span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

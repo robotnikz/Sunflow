@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import { InverterData, SystemConfig, TimeRange, HistoryData, RoiData } from '../types';
+import { InverterData, SystemConfig, TimeRange, HistoryData, RoiData, ForecastData } from '../types';
 import PowerFlow from './PowerFlow';
 import EnergyChart from './EnergyChart';
 import BatteryChart from './BatteryChart';
@@ -10,8 +11,9 @@ import BatteryWidget from './BatteryWidget';
 import StatusTimeline from './StatusTimeline'; 
 import AmortizationWidget from './AmortizationWidget';
 import WeatherWidget from './WeatherWidget';
-import { getHistory, getRoiData } from '../services/api';
-import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp } from 'lucide-react';
+import SmartRecommendations from './SmartRecommendations';
+import { getHistory, getRoiData, getForecast } from '../services/api';
+import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp, ShieldCheck, Download } from 'lucide-react';
 
 interface DashboardProps {
   data: InverterData | null;
@@ -20,10 +22,20 @@ interface DashboardProps {
   refreshTrigger: number; // Increment this to force reload of historical/ROI data
 }
 
+export interface WeatherData {
+    current: {
+      temp: number;
+      weatherCode: number;
+    };
+    dailyYield: number; // Calculated kWh from Open-Meteo radiation
+}
+
 const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigger }) => {
   const [timeRange, setTimeRange] = useState<TimeRange>('day');
   const [history, setHistory] = useState<HistoryData | null>(null);
   const [roiData, setRoiData] = useState<RoiData | null>(null);
+  const [forecast, setForecast] = useState<ForecastData | null>(null);
+  const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loadingHist, setLoadingHist] = useState(false);
   
   // Custom Date Range State
@@ -36,10 +48,9 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
     // Refresh history every 60s (Standard monitoring interval)
     const interval = setInterval(fetchHistory, 60000); 
     return () => clearInterval(interval);
-  }, [timeRange, startDate, endDate, refreshTrigger]); // Added refreshTrigger to dependency
+  }, [timeRange, startDate, endDate, refreshTrigger]); 
 
   // Fetch ROI Data (Expensive calculation)
-  // Refreshes every 10 minutes OR when refreshTrigger changes (Settings Saved)
   useEffect(() => {
     const fetchRoi = async () => {
         try {
@@ -48,12 +59,66 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
         } catch(e) { console.error("ROI Fetch Error", e); }
     };
     
-    fetchRoi(); // Initial fetch
-    
-    // Poll every 10 minutes
+    fetchRoi(); 
     const interval = setInterval(fetchRoi, 10 * 60 * 1000); 
     return () => clearInterval(interval);
-  }, [refreshTrigger]); // Added refreshTrigger to dependency
+  }, [refreshTrigger]); 
+
+  // Fetch Forecast (Solcast)
+  useEffect(() => {
+    if (!config.solcastApiKey) return;
+    const fetchFC = async () => {
+        try {
+            const fc = await getForecast();
+            setForecast(fc);
+        } catch(e) { console.error("Forecast Fetch Error", e); }
+    };
+    fetchFC();
+    // Refresh forecast every 60 mins (handled by backend cache too)
+    const interval = setInterval(fetchFC, 60 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [config.solcastApiKey, refreshTrigger]);
+
+  // Fetch Weather (Open-Meteo) - Fallback Logic
+  useEffect(() => {
+    if (!config.latitude || !config.longitude) return;
+
+    const fetchWeather = async () => {
+      try {
+        const lat = config.latitude;
+        const lon = config.longitude;
+        // Fetch current weather + Daily Shortwave Radiation Sum (MJ/m²)
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,is_day&daily=weather_code,shortwave_radiation_sum&timezone=auto&forecast_days=1`;
+        
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("Weather API failed");
+        
+        const wData = await res.json();
+        
+        // Calculate Fallback Yield: Capacity * (Radiation_MJ / 3.6) * PR(0.85)
+        const radiationMJ = wData.daily?.shortwave_radiation_sum?.[0] || 0;
+        const radiationKWh = radiationMJ / 3.6;
+        const capacity = config.systemCapacity || 0; 
+        const pr = 0.85; 
+        const estimatedYield = capacity * radiationKWh * pr;
+
+        setWeather({
+            current: {
+                temp: wData.current.temperature_2m,
+                weatherCode: wData.current.weather_code
+            },
+            dailyYield: estimatedYield
+        });
+      } catch (err) {
+        console.error("Failed to load weather/fallback forecast", err);
+      }
+    };
+
+    fetchWeather();
+    const interval = setInterval(fetchWeather, 30 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [config.latitude, config.longitude, config.systemCapacity]);
+
 
   const fetchHistory = async () => {
     if (timeRange === 'custom' && (!startDate || !endDate)) return;
@@ -67,6 +132,34 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
     } finally {
       setLoadingHist(false);
     }
+  };
+
+  const handleDownloadCSV = () => {
+      if (!history || !history.chart) return;
+
+      const headers = ['Timestamp', 'Production (W)', 'Consumption (W)', 'Grid (W)', 'Battery (W)', 'SOC (%)', 'Autonomy (%)', 'SelfConsumption (%)'];
+      const rows = history.chart.map(row => [
+          row.timestamp,
+          row.production,
+          row.consumption,
+          row.grid,
+          row.battery,
+          row.soc,
+          row.autonomy,
+          row.selfConsumption
+      ]);
+
+      const csvContent = "data:text/csv;charset=utf-8," 
+          + headers.join(",") + "\n" 
+          + rows.map(e => e.join(",")).join("\n");
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `sunflow_data_${timeRange}_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
   };
 
   // Helper Calculations
@@ -111,7 +204,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
       {/* --- SECTION 1: LIVE MONITORING --- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Power Flow Diagram (Takes 2/3 width) */}
-        <div className="lg:col-span-2 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl relative overflow-hidden flex flex-col h-[520px]">
+        {/* Removed fixed height so it grows with content, but set min-height for consistent look */}
+        <div className="lg:col-span-2 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl relative overflow-hidden flex flex-col min-h-[500px]">
           <div className="absolute top-6 left-6 flex items-center gap-2 text-slate-300 font-semibold z-10">
              <div className="p-1.5 bg-slate-700/50 rounded-lg backdrop-blur">
                 <Zap className="text-yellow-500" size={18} />
@@ -125,53 +219,80 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
         </div>
 
         {/* Right: Widgets Column (Takes 1/3 width) */}
-        <div className="flex flex-col gap-6 h-[520px]">
+        <div className="flex flex-col gap-6 min-h-[500px]">
+          {/* Smart Recommendations - High Priority */}
+          <div className="flex-1 min-h-[220px]">
+            <SmartRecommendations 
+                power={data.power}
+                soc={data.battery.soc}
+                forecast={forecast}
+                todayProduction={data.energy.today.production}
+                fallbackDailyYield={weather?.dailyYield}
+                batteryCapacity={config.batteryCapacity || 10}
+                appliances={config.appliances || []}
+            />
+          </div>
+
           {/* Battery Widget */}
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-[220px]">
              <BatteryWidget 
                 soc={data.battery.soc}
                 power={data.power.battery}
                 state={data.battery.state}
+                capacity={config.batteryCapacity || 10}
              />
-          </div>
-          
-          {/* Weather Widget */}
-          <div className="flex-1 min-h-0">
-             <WeatherWidget config={config} />
           </div>
         </div>
       </div>
 
-      {/* --- SECTION 2: SYSTEM HEALTH & LONG TERM METRICS --- */}
-      {/* These are separated from the time-range selector to indicate they are global/current states */}
+      {/* --- SECTION 2: SYSTEM HEALTH & FORECAST --- */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in">
           {/* ROI Widget */}
           <AmortizationWidget roiData={roiData} currency={config.currency} />
 
-          {/* Realtime Efficiency Donuts */}
-          <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg flex items-center justify-center relative">
-               <div className="absolute top-4 left-4 text-slate-400 text-sm font-medium flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-blue-500"></span> Live Autonomy
-               </div>
-               <div className="h-40 w-full mt-4">
-                <EnergyDonut 
-                    percentage={data.autonomy} 
-                    label="" 
-                    color="#3b82f6" 
-                />
-               </div>
+          {/* Weather / Solar Forecast (Moved here from top section) */}
+          <div className="h-full">
+             <WeatherWidget 
+                config={config} 
+                forecast={forecast}
+                weatherData={weather}
+                actualProduction={data.energy.today.production}
+             />
           </div>
-          <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg flex items-center justify-center relative">
-               <div className="absolute top-4 left-4 text-slate-400 text-sm font-medium flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-green-500"></span> Live Self Consumption
-               </div>
-               <div className="h-40 w-full mt-4">
-                <EnergyDonut 
-                    percentage={data.selfConsumption} 
-                    label="" 
-                    color="#22c55e" 
-                />
-               </div>
+
+          {/* Realtime Efficiency Donuts */}
+          <div className="grid grid-rows-2 gap-4 h-full">
+            {/* Autonomy */}
+            <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg flex items-center justify-between relative overflow-hidden group hover:border-blue-500/30 transition-colors">
+                <div className="z-10 pl-2 flex flex-col justify-center">
+                    <div className="flex items-center gap-2 mb-1">
+                        <div className="p-1.5 bg-blue-500/10 rounded-lg text-blue-400">
+                             <ShieldCheck size={18} />
+                        </div>
+                        <span className="text-slate-300 font-bold text-sm tracking-wide">AUTONOMY</span>
+                    </div>
+                    <div className="text-xs text-slate-500 pl-1">Grid Independence</div>
+                </div>
+                <div className="h-24 w-24 mr-2">
+                    <EnergyDonut percentage={data.autonomy} color="#3b82f6" />
+                </div>
+            </div>
+
+            {/* Self Consumption */}
+            <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg flex items-center justify-between relative overflow-hidden group hover:border-emerald-500/30 transition-colors">
+                <div className="z-10 pl-2 flex flex-col justify-center">
+                    <div className="flex items-center gap-2 mb-1">
+                         <div className="p-1.5 bg-emerald-500/10 rounded-lg text-emerald-400">
+                             <Leaf size={18} />
+                        </div>
+                        <span className="text-slate-300 font-bold text-sm tracking-wide">USAGE</span>
+                    </div>
+                    <div className="text-xs text-slate-500 pl-1">Solar Utilization</div>
+                </div>
+                <div className="h-24 w-24 mr-2">
+                    <EnergyDonut percentage={data.selfConsumption} color="#22c55e" />
+                </div>
+            </div>
           </div>
       </div>
 
@@ -188,20 +309,30 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                 <Calendar size={18} className="text-blue-400"/>
                 Statistics & Analysis
             </h2>
-            <div className="flex flex-wrap bg-slate-900 rounded-lg p-1 border border-slate-700">
-                {(['hour', 'day', 'week', 'month', 'year', 'custom'] as TimeRange[]).map((range) => (
-                    <button
-                        key={range}
-                        onClick={() => setTimeRange(range)}
-                        className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-                            timeRange === range 
-                            ? 'bg-slate-700 text-white shadow ring-1 ring-slate-600' 
-                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-                        }`}
-                    >
-                        {range.charAt(0).toUpperCase() + range.slice(1)}
-                    </button>
-                ))}
+            <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap bg-slate-900 rounded-lg p-1 border border-slate-700">
+                    {(['hour', 'day', 'week', 'month', 'year', 'custom'] as TimeRange[]).map((range) => (
+                        <button
+                            key={range}
+                            onClick={() => setTimeRange(range)}
+                            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                                timeRange === range 
+                                ? 'bg-slate-700 text-white shadow ring-1 ring-slate-600' 
+                                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                            }`}
+                        >
+                            {range.charAt(0).toUpperCase() + range.slice(1)}
+                        </button>
+                    ))}
+                </div>
+                {/* Export Button */}
+                <button 
+                    onClick={handleDownloadCSV}
+                    className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg border border-slate-700 transition-colors"
+                    title="Export CSV"
+                >
+                    <Download size={18} />
+                </button>
             </div>
         </div>
 
@@ -315,7 +446,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
 
                 {/* Right Column: Charts */}
                 <div className="lg:col-span-2 flex flex-col gap-6">
-                    
                     {/* Main Power Chart */}
                     <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[400px] flex flex-col relative overflow-hidden group">
                         <div className="absolute top-0 right-0 p-6 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -328,7 +458,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                             <EnergyChart history={history.chart} />
                         </div>
                     </div>
-
                     {/* Battery SOC Chart */}
                     <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[250px] flex flex-col">
                         <h3 className="text-slate-400 text-sm font-medium mb-6 flex items-center gap-2 shrink-0">
@@ -338,7 +467,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                             <BatteryChart history={history.chart} />
                         </div>
                     </div>
-
                     {/* Efficiency Chart */}
                     <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[250px] flex flex-col">
                         <h3 className="text-slate-400 text-sm font-medium mb-6 flex items-center gap-2 shrink-0">
