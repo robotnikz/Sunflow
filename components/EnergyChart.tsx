@@ -10,25 +10,39 @@ interface EnergyChartProps {
     grid?: number;
     battery?: number;
   }>;
+  timeRange: string;
 }
 
-const EnergyChart: React.FC<EnergyChartProps> = ({ history }) => {
+const EnergyChart: React.FC<EnergyChartProps> = ({ history, timeRange }) => {
   if (history.length === 0) {
     return <div className="flex items-center justify-center h-full text-slate-500">No historical data available yet.</div>;
   }
 
-  // Smart Date Formatting
-  const startTime = new Date(history[0].timestamp).getTime();
-  const endTime = new Date(history[history.length - 1].timestamp).getTime();
-  const durationHours = (endTime - startTime) / (1000 * 60 * 60);
-  const showDate = durationHours > 24;
-
+  // Dynamic Tick Formatting based on selected timeRange
   const formatTick = (ts: string) => {
     const d = new Date(ts);
-    if (showDate) {
-      return `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth()+1).toString().padStart(2, '0')} ${d.getHours().toString().padStart(2, '0')}:00`;
+    
+    switch(timeRange) {
+        case 'hour':
+            // 14:05
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        case 'day':
+            // 14:00
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        case 'week':
+            // Mon 10 (Short Day, Date)
+            return d.toLocaleDateString([], { weekday: 'short', day: '2-digit' });
+        case 'month':
+            // 12.05 (Day.Month)
+            return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
+        case 'year':
+            // Jan 24 (Month Year)
+            return d.toLocaleDateString([], { month: 'short', year: '2-digit' });
+        case 'custom':
+            return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        default:
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   const data = history.map(h => ({

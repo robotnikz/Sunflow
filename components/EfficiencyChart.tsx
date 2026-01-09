@@ -8,22 +8,32 @@ interface EfficiencyChartProps {
     autonomy: number;
     selfConsumption: number;
   }>;
+  timeRange: string;
 }
 
-const EfficiencyChart: React.FC<EfficiencyChartProps> = ({ history }) => {
+const EfficiencyChart: React.FC<EfficiencyChartProps> = ({ history, timeRange }) => {
   if (history.length === 0) return null;
 
-  const startTime = new Date(history[0].timestamp).getTime();
-  const endTime = new Date(history[history.length - 1].timestamp).getTime();
-  const durationHours = (endTime - startTime) / (1000 * 60 * 60);
-  const showDate = durationHours > 24;
-
+  // Dynamic Tick Formatting based on selected timeRange
   const formatTick = (ts: string) => {
     const d = new Date(ts);
-    if (showDate) {
-      return `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth()+1).toString().padStart(2, '0')} ${d.getHours().toString().padStart(2, '0')}:00`;
+    
+    switch(timeRange) {
+        case 'hour':
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        case 'day':
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        case 'week':
+            return d.toLocaleDateString([], { weekday: 'short', day: '2-digit' });
+        case 'month':
+            return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
+        case 'year':
+            return d.toLocaleDateString([], { month: 'short', year: '2-digit' });
+        case 'custom':
+            return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        default:
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   const renderLegend = (props: any) => {

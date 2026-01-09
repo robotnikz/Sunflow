@@ -111,7 +111,7 @@ export interface HistoryData {
     battery: number; // Positive = Discharging, Negative = Charging
     autonomy: number; // %
     selfConsumption: number; // %
-    status: number; // 0=Offline, 1=Running, 2=Error
+    status: number; // 0=Offline, 1=Running, 2=Error, 3=Idle
   }>;
   stats: EnergyStats;
 }

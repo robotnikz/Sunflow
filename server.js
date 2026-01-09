@@ -171,13 +171,11 @@ const fetchFroniusData = async (ip) => {
 };
 
 // Helper: Get Local SQLite-compatible Timestamp (YYYY-MM-DD HH:MM:SS)
-const getLocalTimestamp = () => {
-    const now = new Date();
-    // Adjust to local time by subtracting the timezone offset
-    const offsetMs = now.getTimezoneOffset() * 60 * 1000;
-    const local = new Date(now.getTime() - offsetMs);
-    // Slice ISO string to get YYYY-MM-DDTHH:MM:SS and replace T with space
-    return local.toISOString().slice(0, 19).replace('T', ' ');
+// Fixed: Explicitly use the configured Timezone (Europe/Berlin default) using sv-SE locale (ISO-like format)
+const getLocalTimestamp = (date = new Date()) => {
+    const timeZone = process.env.TZ || 'Europe/Berlin';
+    // 'sv-SE' locale formats as YYYY-MM-DD HH:mm:ss, which is SQL friendly
+    return date.toLocaleString('sv-SE', { timeZone }).replace('T', ' ');
 };
 
 
@@ -224,22 +222,46 @@ setInterval(async () => {
         // Check Fronius API Response Code
         const apiCode = rawData.Head?.Status?.Code;
         
-        if (apiCode === 0) {
-            statusCode = 1; // 1 = Running/OK
-        } else {
-            statusCode = 2; // 2 = Error reported by Inverter
-        }
-
         const site = rawData.Body.Data.Site;
         const inverters = rawData.Body.Data.Inverters;
-        const inverterKey = Object.keys(inverters)[0];
-        soc = inverters[inverterKey] ? inverters[inverterKey].SOC : 0;
+        const inverterKey = Object.keys(inverters)[0]; // Assume 1 inverter
+        const inverterData = inverters[inverterKey];
 
+        soc = inverterData ? inverterData.SOC : 0;
         p_pv = site.P_PV || 0;
         p_load = Math.abs(site.P_Load || 0);
         p_grid = site.P_Grid || 0;
         p_batt = site.P_Akku || 0;
         e_day = site.E_Day || 0;
+
+        if (apiCode === 0) {
+            // Parse Device Status Code
+            // Fronius Codes: 
+            // 7 = Running
+            // 8 = Standby (Night)
+            // 9 = Bootloading
+            // 10 = Error
+            const deviceStatus = inverterData?.StatusCode;
+            
+            if (deviceStatus === 7) {
+                statusCode = 1; // Running
+            } else if (deviceStatus === 8 || deviceStatus === 9) {
+                statusCode = 3; // Idle / Standby (NEW)
+            } else if (deviceStatus >= 10) {
+                statusCode = 2; // Error
+            } else {
+                // Fallback Logic if StatusCode missing
+                // If PV is 0 and Battery is idle, assume Idle
+                if (Math.abs(p_pv) < 5 && Math.abs(p_batt) < 10) {
+                    statusCode = 3;
+                } else {
+                    statusCode = 1;
+                }
+            }
+        } else {
+            statusCode = 2; // API Reported Error
+        }
+
     } else {
         statusCode = 0; // Offline / Network Error
     }
@@ -248,14 +270,10 @@ setInterval(async () => {
     if (config.notifications?.enabled && config.notifications?.discordWebhook) {
         const nConfig = config.notifications;
         
-        // 1. Error Status
+        // 1. Error Status (Only trigger on explicit error status 2, ignore Offline for now)
         if (nConfig.triggers.errors) {
             if (statusCode === 2 && notifyState.previousStatus !== 2) {
                 await sendDiscordNotification(nConfig.discordWebhook, "⚠️ Inverter Error", "The inverter is reporting an error state.", 15158332); // Red
-            }
-            if (statusCode === 0 && notifyState.previousStatus !== 0) {
-                 // Offline check (maybe opt-in, keep subtle for now or skip to avoid spam on restart)
-                 // await sendDiscordNotification(nConfig.discordWebhook, "🔌 Inverter Offline", "Could not connect to inverter API.", 9807270); // Grey
             }
         }
         notifyState.previousStatus = statusCode;
@@ -275,37 +293,28 @@ setInterval(async () => {
         }
         notifyState.previousSoc = soc;
 
-        // 3. Smart Advice (Debounced)
+        // 3. Smart Advice (Debounced) - Only if Running (1)
         if (nConfig.triggers.smartAdvice && statusCode === 1) {
             const now = Date.now();
             const cooldownMs = (nConfig.smartAdviceCooldownMinutes || 60) * 60 * 1000;
             
             if (now - notifyState.lastSmartAdviceSent > cooldownMs) {
-                // Calculate Available Power for Divert
-                // Logic mimics SmartRecommendations.tsx: Grid Export + Battery Charging (if any)
-                // Note: We don't have forecast logic here easily, so we assume if we have SURPLUS, we can use it.
-                // Surplus = Export (negative grid) + Charging (negative batt)
                 const gridExport = p_grid < -10 ? Math.abs(p_grid) : 0;
                 const battCharging = p_batt < -10 ? Math.abs(p_batt) : 0;
                 const totalSurplus = gridExport + battCharging;
 
                 let bestAppliance = null;
 
-                // Check appliances
                 (config.appliances || []).forEach(app => {
-                    // Initialize counter if missing
                     if (!notifyState.smartAdviceCounters[app.id]) notifyState.smartAdviceCounters[app.id] = 0;
 
-                    // Condition: Surplus covers the device wattage
                     if (totalSurplus >= app.watts) {
                         notifyState.smartAdviceCounters[app.id]++;
                     } else {
-                        notifyState.smartAdviceCounters[app.id] = 0; // Reset if not enough power
+                        notifyState.smartAdviceCounters[app.id] = 0;
                     }
 
-                    // Trigger if sustained for 3 minutes (3 ticks)
                     if (notifyState.smartAdviceCounters[app.id] >= 3) {
-                        // Pick the highest wattage device that qualifies
                         if (!bestAppliance || app.watts > bestAppliance.watts) {
                             bestAppliance = app;
                         }
@@ -317,14 +326,13 @@ setInterval(async () => {
                         nConfig.discordWebhook, 
                         "💡 Smart Suggestion", 
                         `Excess solar power available (${Math.round(totalSurplus)}W). You can run the **${bestAppliance.name}** now for free!`, 
-                        3447003, // Blue
+                        3447003, 
                         [
                             { name: "Surplus", value: `${Math.round(totalSurplus)} W`, inline: true },
                             { name: "Device", value: `${bestAppliance.watts} W`, inline: true }
                         ]
                     );
                     notifyState.lastSmartAdviceSent = now;
-                    // Reset counters to prevent immediate re-trigger for other smaller devices
                     notifyState.smartAdviceCounters = {}; 
                 }
             }
@@ -332,6 +340,7 @@ setInterval(async () => {
     }
 
     // Insert with Explicit LOCAL TIMESTAMP
+    // Now uses getLocalTimestamp which respects TZ env var correctly
     const timestamp = getLocalTimestamp();
     const stmt = db.prepare(`INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, energy_day_prod, status_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
     stmt.run(timestamp, p_pv, p_load, p_grid, p_batt, soc, e_day, statusCode);
@@ -582,9 +591,10 @@ app.get('/api/data', async (req, res) => {
         const soc = inverters[inverterKey]?.SOC || 0;
         
         // Correct battery state logic (Negative is Charging)
+        // Widen gap to 10W to capture real idle state better
         let batState = 'idle';
-        if (site.P_Akku < -5) batState = 'charging';
-        else if (site.P_Akku > 5) batState = 'discharging';
+        if (site.P_Akku < -10) batState = 'charging';
+        else if (site.P_Akku > 10) batState = 'discharging';
         
         responseData.battery = {
             soc: soc,
@@ -855,29 +865,43 @@ app.get('/api/history', (req, res) => {
         else if (diffDays <= 31) groupBy = 30; // 30 Mins for up to a month
         else groupBy = 1440;                  // 1 Day otherwise
     } else {
+        // Strict Rolling Windows
+        const now = new Date();
+        
         switch(range) {
-            case 'hour': 
-                queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of day', '+' || strftime('%H', 'now', 'localtime') || ' hours')"; 
-                groupBy = 1; // 1 Minute
+            case 'hour':
+                // Last 60 Minutes
+                const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+                queryTimeClause = `timestamp >= '${getLocalTimestamp(oneHourAgo)}'`;
+                groupBy = 1; 
                 break;
             case 'day': 
-                queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of day')"; 
-                groupBy = 1; // 1 Minute (Full Resolution)
+                // Last 24 Hours
+                const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                queryTimeClause = `timestamp >= '${getLocalTimestamp(yesterday)}'`; 
+                groupBy = 1; 
                 break;
             case 'week': 
-                queryTimeClause = "timestamp >= datetime('now', 'localtime', '-6 days')"; 
-                groupBy = 5; // 5 Minutes
+                // Last 7 Days (Strict 168 Hours)
+                const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                queryTimeClause = `timestamp >= '${getLocalTimestamp(lastWeek)}'`; 
+                groupBy = 5; // 5 Minute Intervals
                 break;
             case 'month': 
-                queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of month')"; 
-                groupBy = 30; // 30 Minutes
+                // Last 30 Days
+                const lastMonth = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                queryTimeClause = `timestamp >= '${getLocalTimestamp(lastMonth)}'`; 
+                groupBy = 30; // 30 Minute Intervals
                 break;
             case 'year': 
-                queryTimeClause = "timestamp >= datetime('now', 'localtime', 'start of year')"; 
-                groupBy = 1440; // 1 Day
+                // Last 365 Days
+                const lastYear = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+                queryTimeClause = `timestamp >= '${getLocalTimestamp(lastYear)}'`; 
+                groupBy = 1440; // 1 Day Intervals
                 break;
             default: 
-                queryTimeClause = "timestamp >= datetime('now', 'localtime', '-24 hours')";
+                const defaultYesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                queryTimeClause = `timestamp >= '${getLocalTimestamp(defaultYesterday)}'`;
                 groupBy = 1;
         }
     }

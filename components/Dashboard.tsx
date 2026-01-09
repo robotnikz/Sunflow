@@ -32,7 +32,13 @@ export interface WeatherData {
 
 const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigger }) => {
   const [timeRange, setTimeRange] = useState<TimeRange>('day');
+  
+  // Main History State (for Charts & Stats) - Controlled by TimeRange selector
   const [history, setHistory] = useState<HistoryData | null>(null);
+  
+  // Status History State (ALWAYS 24h) - Independent of TimeRange selector
+  const [statusHistory, setStatusHistory] = useState<HistoryData | null>(null);
+
   const [roiData, setRoiData] = useState<RoiData | null>(null);
   const [forecast, setForecast] = useState<ForecastData | null>(null);
   const [weather, setWeather] = useState<WeatherData | null>(null);
@@ -45,13 +51,30 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
   const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
-  // Fetch History (Charts, Stats)
+  // 1. Fetch Main History (Charts, Stats)
   useEffect(() => {
     fetchHistory();
     // Refresh history every 60s (Standard monitoring interval)
     const interval = setInterval(fetchHistory, 60000); 
     return () => clearInterval(interval);
   }, [timeRange, startDate, endDate, refreshTrigger]); 
+
+  // 2. Fetch Status History (Fixed 24h for Timeline)
+  useEffect(() => {
+    const fetchStatusHistory = async () => {
+        try {
+            // Always request 'day' to get the rolling 24h window
+            const hist = await getHistory('day');
+            setStatusHistory(hist);
+        } catch (e) {
+            console.error("Status history fetch failed", e);
+        }
+    };
+    
+    fetchStatusHistory();
+    const interval = setInterval(fetchStatusHistory, 60000); 
+    return () => clearInterval(interval);
+  }, [refreshTrigger]);
 
   // Fetch ROI Data (Expensive calculation)
   useEffect(() => {
@@ -316,7 +339,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
 
       {/* --- SECTION 3: TIMELINE --- */}
       <div className="animate-fade-in">
-        <StatusTimeline history={history?.chart || []} />
+        {/* Pass statusHistory (fixed 24h) instead of variable history */}
+        <StatusTimeline history={statusHistory?.chart || []} />
       </div>
 
       {/* --- SECTION 4: HISTORICAL ANALYSIS CONTROLS --- */}
@@ -473,7 +497,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                              <Zap size={16}/> Power History
                         </h3>
                         <div className="flex-1 min-h-0 w-full">
-                            <EnergyChart history={history.chart} />
+                            <EnergyChart history={history.chart} timeRange={timeRange} />
                         </div>
                     </div>
                     {/* Battery SOC Chart */}
@@ -482,7 +506,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                             <Battery size={16}/> Battery State of Charge
                         </h3>
                         <div className="flex-1 min-h-0 w-full">
-                            <BatteryChart history={history.chart} />
+                            <BatteryChart history={history.chart} timeRange={timeRange} />
                         </div>
                     </div>
                     {/* Efficiency Chart */}
@@ -491,7 +515,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                             <BarChart3 size={16}/> Efficiency History
                         </h3>
                         <div className="flex-1 min-h-0 w-full">
-                            <EfficiencyChart history={history.chart} />
+                            <EfficiencyChart history={history.chart} timeRange={timeRange} />
                         </div>
                     </div>
                 </div>
