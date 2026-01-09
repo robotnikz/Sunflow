@@ -98,27 +98,36 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
     }
 });
 
+const DEFAULT_APPLIANCES = [
+  { id: 'phone', name: 'Charge Phone', watts: 15, kwhEstimate: 0.02, iconName: 'smartphone', color: 'text-blue-400' },
+  { id: 'laptop', name: 'Laptop', watts: 60, kwhEstimate: 0.15, iconName: 'laptop', color: 'text-indigo-400' },
+  { id: 'tv', name: 'TV / OLED', watts: 150, kwhEstimate: 0.3, iconName: 'tv', color: 'text-purple-400' },
+  { id: 'pc', name: 'Gaming PC', watts: 400, kwhEstimate: 0.8, iconName: 'gamepad', color: 'text-pink-400' },
+  { id: 'coffee', name: 'Coffee Maker', watts: 1000, kwhEstimate: 0.1, iconName: 'coffee', color: 'text-amber-700' },
+  { id: 'dishwasher', name: 'Dishwasher', watts: 2000, kwhEstimate: 1.2, iconName: 'utensils', color: 'text-teal-400' },
+  { id: 'washing', name: 'Washing Machine', watts: 2200, kwhEstimate: 1.0, iconName: 'shirt', color: 'text-cyan-400' },
+  { id: 'dryer', name: 'Tumble Dryer', watts: 2000, kwhEstimate: 2.0, iconName: 'wind', color: 'text-orange-400' },
+  { id: 'ev', name: 'Car (1h Charge)', watts: 3700, kwhEstimate: 3.7, iconName: 'car', color: 'text-emerald-400' },
+];
+
 const getConfig = () => {
+    let config = { inverterIp: '', currency: 'EUR', systemStartDate: new Date().toISOString().split('T')[0] };
     if (fs.existsSync(CONFIG_FILE)) {
-        return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+        config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
     }
-    return { inverterIp: '', currency: 'EUR', systemStartDate: new Date().toISOString().split('T')[0] };
+    // Ensure default appliances exist if not present
+    if (!config.appliances || config.appliances.length === 0) {
+        config.appliances = DEFAULT_APPLIANCES;
+    }
+    return config;
 };
 
 const saveConfig = (cfg) => {
+    // Merge with existing to ensure we don't lose fields
+    const current = getConfig();
     const diskConfig = {
-        inverterIp: cfg.inverterIp,
-        currency: cfg.currency,
-        systemStartDate: cfg.systemStartDate || new Date().toISOString().split('T')[0],
-        latitude: cfg.latitude,
-        longitude: cfg.longitude,
-        systemCapacity: cfg.systemCapacity,
-        batteryCapacity: cfg.batteryCapacity, // Added battery capacity
-        degradationRate: cfg.degradationRate,
-        inflationRate: cfg.inflationRate,
-        solcastApiKey: cfg.solcastApiKey, // Added Solcast
-        solcastSiteId: cfg.solcastSiteId, // Added Solcast
-        initialValues: cfg.initialValues
+        ...current,
+        ...cfg
     };
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(diskConfig, null, 2));
 };

@@ -22,11 +22,20 @@ interface DashboardProps {
   refreshTrigger: number; // Increment this to force reload of historical/ROI data
 }
 
+export interface WeatherData {
+    current: {
+      temp: number;
+      weatherCode: number;
+    };
+    dailyYield: number; // Calculated kWh from Open-Meteo radiation
+}
+
 const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigger }) => {
   const [timeRange, setTimeRange] = useState<TimeRange>('day');
   const [history, setHistory] = useState<HistoryData | null>(null);
   const [roiData, setRoiData] = useState<RoiData | null>(null);
   const [forecast, setForecast] = useState<ForecastData | null>(null);
+  const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loadingHist, setLoadingHist] = useState(false);
   
   // Custom Date Range State
@@ -69,6 +78,47 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
     const interval = setInterval(fetchFC, 60 * 60 * 1000);
     return () => clearInterval(interval);
   }, [config.solcastApiKey, refreshTrigger]);
+
+  // Fetch Weather (Open-Meteo) - Fallback Logic
+  useEffect(() => {
+    if (!config.latitude || !config.longitude) return;
+
+    const fetchWeather = async () => {
+      try {
+        const lat = config.latitude;
+        const lon = config.longitude;
+        // Fetch current weather + Daily Shortwave Radiation Sum (MJ/m²)
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,is_day&daily=weather_code,shortwave_radiation_sum&timezone=auto&forecast_days=1`;
+        
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("Weather API failed");
+        
+        const wData = await res.json();
+        
+        // Calculate Fallback Yield: Capacity * (Radiation_MJ / 3.6) * PR(0.85)
+        const radiationMJ = wData.daily?.shortwave_radiation_sum?.[0] || 0;
+        const radiationKWh = radiationMJ / 3.6;
+        const capacity = config.systemCapacity || 0; 
+        const pr = 0.85; 
+        const estimatedYield = capacity * radiationKWh * pr;
+
+        setWeather({
+            current: {
+                temp: wData.current.temperature_2m,
+                weatherCode: wData.current.weather_code
+            },
+            dailyYield: estimatedYield
+        });
+      } catch (err) {
+        console.error("Failed to load weather/fallback forecast", err);
+      }
+    };
+
+    fetchWeather();
+    const interval = setInterval(fetchWeather, 30 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [config.latitude, config.longitude, config.systemCapacity]);
+
 
   const fetchHistory = async () => {
     if (timeRange === 'custom' && (!startDate || !endDate)) return;
@@ -145,11 +195,13 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
           {/* Smart Recommendations - High Priority */}
           <div className="flex-1 min-h-[220px]">
             <SmartRecommendations 
-                gridPower={data.power.grid} 
+                power={data.power}
                 soc={data.battery.soc}
-                pvPower={data.power.pv}
                 forecast={forecast}
+                todayProduction={data.energy.today.production}
+                fallbackDailyYield={weather?.dailyYield}
                 batteryCapacity={config.batteryCapacity || 10}
+                appliances={config.appliances || []}
             />
           </div>
 
@@ -171,11 +223,15 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
 
           {/* Weather / Solar Forecast (Moved here from top section) */}
           <div className="h-full">
-             <WeatherWidget config={config} />
+             <WeatherWidget 
+                config={config} 
+                forecast={forecast}
+                weatherData={weather}
+                actualProduction={data.energy.today.production}
+             />
           </div>
 
-          {/* Realtime Efficiency Donuts (Combined into one column stack for space, or kept side-by-side if enough room) */}
-          {/* We'll use a flex container to stack them vertically on mobile, but here they are in a grid cell */}
+          {/* Realtime Efficiency Donuts */}
           <div className="grid grid-rows-2 gap-4 h-full">
             <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg flex items-center justify-between relative overflow-hidden">
                 <div className="z-10 pl-2">
@@ -186,7 +242,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                     <EnergyDonut percentage={data.autonomy} label="" color="#3b82f6" small />
                 </div>
             </div>
-            <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg flex items-center justify-between relative overflow-hidden">
+            <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg flex items-center justify-between relative overflow-hidden">
                 <div className="z-10 pl-2">
                     <div className="text-slate-400 text-xs font-bold uppercase mb-1">Self Consumption</div>
                     <div className="text-2xl font-bold text-green-400">{data.selfConsumption}%</div>
@@ -204,7 +260,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
       </div>
 
       {/* --- SECTION 4: HISTORICAL ANALYSIS CONTROLS --- */}
-      {/* ... (Existing History Control code preserved) ... */}
       <div className="flex flex-col bg-slate-800/60 backdrop-blur p-2 rounded-xl border border-slate-700/50 mt-4 gap-4 sticky top-[70px] z-20 shadow-lg">
         
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -257,7 +312,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
       </div>
 
       {/* --- SECTION 5: HISTORICAL DATA GRIDS --- */}
-      {/* ... (Existing History Grids preserved) ... */}
       {history && !loadingHist ? (
         <div className="animate-fade-in space-y-6">
             

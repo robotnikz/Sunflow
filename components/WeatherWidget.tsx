@@ -1,86 +1,48 @@
-import React, { useEffect, useState } from 'react';
-import { Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Loader2, Sun, MapPinOff } from 'lucide-react';
-import { SystemConfig } from '../types';
+
+import React from 'react';
+import { Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Loader2, Sun, MapPinOff, SunMedium } from 'lucide-react';
+import { SystemConfig, ForecastData } from '../types';
+import { WeatherData } from './Dashboard';
 
 interface WeatherWidgetProps {
   config: SystemConfig;
+  forecast: ForecastData | null;
+  weatherData: WeatherData | null;
+  actualProduction: number; // kWh (Energy produced today so far)
 }
 
-interface WeatherData {
-  current: {
-    temp: number;
-    weatherCode: number;
-  };
-  forecast: {
-    todayYield: number; // kWh
-  };
-}
+const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config, forecast, weatherData, actualProduction }) => {
 
-const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config }) => {
-  const [weather, setWeather] = useState<WeatherData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Calculate Best Yield Estimate for Display
+  let displayYield = 0;
+  let source: 'solcast' | 'openmeteo' = 'openmeteo';
 
-  useEffect(() => {
-    if (!config.latitude || !config.longitude) return;
+  if (forecast && forecast.forecasts) {
+      // SOLCAST LOGIC:
+      // Total Day = (Actual Produced So Far) + (Sum of Forecasts for Rest of Today)
+      source = 'solcast';
+      
+      const now = new Date();
+      const todayDate = now.getDate();
+      
+      // Sum up remaining forecasts for today
+      const remainingKwh = forecast.forecasts.reduce((sum, entry) => {
+          const entryDate = new Date(entry.period_end);
+          // Check if entry is for today and in the future
+          if (entryDate.getDate() === todayDate && entryDate > now) {
+              return sum + (entry.pv_estimate * 0.5);
+          }
+          return sum;
+      }, 0);
 
-    const fetchWeather = async () => {
-      setLoading(true);
-      try {
-        const lat = config.latitude;
-        const lon = config.longitude;
-        // Open-Meteo API (Free for non-commercial use)
-        // Fetch current weather + Daily Shortwave Radiation Sum (MJ/m²)
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,is_day&daily=weather_code,shortwave_radiation_sum&timezone=auto&forecast_days=1`;
-        
-        const res = await fetch(url);
-        if (!res.ok) throw new Error("Weather API failed");
-        
-        const data = await res.json();
-        
-        // Calculate Yield Forecast
-        // Formula: Energy (kWh) = Area * Radiation (kWh/m2) * Efficiency
-        // Simpler with System Capacity: Energy = Capacity(kWp) * (Radiation / 1kW/m2 standard) * PR (0.75-0.85)
-        // Shortwave Radiation is in MJ/m². 1 kWh = 3.6 MJ.
-        // So Radiation (kWh/m²) = MJ / 3.6
-        
-        const radiationMJ = data.daily.shortwave_radiation_sum[0];
-        const radiationKWh = radiationMJ / 3.6;
-        const capacity = config.systemCapacity || 0; // kWp
-        
-        // Performance Ratio (PR) typically ~0.8 to 0.85 for new systems
-        const pr = 0.85; 
-        
-        // Estimated Yield = Capacity * (Radiation / 1) * PR ?? 
-        // Actually, 1kWp system produces roughly 'Radiation(kWh/m2)' * Efficiency factor?
-        // Standard Test Conditions: 1kW/m2.
-        // So if Radiation is 5 kWh/m2, a 1kWp system produces ~4-5 kWh.
-        
-        const estimatedYield = capacity * radiationKWh * pr;
+      displayYield = actualProduction + remainingKwh;
 
-        setWeather({
-            current: {
-                temp: data.current.temperature_2m,
-                weatherCode: data.current.weather_code
-            },
-            forecast: {
-                todayYield: estimatedYield
-            }
-        });
-        setError(null);
-      } catch (err) {
-        console.error(err);
-        setError("Failed to load weather");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchWeather();
-    // Refresh every 30 mins
-    const interval = setInterval(fetchWeather, 30 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [config.latitude, config.longitude, config.systemCapacity]);
+  } else if (weatherData) {
+      // OPEN-METEO FALLBACK:
+      // Use the daily yield calculated in Dashboard
+      source = 'openmeteo';
+      displayYield = weatherData.dailyYield;
+  }
 
   if (!config.latitude || !config.longitude) {
     return (
@@ -120,36 +82,42 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config }) => {
 
   return (
     <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-xl relative overflow-hidden h-full flex flex-col justify-between">
-       {/* Background gradient based on weather? Keep it simple dark for now */}
+       {/* Background gradient */}
        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 blur-[50px] rounded-full pointer-events-none"></div>
 
        <div className="flex justify-between items-start relative z-10">
           <div>
              <h3 className="text-slate-400 text-sm font-medium">Local Weather</h3>
-             {weather && (
-                 <div className="mt-1 text-slate-500 text-xs">{getWeatherLabel(weather.current.weatherCode)}</div>
+             {weatherData && (
+                 <div className="mt-1 text-slate-500 text-xs">{getWeatherLabel(weatherData.current.weatherCode)}</div>
              )}
           </div>
-          {loading ? (
-             <Loader2 className="animate-spin text-slate-500" size={24} />
-          ) : weather ? (
+          {weatherData ? (
              <div className="text-right">
-                <div className="text-2xl font-bold text-slate-200">{weather.current.temp}°C</div>
+                <div className="text-2xl font-bold text-slate-200">{weatherData.current.temp}°C</div>
              </div>
           ) : (
-             <div className="text-red-400 text-xs">{error}</div>
+             <div className="flex items-center gap-2 text-slate-500 text-xs">
+                 <Loader2 className="animate-spin" size={14} /> Loading...
+             </div>
           )}
        </div>
 
        <div className="flex items-center justify-center my-2 relative z-10">
-          {weather ? getWeatherIcon(weather.current.weatherCode) : <Cloud className="text-slate-600" size={48} />}
+          {weatherData ? getWeatherIcon(weatherData.current.weatherCode) : <Cloud className="text-slate-600" size={48} />}
        </div>
 
-       <div className="mt-2 bg-slate-900/50 rounded-xl p-3 border border-slate-700/50 relative z-10">
-          <div className="text-xs text-slate-500 uppercase font-bold mb-1">Forecast Today</div>
-          {weather && config.systemCapacity ? (
+       <div className={`mt-2 bg-slate-900/50 rounded-xl p-3 border relative z-10 ${source === 'solcast' ? 'border-blue-500/30 bg-blue-900/10' : 'border-slate-700/50'}`}>
+          <div className="flex justify-between items-center mb-1">
+             <span className="text-xs text-slate-500 uppercase font-bold">Forecast Today</span>
+             {source === 'solcast' && (
+                 <span className="text-[10px] text-blue-400 flex items-center gap-1"><SunMedium size={10}/> Solcast</span>
+             )}
+          </div>
+          
+          {(weatherData || (forecast && forecast.forecasts)) && config.systemCapacity ? (
             <div className="flex items-baseline gap-1">
-                <span className="text-xl font-bold text-yellow-400">~{Math.round(weather.forecast.todayYield)}</span>
+                <span className={`text-xl font-bold ${source === 'solcast' ? 'text-blue-300' : 'text-yellow-400'}`}>~{Math.round(displayYield)}</span>
                 <span className="text-sm text-slate-400">kWh</span>
             </div>
           ) : (

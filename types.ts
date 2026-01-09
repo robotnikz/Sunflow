@@ -14,6 +14,15 @@ export interface Expense {
   date: string; // Date incurred or start date for yearly
 }
 
+export interface Appliance {
+  id: string;
+  name: string;
+  watts: number;
+  kwhEstimate: number; // calculated from watts * duration or manual
+  iconName: string;    // String reference to Lucide icon key
+  color: string;       // Tailwind text color class
+}
+
 export interface SystemConfig {
   inverterIp: string;
   currency: string;
@@ -32,6 +41,7 @@ export interface SystemConfig {
     export?: number; // kWh
     financialReturn?: number; // Money amount already saved/earned before app installation
   };
+  appliances?: Appliance[]; // Custom list of user devices
 }
 
 export interface SystemInfo {

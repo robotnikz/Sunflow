@@ -8,7 +8,7 @@ A comprehensive monitoring solution for Fronius Gen24 inverters featuring real-t
 ## Prerequisites
 
 1. **Docker Desktop** (Windows/Mac) or Docker Engine (Linux).
-2. **Fronius Gen24 Inverter** with "Solar API" enabled (Settings > Communication > Solar API).
+2. **Fronius Symo GEN24 10.0 Plus Inverter** with "Solar API" enabled (Settings > Communication > Solar API). (Other Fronius Inverter may also work, didn't test)
 
 ## Installation
 
