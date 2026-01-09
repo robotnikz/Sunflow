@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Smartphone, Laptop, Tv, Gamepad2, Coffee, Utensils, Shirt, Car, Zap, ArrowUp, BatteryWarning, SunMedium, Battery, CheckCircle2, Hourglass, Leaf, Wind, Monitor, Lightbulb, Speaker, Refrigerator, Fan } from 'lucide-react';
+import { Smartphone, Laptop, Tv, Gamepad2, Coffee, Utensils, Shirt, Car, Zap, ArrowUp, BatteryWarning, SunMedium, Battery, CheckCircle2, Hourglass, Leaf, Wind, Monitor, Lightbulb, Speaker, Refrigerator, Fan, AlertOctagon } from 'lucide-react';
 import { ForecastData, Appliance } from '../types';
 
 interface SmartRecommendationsProps {
@@ -12,10 +12,12 @@ interface SmartRecommendationsProps {
   };
   soc: number;       // Battery State of Charge %
   forecast: ForecastData | null;
+  solcastRateLimited: boolean;
   todayProduction: number; // kWh
-  fallbackDailyYield?: number; // kWh (From Open-Meteo)
+  isDay: boolean; // From Open-Meteo
   batteryCapacity: number; // kWh
   appliances: Appliance[]; // User configured appliances
+  hasSolcastKey: boolean;
 }
 
 // Icon Mapping for dynamic loading
@@ -37,53 +39,39 @@ export const ICON_MAP: Record<string, any> = {
     'zap': Zap
 };
 
-const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc, forecast, todayProduction, fallbackDailyYield, batteryCapacity, appliances }) => {
+const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc, forecast, solcastRateLimited, todayProduction, isDay, batteryCapacity, appliances, hasSolcastKey }) => {
   const deviceList = appliances || [];
 
   // --- REALTIME DATA ---
   const gridExport = power.grid < -10 ? Math.abs(power.grid) : 0;
   const batteryCharging = power.battery < -10 ? Math.abs(power.battery) : 0;
   
-  // --- FORECAST & BATTERY STRATEGY ---
+  // --- FORECAST LOGIC (STRICT SEPARATION) ---
   let forecastRemainingKwh = 0;
-  let usingFallback = false;
   
-  if (forecast && forecast.forecasts) {
-      // 1. Primary Strategy: Solcast High-Res Forecast
-      const now = new Date();
-      const remainingSlots = forecast.forecasts.filter(f => {
-          const d = new Date(f.period_end);
-          return d > now && d.getDate() === now.getDate();
-      });
-      // Solcast periods are 30 mins (0.5h). Energy (kWh) = Power(kW) * 0.5
-      forecastRemainingKwh = remainingSlots.reduce((sum, f) => sum + (f.pv_estimate * 0.5), 0);
-  } else if (fallbackDailyYield !== undefined) {
-      // 2. Fallback Strategy: Open-Meteo Daily Total
-      // We know Total Estimate and Actual Produced. Difference is roughly what's left.
-      // We clamp it to 0 because actual can exceed forecast.
-      usingFallback = true;
-      forecastRemainingKwh = Math.max(0, fallbackDailyYield - todayProduction);
-  }
+  if (!isDay) {
+      // NIGHT TIME: Forecast is 0 regardless of source
+      forecastRemainingKwh = 0;
+  } else if (hasSolcastKey) {
+      // SOLCAST MODE (Yellow)
+      if (forecast && forecast.forecasts && forecast.forecasts.length > 0) {
+        const now = new Date();
+        const remainingSlots = forecast.forecasts.filter(f => {
+            const d = new Date(f.period_end);
+            return d > now && d.getDate() === now.getDate();
+        });
+        forecastRemainingKwh = remainingSlots.reduce((sum, f) => sum + (f.pv_estimate * 0.5), 0);
+      }
+      // If Limit Reached and no data, it stays 0, but UI shows warning.
+  } 
+  // No Fallback Logic anymore.
 
-  const hasAnyForecastData = (!!forecast && !!forecast.forecasts) || (fallbackDailyYield !== undefined);
+  const hasAnyForecastData = hasSolcastKey && !!forecast;
 
-  // Calculate Energy needed to fill battery
+  // --- BATTERY STRATEGY ---
   const socMissing = Math.max(0, 100 - soc);
   const kwhToFill = (socMissing / 100) * batteryCapacity;
-
-  // SAFETY BUFFER calculation
-  // How much specific "Solar Energy" is left AFTER we assume the battery gets full?
-  // We subtract 10% buffer for base load/fluctuations.
   const energyBufferKwh = forecastRemainingKwh - (kwhToFill * 1.1);
-
-  // STRATEGY DECISION
-  // Can we divert battery charging power?
-  // YES if: 
-  // 1. We have a positive Energy Buffer (Forecast > Battery Need)
-  // OR 
-  // 2. Battery is already nearly full (>95%)
-  // OR
-  // 3. No forecast data at all? (Fallback below handles strict mode)
   const isBatterySafe = (energyBufferKwh > 0) || soc > 95;
   
   // Available Power Logic
@@ -91,20 +79,16 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
   let divertableAmount = 0;
 
   if (isBatterySafe) {
-      // Strategy: OPTIMIZE SELF-CONSUMPTION
-      // We can use Grid Export + Current Battery Charging power
       divertableAmount = batteryCharging;
       totalAvailablePower = gridExport + divertableAmount;
   } else {
-      // Strategy: PRIORITY CHARGING
-      // We only use Grid Export. We DO NOT steal from battery charging.
       divertableAmount = 0;
       totalAvailablePower = gridExport;
   }
 
-  // Fallback if strictly NO data at all (neither solcast nor open-meteo)
+  // Fallback if strictly NO data at all
   if (!hasAnyForecastData) {
-      if (soc > 80) { // Much stricter without forecast
+      if (soc > 80) { 
           divertableAmount = batteryCharging;
           totalAvailablePower = gridExport + batteryCharging;
       } else {
@@ -112,29 +96,20 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
       }
   }
 
-  // Safety Margin (Watts) to prevent constant flipping
   const SAFETY_MARGIN = 100;
   const usablePower = Math.max(0, totalAvailablePower - SAFETY_MARGIN);
 
   // --- FILTER APPLIANCES ---
   const available = deviceList.filter(app => {
-      // Check 1: Do we have enough POWER (Watts) right now?
       const hasPower = app.watts <= usablePower;
-
-      // Check 2: Do we have enough ENERGY (kWh) budget for the day?
       const isGridOnly = app.watts <= gridExport;
-      
-      // If we need to dip into the battery charging flow (Divert), check the kWh budget
       let hasEnergyBudget = true;
       if (!isGridOnly && hasAnyForecastData) {
-          // If we run this, does it eat up the buffer needed for the battery?
           hasEnergyBudget = app.kwhEstimate <= energyBufferKwh || soc > 95;
       }
-
       return hasPower && hasEnergyBudget;
   });
 
-  // Find "Blocked by Energy Budget" items 
   const energyBlocked = deviceList.find(app => 
       !available.includes(app) && 
       app.watts <= usablePower &&
@@ -142,7 +117,6 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
       app.kwhEstimate > energyBufferKwh
   );
 
-  // Find "Blocked by Power Priority" items
   const batteryBlocked = deviceList.find(app => 
       !available.includes(app) && 
       !energyBlocked &&
@@ -175,7 +149,6 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
                 <span className="text-xs text-slate-500 font-medium">Free</span>
               </div>
               
-              {/* Only show "Has battery flow" if we are actually suggesting using it. */}
               {divertableAmount > 0 && (
                    <div className="flex items-center gap-1 text-[10px] text-blue-400 mt-1">
                       <CheckCircle2 size={10} />
@@ -201,13 +174,18 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
                 </span>
             </div>
             
-            {/* 2. Forecast vs Battery Need - Always Visible (with placeholders if no data) */}
+            {/* 2. Forecast vs Battery Need */}
             <div className="flex items-center gap-2 text-[10px] bg-slate-900/60 px-2 py-1 rounded-md border border-slate-700/50">
-                <div className="flex items-center gap-1" title={hasAnyForecastData ? `Remaining Solar Forecast Today (${usingFallback ? 'Estimated' : 'Solcast'})` : "Forecast data unavailable"}>
-                    <SunMedium size={10} className={hasAnyForecastData ? (usingFallback ? "text-slate-400" : "text-yellow-500") : "text-slate-600"}/> 
+                <div className="flex items-center gap-1" title={hasAnyForecastData ? `Remaining Solar Forecast Today (Solcast)` : "Forecast data unavailable"}>
+                    <SunMedium size={10} className={hasAnyForecastData ? "text-yellow-500" : "text-slate-600"}/> 
                     <span className="text-slate-300">
                         {hasAnyForecastData ? `+${Math.round(forecastRemainingKwh)}k` : '--'}
                     </span>
+                    {solcastRateLimited && (
+                        <span title="Solcast API Limit Reached (Using cached data if available)">
+                            <AlertOctagon size={10} className="text-red-500 animate-pulse" />
+                        </span>
+                    )}
                 </div>
                 <span className="text-slate-600 text-[9px]">vs</span>
                 <div className="flex items-center gap-1" title="Energy needed to reach 100% Charge">
@@ -220,7 +198,7 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
       </div>
 
       <div className="flex-1 flex flex-col gap-3 relative z-10 min-h-[140px] mt-2">
-        
+        {/* ... Recommendations List ... */}
         {available.length === 0 ? (
              <div className="flex flex-col items-center justify-center flex-1 text-center opacity-60">
                 {energyBlocked ? (

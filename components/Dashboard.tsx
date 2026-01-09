@@ -26,8 +26,8 @@ export interface WeatherData {
     current: {
       temp: number;
       weatherCode: number;
+      isDay: boolean; 
     };
-    dailyYield: number; // Calculated kWh from Open-Meteo radiation
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigger }) => {
@@ -37,6 +37,9 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
   const [forecast, setForecast] = useState<ForecastData | null>(null);
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loadingHist, setLoadingHist] = useState(false);
+  
+  // Rate Limit Flag for UI Hint
+  const [solcastRateLimited, setSolcastRateLimited] = useState(false);
   
   // Custom Date Range State
   const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -64,22 +67,41 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
     return () => clearInterval(interval);
   }, [refreshTrigger]); 
 
-  // Fetch Forecast (Solcast)
+  // --- STRICT FORECAST LOGIC ---
+  // Mode: Solcast ONLY for Yield. OpenMeteo ONLY for Weather Icon.
+  // Interval: 96 Minutes (matches backend cache to stay within 10 reqs/16h window)
+
+  const POLL_INTERVAL = 96 * 60 * 1000; 
+
+  // 1. SOLCAST LOGIC (Only if Key exists)
   useEffect(() => {
-    if (!config.solcastApiKey) return;
+    if (!config.solcastApiKey) {
+        setForecast(null);
+        return;
+    }
+
     const fetchFC = async () => {
         try {
             const fc = await getForecast();
             setForecast(fc);
-        } catch(e) { console.error("Forecast Fetch Error", e); }
+            setSolcastRateLimited(false);
+        } catch(e: any) { 
+            // If 429, we set the flag to show a warning, but we DO NOT clear the old data if it exists.
+            if (e.message && e.message.includes('429')) {
+                console.warn("Solcast Rate Limit hit. Keeping old data if available.");
+                setSolcastRateLimited(true);
+            } else {
+                 console.error("Solcast Fetch Failed", e);
+            }
+        }
     };
+    
     fetchFC();
-    // Refresh forecast every 60 mins (handled by backend cache too)
-    const interval = setInterval(fetchFC, 60 * 60 * 1000);
+    const interval = setInterval(fetchFC, POLL_INTERVAL);
     return () => clearInterval(interval);
   }, [config.solcastApiKey, refreshTrigger]);
 
-  // Fetch Weather (Open-Meteo) - Fallback Logic
+  // 2. OPEN METEO LOGIC (Weather Conditions ONLY)
   useEffect(() => {
     if (!config.latitude || !config.longitude) return;
 
@@ -87,37 +109,31 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
       try {
         const lat = config.latitude;
         const lon = config.longitude;
-        // Fetch current weather + Daily Shortwave Radiation Sum (MJ/m²)
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,is_day&daily=weather_code,shortwave_radiation_sum&timezone=auto&forecast_days=1`;
+        // Fetch current weather ONLY. No radiation/yield calculation.
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,is_day&timezone=auto&forecast_days=1`;
         
         const res = await fetch(url);
         if (!res.ok) throw new Error("Weather API failed");
         
         const wData = await res.json();
         
-        // Calculate Fallback Yield: Capacity * (Radiation_MJ / 3.6) * PR(0.85)
-        const radiationMJ = wData.daily?.shortwave_radiation_sum?.[0] || 0;
-        const radiationKWh = radiationMJ / 3.6;
-        const capacity = config.systemCapacity || 0; 
-        const pr = 0.85; 
-        const estimatedYield = capacity * radiationKWh * pr;
-
         setWeather({
             current: {
                 temp: wData.current.temperature_2m,
-                weatherCode: wData.current.weather_code
-            },
-            dailyYield: estimatedYield
+                weatherCode: wData.current.weather_code,
+                isDay: wData.current.is_day === 1
+            }
         });
       } catch (err) {
-        console.error("Failed to load weather/fallback forecast", err);
+        console.error("Failed to load weather", err);
       }
     };
 
     fetchWeather();
-    const interval = setInterval(fetchWeather, 30 * 60 * 1000);
+    // Use same polling interval for consistency
+    const interval = setInterval(fetchWeather, POLL_INTERVAL);
     return () => clearInterval(interval);
-  }, [config.latitude, config.longitude, config.systemCapacity]);
+  }, [config.latitude, config.longitude]);
 
 
   const fetchHistory = async () => {
@@ -226,10 +242,12 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                 power={data.power}
                 soc={data.battery.soc}
                 forecast={forecast}
+                solcastRateLimited={solcastRateLimited}
                 todayProduction={data.energy.today.production}
-                fallbackDailyYield={weather?.dailyYield}
+                isDay={weather?.current.isDay ?? true} // Fallback to true if loading
                 batteryCapacity={config.batteryCapacity || 10}
                 appliances={config.appliances || []}
+                hasSolcastKey={!!config.solcastApiKey}
             />
           </div>
 
@@ -256,7 +274,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                 config={config} 
                 forecast={forecast}
                 weatherData={weather}
-                actualProduction={data.energy.today.production}
+                solcastRateLimited={solcastRateLimited}
              />
           </div>
 

@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Loader2, Sun, MapPinOff, SunMedium } from 'lucide-react';
+import { Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Loader2, Sun, MapPinOff, SunMedium, AlertOctagon, Settings2 } from 'lucide-react';
 import { SystemConfig, ForecastData } from '../types';
 import { WeatherData } from './Dashboard';
 
@@ -8,40 +8,30 @@ interface WeatherWidgetProps {
   config: SystemConfig;
   forecast: ForecastData | null;
   weatherData: WeatherData | null;
-  actualProduction: number; // kWh (Energy produced today so far)
+  solcastRateLimited: boolean;
 }
 
-const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config, forecast, weatherData, actualProduction }) => {
+const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config, forecast, weatherData, solcastRateLimited }) => {
 
-  // Calculate Best Yield Estimate for Display
+  // Calculate Total Daily Yield
+  // STRICT LOGIC: If Solcast Key -> Use Solcast. Else -> OpenMeteo is NOT used for yield.
   let displayYield = 0;
-  let source: 'solcast' | 'openmeteo' = 'openmeteo';
+  const hasSolcastKey = !!config.solcastApiKey;
 
-  if (forecast && forecast.forecasts) {
-      // SOLCAST LOGIC:
-      // Total Day = (Actual Produced So Far) + (Sum of Forecasts for Rest of Today)
-      source = 'solcast';
-      
-      const now = new Date();
-      const todayDate = now.getDate();
-      
-      // Sum up remaining forecasts for today
-      const remainingKwh = forecast.forecasts.reduce((sum, entry) => {
-          const entryDate = new Date(entry.period_end);
-          // Check if entry is for today and in the future
-          if (entryDate.getDate() === todayDate && entryDate > now) {
-              return sum + (entry.pv_estimate * 0.5);
-          }
-          return sum;
-      }, 0);
-
-      displayYield = actualProduction + remainingKwh;
-
-  } else if (weatherData) {
-      // OPEN-METEO FALLBACK:
-      // Use the daily yield calculated in Dashboard
-      source = 'openmeteo';
-      displayYield = weatherData.dailyYield;
+  if (hasSolcastKey) {
+      // SOLCAST MODE (Yellow)
+      if (forecast && forecast.forecasts && forecast.forecasts.length > 0) {
+          const now = new Date();
+          const todaysKwh = forecast.forecasts.reduce((sum, entry) => {
+              const entryDate = new Date(entry.period_end);
+              if (entryDate.getDate() === now.getDate()) {
+                  return sum + (entry.pv_estimate * 0.5);
+              }
+              return sum;
+          }, 0);
+          displayYield = todaysKwh;
+      }
+      // If no data (e.g. rate limit w/o cache), yield remains 0. UI shows warning.
   }
 
   if (!config.latitude || !config.longitude) {
@@ -53,15 +43,8 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config, forecast, weather
     );
   }
 
-  // WMO Weather Code Mapping
+  // WMO Weather Code Mapping (Visual only, always from OpenMeteo)
   const getWeatherIcon = (code: number) => {
-    // 0 Clear
-    // 1-3 Cloudy
-    // 45,48 Fog
-    // 51,53,55 Drizzle
-    // 61,63,65 Rain
-    // 71,73,75 Snow
-    // 95,96,99 Thunderstorm
     if (code === 0) return <Sun className="text-yellow-400" size={48} />;
     if (code <= 3) return <CloudSun className="text-blue-200" size={48} />;
     if (code <= 48) return <CloudFog className="text-slate-400" size={48} />;
@@ -107,22 +90,39 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config, forecast, weather
           {weatherData ? getWeatherIcon(weatherData.current.weatherCode) : <Cloud className="text-slate-600" size={48} />}
        </div>
 
-       <div className={`mt-2 bg-slate-900/50 rounded-xl p-3 border relative z-10 ${source === 'solcast' ? 'border-blue-500/30 bg-blue-900/10' : 'border-slate-700/50'}`}>
+       <div className={`mt-2 bg-slate-900/50 rounded-xl p-3 border relative z-10 ${hasSolcastKey ? 'border-yellow-500/20 bg-yellow-900/10' : 'border-slate-700/50'}`}>
           <div className="flex justify-between items-center mb-1">
-             <span className="text-xs text-slate-500 uppercase font-bold">Forecast Today</span>
-             {source === 'solcast' && (
-                 <span className="text-[10px] text-blue-400 flex items-center gap-1"><SunMedium size={10}/> Solcast</span>
+             <span className="text-xs text-slate-500 uppercase font-bold">Total Forecast Today</span>
+             {hasSolcastKey ? (
+                 <div className="flex items-center gap-1">
+                     {solcastRateLimited && (
+                         <span title="Solcast Limit Reached">
+                            <AlertOctagon size={12} className="text-red-500 animate-pulse" />
+                         </span>
+                     )}
+                     <span className="text-[10px] text-yellow-500 flex items-center gap-1"><SunMedium size={10}/> Solcast</span>
+                 </div>
+             ) : (
+                 // No key = No forecast provider active
+                 <span className="text-[10px] text-slate-500 flex items-center gap-1">No Provider</span>
              )}
           </div>
           
-          {(weatherData || (forecast && forecast.forecasts)) && config.systemCapacity ? (
-            <div className="flex items-baseline gap-1">
-                <span className={`text-xl font-bold ${source === 'solcast' ? 'text-blue-300' : 'text-yellow-400'}`}>~{Math.round(displayYield)}</span>
-                <span className="text-sm text-slate-400">kWh</span>
-            </div>
+          {hasSolcastKey ? (
+             (weatherData || (forecast && forecast.forecasts)) ? (
+                <div className="flex items-baseline gap-1">
+                    <span className="text-xl font-bold text-yellow-400">~{Math.round(displayYield)}</span>
+                    <span className="text-sm text-slate-400">kWh</span>
+                </div>
+             ) : (
+                 <div className="text-xs text-slate-500 italic">
+                    Loading...
+                 </div>
+             )
           ) : (
-             <div className="text-xs text-slate-500 italic">
-                {config.systemCapacity ? "Loading..." : "Set System kWp"}
+             <div className="flex items-center gap-2 text-xs text-slate-400">
+                <Settings2 size={14} />
+                <span>Configure Solcast</span>
              </div>
           )}
        </div>
