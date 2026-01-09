@@ -155,9 +155,9 @@ const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state, capaci
                 )}
             </div>
             
-            {/* Pulse Animation Ring for Charging */}
+            {/* Subtle Glow for Charging (Replaces intrusive Ping) */}
             {isCharging && (
-                 <div className="absolute inset-0 rounded-full border-2 border-emerald-500/20 animate-ping pointer-events-none m-8"></div>
+                 <div className="absolute inset-0 rounded-full bg-emerald-500/10 animate-pulse pointer-events-none m-12 blur-xl"></div>
             )}
         </div>
 
