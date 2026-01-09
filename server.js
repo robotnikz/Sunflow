@@ -387,9 +387,15 @@ app.get('/api/data', async (req, res) => {
             battery: Math.round(site.P_Akku || 0)
         };
         const soc = inverters[inverterKey]?.SOC || 0;
+        
+        // Correct battery state logic (Negative is Charging)
+        let batState = 'idle';
+        if (site.P_Akku < -5) batState = 'charging';
+        else if (site.P_Akku > 5) batState = 'discharging';
+        
         responseData.battery = {
             soc: soc,
-            state: (site.P_Akku > 5) ? 'charging' : (site.P_Akku < -5) ? 'discharging' : 'idle'
+            state: batState
         };
         responseData.energy.today.production = (site.E_Day || 0) / 1000;
         
