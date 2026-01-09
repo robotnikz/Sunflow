@@ -1,3 +1,18 @@
+# [1.2.0](https://github.com/robotnikz/Sunflow/compare/v1.1.0...v1.2.0) (2026-01-09)
+
+
+### Bug Fixes
+
+* fixed blurry fonts in history graphs ([a641396](https://github.com/robotnikz/Sunflow/commit/a641396b0ff694ea1e9fc0434690a004c757b1ec))
+* fixed forecast logic. ([f76399a](https://github.com/robotnikz/Sunflow/commit/f76399ab5e50d0d2cd2f70bd4b1ab14839088a00))
+* fixed some optical glitches in settings panel ([6714a8b](https://github.com/robotnikz/Sunflow/commit/6714a8b27dfa33bf9c9ba4a98856f0992b3f1e46))
+* fixed some widget bugs ([78bc499](https://github.com/robotnikz/Sunflow/commit/78bc499546b95180bb1ac0c0c142c94e804340d2))
+
+
+### Features
+
+* added option for discord notifications ([7d1cabd](https://github.com/robotnikz/Sunflow/commit/7d1cabd279c4dfbaf860dd50769e40dfad6770f3))
+
 # [1.1.0](https://github.com/robotnikz/Sunflow/compare/v1.0.3...v1.1.0) (2026-01-09)
 
 
