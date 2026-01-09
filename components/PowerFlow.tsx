@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { memo } from 'react';
 import { Sun, Home, Zap, Battery, ArrowDown, ArrowUp } from 'lucide-react';
 
 interface PowerFlowProps {
@@ -12,7 +12,7 @@ interface PowerFlowProps {
   soc: number;
 }
 
-const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
+const PowerFlow: React.FC<PowerFlowProps> = memo(({ power, soc }) => {
   // Logic
   const isImporting = power.grid > 0;
   const isExporting = power.grid < 0;
@@ -197,6 +197,6 @@ const PowerFlow: React.FC<PowerFlowProps> = ({ power, soc }) => {
 
     </div>
   );
-};
+});
 
 export default PowerFlow;

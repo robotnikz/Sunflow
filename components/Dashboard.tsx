@@ -30,6 +30,14 @@ export interface WeatherData {
     };
 }
 
+// SKELETON LOADER COMPONENT (Moved outside for Performance)
+const SkeletonCard = ({ height = "h-64" }: { height?: string }) => (
+  <div className={`bg-slate-800/50 rounded-2xl border border-slate-700/50 shadow-lg ${height} w-full animate-pulse flex flex-col p-6`}>
+      <div className="h-5 w-32 bg-slate-700 rounded mb-6"></div>
+      <div className="flex-1 bg-slate-700/30 rounded-xl"></div>
+  </div>
+);
+
 const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigger }) => {
   const [timeRange, setTimeRange] = useState<TimeRange>('day');
   
@@ -222,14 +230,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
 
   const currencySymbol = config.currency === 'EUR' ? '€' : config.currency === 'GBP' ? '£' : '$';
   const peaks = history ? getPeaks(history.chart) : { maxPv: 0, maxLoad: 0 };
-
-  // SKELETON LOADER COMPONENT
-  const SkeletonCard = ({ height = "h-64" }: { height?: string }) => (
-    <div className={`bg-slate-800/50 rounded-2xl border border-slate-700/50 shadow-lg ${height} w-full animate-pulse flex flex-col p-6`}>
-        <div className="h-5 w-32 bg-slate-700 rounded mb-6"></div>
-        <div className="flex-1 bg-slate-700/30 rounded-xl"></div>
-    </div>
-  );
 
   return (
     <div className="space-y-6 pb-12">
