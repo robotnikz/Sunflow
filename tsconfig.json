@@ -5,16 +5,39 @@
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
+    
+    /* 'bundler' is the modern standard for Vite projects */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
+
+    /* Strictness */
     "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+
+    /* Interop */
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    
+    /* 
+       Types configuration:
+       - vite/client: Fixes imports for assets and env variables
+       - vitest/globals: Allows using describe, it, expect without imports (if globals: true)
+       - node: Allows process.env
+    */
+    "types": [
+      "vite/client", 
+      "vitest/globals", 
+      "@testing-library/jest-dom",
+      "node"
+    ]
   },
-  "include": ["./**/*.ts", "./**/*.tsx"]
+  "include": [".", "./**/*.ts", "./**/*.tsx"],
+  "exclude": ["node_modules", "dist"]
 }

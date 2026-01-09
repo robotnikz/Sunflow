@@ -1,4 +1,4 @@
-name: Release & Docker
+name: CI/CD Pipeline
 
 on:
   push:
@@ -11,14 +11,39 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # JOB 1: Semantic Release
-  # Analyzes commits, bumps version in package.json, creates git tag, creates GitHub Release
+  # JOB 1: QUALITY ASSURANCE
+  # Runs Typechecks and Unit Tests
+  test:
+    name: Run Tests & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Type Check (TypeScript)
+        run: npm run typecheck
+
+      - name: Run Unit Tests
+        run: npm run test:run
+
+  # JOB 2: Semantic Release
+  # Only runs if tests pass AND we are on main branch (not PRs)
   release:
-    if: github.event_name != 'pull_request'
     name: Semantic Release
+    needs: test # WAITS FOR TESTS TO PASS
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Needed to commit package.json changes and create release
+      contents: write
       issues: write
       pull-requests: write
     outputs:
@@ -28,8 +53,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0 # Important for semantic-release to analyze history
-          persist-credentials: false # We use a PAT or standard token for pushing back
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v3
@@ -51,12 +76,12 @@ jobs:
             @semantic-release/git
             @semantic-release/npm
 
-  # JOB 2: Docker Build
-  # Only runs if a new release was actually published by the previous job
+  # JOB 3: Docker Build
+  # Only runs if a new release was published
   build-and-push:
-    needs: release
-    # Only run if a release was published OR if it's a pull request (for testing build)
-    if: needs.release.outputs.new_release_published == 'true' || github.event_name == 'pull_request'
+    name: Build & Push Docker
+    needs: release # WAITS FOR RELEASE TO FINISH
+    if: needs.release.outputs.new_release_published == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -67,9 +92,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
-          # If it's a release, checkout the TAG created by semantic-release
-          # This ensures the Docker build contains the updated package.json version
-          ref: ${{ needs.release.outputs.new_release_published == 'true' && format('refs/tags/v{0}', needs.release.outputs.new_release_version) || '' }}
+          ref: ${{ format('refs/tags/v{0}', needs.release.outputs.new_release_version) }}
 
       - name: Lowercase Image Name
         run: |
@@ -82,7 +105,6 @@ jobs:
         uses: docker/setup-buildx-action@v2
 
       - name: Log into registry ${{ env.REGISTRY }}
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v2
         with:
           registry: ${{ env.REGISTRY }}
@@ -97,14 +119,13 @@ jobs:
           tags: |
             type=semver,pattern={{version}},value=${{ needs.release.outputs.new_release_version }}
             type=semver,pattern={{major}}.{{minor}},value=${{ needs.release.outputs.new_release_version }}
-            type=raw,value=latest,enable=${{ needs.release.outputs.new_release_published == 'true' }}
-            type=ref,event=pr
+            type=raw,value=latest
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v4
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
