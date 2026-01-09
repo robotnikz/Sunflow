@@ -263,7 +263,8 @@ app.get('/api/info', async (req, res) => {
 });
 
 // --- SOLCAST PROXY WITH CACHING ---
-// Solcast Free Tier allows ~10-50 calls per day. We MUST cache this.
+// Solcast Free Tier allows ~10 calls per day.
+// We strictly limit calls to daylight hours (05:00 - 22:00) to optimize usage.
 let solcastCache = {
     timestamp: 0,
     data: null
@@ -276,13 +277,29 @@ app.get('/api/forecast', async (req, res) => {
     }
 
     const now = Date.now();
-    const CACHE_DURATION = 45 * 60 * 1000; // 45 minutes cache
+    const currentHour = new Date().getHours();
+    const isDaytime = currentHour >= 5 && currentHour < 22;
 
+    // Cache Duration: 2 Hours (120 mins)
+    // Daylight window is 17 hours. 17 / 2 = 8.5 calls per day (Safe < 10).
+    const CACHE_DURATION = 120 * 60 * 1000;
+
+    // 1. Return fresh cache if available
     if (solcastCache.data && (now - solcastCache.timestamp < CACHE_DURATION)) {
         // console.log("Serving cached Solcast data");
         return res.json(solcastCache.data);
     }
 
+    // 2. If it is NIGHT TIME (outside 05:00-22:00), do NOT fetch new data.
+    // Return stale cache if available, else empty structure.
+    if (!isDaytime) {
+         console.log(`Night time (${currentHour}:00). Skipping Solcast update to save API limit.`);
+         if (solcastCache.data) return res.json(solcastCache.data);
+         // Return empty forecasts to prevent frontend crash
+         return res.json({ forecasts: [] });
+    }
+
+    // 3. Fetch new data (Daytime & Cache Stale)
     try {
         console.log("Fetching new data from Solcast API...");
         const url = `https://api.solcast.com.au/rooftop_sites/${config.solcastSiteId}/forecasts?format=json&api_key=${config.solcastApiKey}`;
@@ -294,7 +311,13 @@ app.get('/api/forecast', async (req, res) => {
         };
         res.json(response.data);
     } catch (error) {
-        console.error("Solcast API Error:", error.message);
+        // Handle Rate Limiting (429) gracefully
+        if (error.response && error.response.status === 429) {
+            console.error("Solcast Rate Limit Reached (429). Serving stale cache if available.");
+        } else {
+            console.error("Solcast API Error:", error.message);
+        }
+
         // If API fails (e.g. rate limit), try to serve stale cache
         if (solcastCache.data) {
             console.log("Serving stale Solcast cache due to error");
@@ -430,9 +453,6 @@ const getTariffForTime = (tariffs, timestamp) => {
 
 // ROI / Amortization Endpoint
 app.get('/api/roi', (req, res) => {
-    // ... (Existing ROI logic remains unchanged)
-    // For brevity, using the existing implementation logic here.
-    // The previous implementation is preserved.
     const config = getConfig();
     const initialFinancialReturn = config.initialValues?.financialReturn || 0;
     const degradationRate = config.degradationRate !== undefined ? config.degradationRate : 0.5;
@@ -452,12 +472,15 @@ app.get('/api/roi', (req, res) => {
 
             let totalInvested = 0;
             let baseYearlyRecurringCost = 0;
+            let totalOneTimeCost = 0;
+
             const now = new Date();
             const systemStart = config.systemStartDate ? new Date(config.systemStartDate) : new Date();
             
             expenses.forEach(exp => {
                 if (exp.type === 'one_time') {
                     totalInvested += exp.amount;
+                    totalOneTimeCost += exp.amount;
                 } else if (exp.type === 'yearly') {
                     baseYearlyRecurringCost += exp.amount;
                     const expDate = new Date(exp.date);
@@ -521,6 +544,8 @@ app.get('/api/roi', (req, res) => {
                 const totalReturned = dbReturned + initialFinancialReturn;
                 const netValue = totalReturned - totalInvested;
                 let breakEvenDate = null;
+                let projectedBreakEvenCost = 0;
+                let isBreakEvenFound = false;
                 const roiPercent = totalInvested > 0 ? (totalReturned / totalInvested) * 100 : 0;
 
                 if (netValue < 0) {
@@ -556,7 +581,6 @@ app.get('/api/roi', (req, res) => {
                     const maxDate = new Date();
                     maxDate.setFullYear(maxDate.getFullYear() + 50);
                     
-                    let isBreakEvenFound = false;
                     const futureTariffs = tariffList.filter(t => t.validFrom > simDate.toISOString().split('T')[0]);
                     const yearlyCheckpoints = [];
                     for(let i=1; i<=50; i++) {
@@ -613,6 +637,10 @@ app.get('/api/roi', (req, res) => {
                                 doneDate.setDate(doneDate.getDate() + daysToClear);
                                 breakEvenDate = doneDate.toISOString();
                                 isBreakEvenFound = true;
+                                
+                                // Calculate Projected Total Cost at that future date
+                                const totalYearsDuration = (doneDate.getTime() - systemStart.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+                                projectedBreakEvenCost = totalOneTimeCost + (baseYearlyRecurringCost * totalYearsDuration);
                             } else {
                                 remainingDebt -= segmentProfitPerDay * daysInSegment;
                             }
@@ -622,6 +650,10 @@ app.get('/api/roi', (req, res) => {
                                 doneDate.setDate(doneDate.getDate() + daysToClear);
                                 breakEvenDate = doneDate.toISOString();
                                 isBreakEvenFound = true;
+
+                                // Calculate Projected Total Cost
+                                const totalYearsDuration = (doneDate.getTime() - systemStart.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+                                projectedBreakEvenCost = totalOneTimeCost + (baseYearlyRecurringCost * totalYearsDuration);
                             }
                         }
                     }
@@ -633,6 +665,7 @@ app.get('/api/roi', (req, res) => {
                     netValue,
                     roiPercent,
                     breakEvenDate,
+                    projectedBreakEvenCost: isBreakEvenFound ? projectedBreakEvenCost : undefined,
                     expenses
                 });
             });

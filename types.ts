@@ -107,6 +107,7 @@ export interface RoiData {
   netValue: number;
   roiPercent: number;
   breakEvenDate: string | null; // ISO Date or null if calculated in past/infinite
+  projectedBreakEvenCost?: number; // Total cost calculated at the future date
   expenses: Expense[];
 }
 
