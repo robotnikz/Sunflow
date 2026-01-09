@@ -13,7 +13,7 @@ import AmortizationWidget from './AmortizationWidget';
 import WeatherWidget from './WeatherWidget';
 import SmartRecommendations from './SmartRecommendations';
 import { getHistory, getRoiData, getForecast } from '../services/api';
-import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp, ShieldCheck } from 'lucide-react';
+import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp, ShieldCheck, Download } from 'lucide-react';
 
 interface DashboardProps {
   data: InverterData | null;
@@ -134,6 +134,34 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
     }
   };
 
+  const handleDownloadCSV = () => {
+      if (!history || !history.chart) return;
+
+      const headers = ['Timestamp', 'Production (W)', 'Consumption (W)', 'Grid (W)', 'Battery (W)', 'SOC (%)', 'Autonomy (%)', 'SelfConsumption (%)'];
+      const rows = history.chart.map(row => [
+          row.timestamp,
+          row.production,
+          row.consumption,
+          row.grid,
+          row.battery,
+          row.soc,
+          row.autonomy,
+          row.selfConsumption
+      ]);
+
+      const csvContent = "data:text/csv;charset=utf-8," 
+          + headers.join(",") + "\n" 
+          + rows.map(e => e.join(",")).join("\n");
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `sunflow_data_${timeRange}_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  };
+
   // Helper Calculations
   const calculateCO2 = (kwh: number) => {
     // Approx 0.4kg CO2 per kWh grid mix saved
@@ -211,6 +239,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                 soc={data.battery.soc}
                 power={data.power.battery}
                 state={data.battery.state}
+                capacity={config.batteryCapacity || 10}
              />
           </div>
         </div>
@@ -280,20 +309,30 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                 <Calendar size={18} className="text-blue-400"/>
                 Statistics & Analysis
             </h2>
-            <div className="flex flex-wrap bg-slate-900 rounded-lg p-1 border border-slate-700">
-                {(['hour', 'day', 'week', 'month', 'year', 'custom'] as TimeRange[]).map((range) => (
-                    <button
-                        key={range}
-                        onClick={() => setTimeRange(range)}
-                        className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-                            timeRange === range 
-                            ? 'bg-slate-700 text-white shadow ring-1 ring-slate-600' 
-                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-                        }`}
-                    >
-                        {range.charAt(0).toUpperCase() + range.slice(1)}
-                    </button>
-                ))}
+            <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap bg-slate-900 rounded-lg p-1 border border-slate-700">
+                    {(['hour', 'day', 'week', 'month', 'year', 'custom'] as TimeRange[]).map((range) => (
+                        <button
+                            key={range}
+                            onClick={() => setTimeRange(range)}
+                            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                                timeRange === range 
+                                ? 'bg-slate-700 text-white shadow ring-1 ring-slate-600' 
+                                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                            }`}
+                        >
+                            {range.charAt(0).toUpperCase() + range.slice(1)}
+                        </button>
+                    ))}
+                </div>
+                {/* Export Button */}
+                <button 
+                    onClick={handleDownloadCSV}
+                    className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg border border-slate-700 transition-colors"
+                    title="Export CSV"
+                >
+                    <Download size={18} />
+                </button>
             </div>
         </div>
 
