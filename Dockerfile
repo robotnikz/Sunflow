@@ -1,45 +1,38 @@
-# Stage 1: Build (Erstellt das React Frontend)
-FROM node:20-alpine AS builder
-
+# Build Stage
+FROM node:20-slim AS builder
 WORKDIR /app
 
-# Abhängigkeiten installieren
+# Copy package files first for better caching
 COPY package*.json ./
-# ÄNDERUNG: 'npm install' statt 'npm ci' verwenden, um Fehler bei fehlender Lock-Datei zu vermeiden
+
+# Install all dependencies (including devDependencies for building)
 RUN npm install
 
-# Quellcode kopieren
+# Copy source code
 COPY . .
 
-# Frontend bauen (erstellt den Ordner /dist)
+# Build frontend
 RUN npm run build
 
-# Stage 2: Production (Der eigentliche Server)
-FROM node:20-alpine
-
+# Production Stage
+FROM node:20-slim
 WORKDIR /app
 
-# Umgebungsvariablen setzen
-ENV NODE_ENV=production
-ENV PORT=3000
-ENV DATA_DIR=/app/data
-
-# Nur Produktions-Abhängigkeiten installieren (spart Platz)
+# Install only production dependencies
 COPY package*.json ./
-# ÄNDERUNG: 'npm install' statt 'npm ci'
-RUN npm install --only=production
+RUN npm install --omit=dev
 
-# Backend-Script kopieren
-COPY server.js ./
-
-# Das fertig gebaute Frontend aus Stage 1 kopieren
+# Copy built assets from builder stage
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/server.js ./
 
-# Datenverzeichnis anlegen (für das Docker Volume)
+# Create persistent data directory
 RUN mkdir -p /app/data
 
-# Port freigeben
+# Environment setup
+ENV PORT=3000
+ENV NODE_ENV=production
+
 EXPOSE 3000
 
-# Startbefehl
 CMD ["node", "server.js"]

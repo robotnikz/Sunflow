@@ -9,9 +9,11 @@
   
   Stop guessing. Start optimizing. Track your ROI in real-time.
 
-  [![Docker Image Size](https://img.shields.io/docker/image-size/robotnikz/sunflow/latest?color=blue&logo=docker)](https://github.com/robotnikz/Sunflow/pkgs/container/sunflow)
-  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-  [![React](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)](https://reactjs.org/)
+  <!-- Badges -->
+  [![CI/CD Pipeline](https://github.com/robotnikz/Sunflow/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/robotnikz/Sunflow/actions/workflows/docker-publish.yml)
+  [![GitHub Release](https://img.shields.io/github/v/release/robotnikz/Sunflow?logo=docker&label=ghcr.io)](https://github.com/robotnikz/Sunflow/pkgs/container/sunflow)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+  [![Frontend](https://img.shields.io/badge/Stack-React%20%7C%20Node.js%20%7C%20SQLite-blue)](https://reactjs.org/)
   
 </div>
 
@@ -23,25 +25,32 @@ SunFlow is not just another monitoring tool. While manufacturer apps are great f
 
 It combines **real-time high-speed monitoring** (direct local connection) with **financial intelligence**. SunFlow calculates exactly when your system will pay for itself based on your specific installation costs and electricity tariffs.
 
-Most importantly, it features an **Smart Energy Assistant** that combines solar forecasts with your battery state to tell you exactly *when* to run your heavy appliances to maximize self-consumption without draining your battery for the night.
+Most importantly, it features a **24/7 Smart Energy Assistant** running on your server. It combines solar forecasts with your battery state to notify you exactly *when* to run your heavy appliances to maximize self-consumption—even if you don't have the dashboard open.
 
 ## ✨ Key Features
 
-### 🧠 Smart Recommendations
+### 🧠 Smart Recommendations & Automation
 Don't just watch the power flow—act on it.
-*   **Intelligent Logic:** SunFlow analyzes your current surplus, battery charge level (SOC), and the *solar forecast* for the rest of the day.
-*   **"Battery Safe" Mode:** It calculates if there is enough sun left to fill your battery *and* run your washing machine.
+*   **Server-Side Intelligence:** The backend continuously monitors surplus, battery SOC, and solar forecasts (Solcast).
+*   **"Battery Safe" Logic:** The system calculates if there is enough sun left to fill your battery *and* run your washing machine. If not, it advises conserving energy for the night.
 *   **Appliance Library:** Add your own devices (Sauna, EV, Dishwasher) with their specific power profiles to get tailored advice.
+
+### 🔔 Smart Notifications (Discord)
+Stay informed wherever you are.
+*   **Proactive Suggestions:** Get a ping on Discord when it's the perfect time to run appliances.
+*   **Safety Alerts:** Instant notifications for Inverter Errors, Battery Empty, or Battery Full events.
+*   **Health Warnings:** Get alerted if your Battery SOH (State of Health) drops below a defined threshold.
+
+### 🔋 Battery Health Guard
+*   **SOH Tracking:** Automatically estimates your Battery's **State of Health** and **Efficiency** based on real charge/discharge cycles over time.
+*   **Cycle Counter:** Tracks the estimated number of full cycles your battery has completed.
+*   **Degradation Monitoring:** Visualizes capacity loss to help you claim warranty if needed.
 
 ### 💰 Financial ROI Tracker
 Solar is an investment. Track it like one.
 *   **Amortization Countdown:** See the exact date your system breaks even.
 *   **Granular Tariffs:** Supports changing energy prices over time (e.g., price hikes in 2024).
 *   **CAPEX & OPEX:** Log installation costs, maintenance fees, or battery upgrades to keep your net profit calculation accurate.
-
-### 🔮 Solar Forecasting
-*   **Integrated Forecasting:** Connects with **Solcast** (High precision) or **Open-Meteo** (Fallback) to visualize future production.
-*   **Planning:** The dashboard shows you at a glance if today will be a "high yield" or "conservation" day.
 
 ### 📊 Deep Historical Analysis
 *   **Self-hosted Data:** Your data lives in a local SQLite database. No cloud delays, no data retention limits.
@@ -76,6 +85,7 @@ Create a `docker-compose.yml` file:
 version: '3.8'
 services:
   sunflow:
+    # Uses the public image from GitHub Container Registry
     image: ghcr.io/robotnikz/sunflow:latest
     container_name: sunflow
     restart: unless-stopped
@@ -111,17 +121,18 @@ Once running, access the dashboard at `http://localhost:3000`.
 
 1.  Click the **Settings Icon** (top right).
 2.  **General:** Enter your Inverter IP (e.g., `192.168.1.50`) and System Capacity.
-3.  **Tariffs:** Add your grid costs (import) and feed-in tariffs (export). *Tip: You can add historical price changes!*
-4.  **Expenses:** Add the cost of your system (Hardware + Installation) to activate the ROI widget.
-5.  **Appliances:** Configure your heavy consumers to enable Smart Recommendations.
+3.  **Notifications:** Add your Discord Webhook URL to enable push notifications for Smart Suggestions and Alerts.
+4.  **Forecasting:** Add your Solcast API Key (Free Tier) to enable the "Battery Safe" calculation logic.
+5.  **Tariffs & Expenses:** Add your grid costs and installation expenses to activate the ROI widget.
+6.  **Appliances:** Configure your heavy consumers (Watts & Duration).
 
 ---
 
 ## 🛠 Tech Stack
 
-*   **Frontend:** React 18, TypeScript, TailwindCSS, Recharts, Lucide Icons.
+*   **Frontend:** React 19, TypeScript, TailwindCSS, Recharts, Lucide Icons.
 *   **Backend:** Node.js (Express), SQLite3.
-*   **Architecture:** Single-container monolith for easy deployment.
+*   **Architecture:** Single-container monolith for easy deployment (GitHub Actions -> GHCR).
 
 ## 🤝 Contributing
 
