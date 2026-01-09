@@ -1,3 +1,10 @@
+## [1.3.2](https://github.com/robotnikz/Sunflow/compare/v1.3.1...v1.3.2) (2026-01-09)
+
+
+### Bug Fixes
+
+* smart recommendation backend logic fixed for notifications ([77614f1](https://github.com/robotnikz/Sunflow/commit/77614f17721c5ebfd28d5b389a5a9250374332e5))
+
 ## [1.3.1](https://github.com/robotnikz/Sunflow/compare/v1.3.0...v1.3.1) (2026-01-09)
 
 
