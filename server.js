@@ -119,6 +119,20 @@ const getConfig = () => {
     if (!config.appliances || config.appliances.length === 0) {
         config.appliances = DEFAULT_APPLIANCES;
     }
+    // Ensure default notifications
+    if (!config.notifications) {
+        config.notifications = {
+            enabled: false,
+            discordWebhook: '',
+            triggers: {
+                errors: true,
+                batteryFull: true,
+                batteryEmpty: true,
+                smartAdvice: true
+            },
+            smartAdviceCooldownMinutes: 120 // Default 2 hours cooldown
+        };
+    }
     return config;
 };
 
@@ -150,6 +164,36 @@ const getLocalTimestamp = () => {
     const local = new Date(now.getTime() - offsetMs);
     // Slice ISO string to get YYYY-MM-DDTHH:MM:SS and replace T with space
     return local.toISOString().slice(0, 19).replace('T', ' ');
+};
+
+
+// --- NOTIFICATION LOGIC ---
+// State to track between polling intervals
+const notifyState = {
+    previousSoc: 0,
+    previousStatus: 1, // 1=OK
+    smartAdviceCounters: {}, // Map<applianceId, countMinutes>
+    lastSmartAdviceSent: 0, // Timestamp ms
+};
+
+const sendDiscordNotification = async (webhookUrl, title, description, color, fields = []) => {
+    if (!webhookUrl) return;
+
+    try {
+        await axios.post(webhookUrl, {
+            embeds: [{
+                title: title,
+                description: description,
+                color: color, // Decimal color
+                fields: fields,
+                footer: { text: "SunFlow Gen24" },
+                timestamp: new Date().toISOString()
+            }]
+        });
+        console.log(`Notification sent: ${title}`);
+    } catch (e) {
+        console.error("Failed to send Discord notification:", e.message);
+    }
 };
 
 // Polling Job - 1 Minute Interval
@@ -184,6 +228,93 @@ setInterval(async () => {
         e_day = site.E_Day || 0;
     } else {
         statusCode = 0; // Offline / Network Error
+    }
+
+    // --- NOTIFICATION CHECKS ---
+    if (config.notifications?.enabled && config.notifications?.discordWebhook) {
+        const nConfig = config.notifications;
+        
+        // 1. Error Status
+        if (nConfig.triggers.errors) {
+            if (statusCode === 2 && notifyState.previousStatus !== 2) {
+                await sendDiscordNotification(nConfig.discordWebhook, "⚠️ Inverter Error", "The inverter is reporting an error state.", 15158332); // Red
+            }
+            if (statusCode === 0 && notifyState.previousStatus !== 0) {
+                 // Offline check (maybe opt-in, keep subtle for now or skip to avoid spam on restart)
+                 // await sendDiscordNotification(nConfig.discordWebhook, "🔌 Inverter Offline", "Could not connect to inverter API.", 9807270); // Grey
+            }
+        }
+        notifyState.previousStatus = statusCode;
+
+        // 2. Battery SOC Triggers
+        if (nConfig.triggers.batteryFull) {
+            if (soc === 100 && notifyState.previousSoc < 100) {
+                await sendDiscordNotification(nConfig.discordWebhook, "🔋 Battery Full", "Storage has reached 100% capacity.", 5763719); // Green
+            }
+        }
+        if (nConfig.triggers.batteryEmpty) {
+            // Trigger at 7% or lower (assuming user wants to know when reserve is hit)
+            // Only trigger if we crossed the threshold downwards
+            if (soc <= 7 && notifyState.previousSoc > 7) {
+                await sendDiscordNotification(nConfig.discordWebhook, "🪫 Battery Low", `Storage level dropped to ${Math.round(soc)}%.`, 15105570); // Orange
+            }
+        }
+        notifyState.previousSoc = soc;
+
+        // 3. Smart Advice (Debounced)
+        if (nConfig.triggers.smartAdvice && statusCode === 1) {
+            const now = Date.now();
+            const cooldownMs = (nConfig.smartAdviceCooldownMinutes || 60) * 60 * 1000;
+            
+            if (now - notifyState.lastSmartAdviceSent > cooldownMs) {
+                // Calculate Available Power for Divert
+                // Logic mimics SmartRecommendations.tsx: Grid Export + Battery Charging (if any)
+                // Note: We don't have forecast logic here easily, so we assume if we have SURPLUS, we can use it.
+                // Surplus = Export (negative grid) + Charging (negative batt)
+                const gridExport = p_grid < -10 ? Math.abs(p_grid) : 0;
+                const battCharging = p_batt < -10 ? Math.abs(p_batt) : 0;
+                const totalSurplus = gridExport + battCharging;
+
+                let bestAppliance = null;
+
+                // Check appliances
+                (config.appliances || []).forEach(app => {
+                    // Initialize counter if missing
+                    if (!notifyState.smartAdviceCounters[app.id]) notifyState.smartAdviceCounters[app.id] = 0;
+
+                    // Condition: Surplus covers the device wattage
+                    if (totalSurplus >= app.watts) {
+                        notifyState.smartAdviceCounters[app.id]++;
+                    } else {
+                        notifyState.smartAdviceCounters[app.id] = 0; // Reset if not enough power
+                    }
+
+                    // Trigger if sustained for 3 minutes (3 ticks)
+                    if (notifyState.smartAdviceCounters[app.id] >= 3) {
+                        // Pick the highest wattage device that qualifies
+                        if (!bestAppliance || app.watts > bestAppliance.watts) {
+                            bestAppliance = app;
+                        }
+                    }
+                });
+
+                if (bestAppliance) {
+                    await sendDiscordNotification(
+                        nConfig.discordWebhook, 
+                        "💡 Smart Suggestion", 
+                        `Excess solar power available (${Math.round(totalSurplus)}W). You can run the **${bestAppliance.name}** now for free!`, 
+                        3447003, // Blue
+                        [
+                            { name: "Surplus", value: `${Math.round(totalSurplus)} W`, inline: true },
+                            { name: "Device", value: `${bestAppliance.watts} W`, inline: true }
+                        ]
+                    );
+                    notifyState.lastSmartAdviceSent = now;
+                    // Reset counters to prevent immediate re-trigger for other smaller devices
+                    notifyState.smartAdviceCounters = {}; 
+                }
+            }
+        }
     }
 
     // Insert with Explicit LOCAL TIMESTAMP
@@ -255,6 +386,19 @@ app.get('/api/config', (req, res) => res.json(getConfig()));
 app.post('/api/config', (req, res) => {
     saveConfig(req.body);
     res.json({ success: true });
+});
+
+// Test Notification Endpoint
+app.post('/api/test-notification', async (req, res) => {
+    const { webhookUrl } = req.body;
+    if (!webhookUrl) return res.status(400).json({ error: "Missing webhook URL" });
+    
+    try {
+        await sendDiscordNotification(webhookUrl, "🔔 Test Notification", "SunFlow notifications are working correctly!", 16776960);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 app.get('/api/info', async (req, res) => {
