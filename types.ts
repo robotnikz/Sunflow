@@ -1,5 +1,4 @@
 
-
 export interface Tariff {
   id?: number;
   validFrom: string; // ISO Date string (YYYY-MM-DD)
@@ -31,9 +30,13 @@ export interface NotificationConfig {
     errors: boolean;
     batteryFull: boolean;
     batteryEmpty: boolean; // Triggers at <= 7%
+    batteryHealth: boolean; // New: Triggers if SOH drops below threshold
     smartAdvice: boolean;
   };
   smartAdviceCooldownMinutes: number;
+  // SOH Config
+  sohThreshold?: number; // Default 75%
+  minCyclesForSoh?: number; // Default 50 cycles
 }
 
 export interface SystemConfig {
@@ -131,6 +134,18 @@ export interface ForecastData {
     period_end: string;
     pv_estimate: number; // kW
   }>;
+}
+
+export interface BatteryHealthData {
+  dataPoints: Array<{
+    date: string;
+    efficiency: number; // % (Discharged / Charged)
+    estimatedCapacity: number; // kWh
+    chargeCycles: number; // Partial cycles approximated
+  }>;
+  averageEfficiency: number;
+  latestCapacityEst: number;
+  totalCycles: number;
 }
 
 export interface FroniusRealtimeResponse {

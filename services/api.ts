@@ -1,5 +1,5 @@
 
-import { InverterData, SystemConfig, HistoryData, TimeRange, Tariff, Expense, RoiData, SystemInfo, ForecastData } from '../types';
+import { InverterData, SystemConfig, HistoryData, TimeRange, Tariff, Expense, RoiData, SystemInfo, ForecastData, BatteryHealthData } from '../types';
 
 const API_BASE = ''; 
 
@@ -23,6 +23,12 @@ export const getHistory = async (range: TimeRange, startDate?: string, endDate?:
 export const getRoiData = async (): Promise<RoiData> => {
   const res = await fetch(`${API_BASE}/api/roi`);
   if (!res.ok) throw new Error("ROI data call failed");
+  return res.json();
+};
+
+export const getBatteryHealth = async (): Promise<BatteryHealthData> => {
+  const res = await fetch(`${API_BASE}/api/battery-health`);
+  if (!res.ok) throw new Error("Battery health data failed");
   return res.json();
 };
 
