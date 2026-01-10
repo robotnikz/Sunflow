@@ -130,7 +130,7 @@ Once running, access the dashboard at `http://localhost:3000`.
 
 ## 🛠 Tech Stack
 
-*   **Frontend:** React 19, TypeScript, TailwindCSS, Recharts, Lucide Icons.
+*   **Frontend:** React 18, TypeScript, TailwindCSS, Recharts, Lucide Icons.
 *   **Backend:** Node.js (Express), SQLite3.
 *   **Architecture:** Single-container monolith for easy deployment (GitHub Actions -> GHCR).
 
