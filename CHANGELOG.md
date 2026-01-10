@@ -1,3 +1,11 @@
+## [1.3.5](https://github.com/robotnikz/Sunflow/compare/v1.3.4...v1.3.5) (2026-01-10)
+
+
+### Bug Fixes
+
+* added possible to enter mixed tariffs with different earnings. e.g up to 10kw and >10kw ([20ae93b](https://github.com/robotnikz/Sunflow/commit/20ae93baa74ff06d9cfea8ac471704adbc4fb8ea))
+* latest commit ([dffad23](https://github.com/robotnikz/Sunflow/commit/dffad233a53fe9addb005e33e2ab250cbe638720))
+
 ## [1.3.4](https://github.com/robotnikz/Sunflow/compare/v1.3.3...v1.3.4) (2026-01-09)
 
 
