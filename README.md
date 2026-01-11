@@ -39,20 +39,29 @@ Don't just watch the power flow—act on it.
 Stay informed wherever you are.
 *   **Proactive Suggestions:** Get a ping on Discord when it's the perfect time to run appliances.
 *   **Safety Alerts:** Instant notifications for Inverter Errors, Battery Empty, or Battery Full events.
+*   **Hysteresis Logic:** Intelligent alerting that prevents "notification bounce" by requiring state changes before re-notifying (e.g., dropping below 95% SoC before sending a new "Full" alert).
 *   **Health Warnings:** Get alerted if your Battery SOH (State of Health) drops below a defined threshold.
+
+### 📈 Upgrade Simulator (NEW!)
+Experiment with your system before spending a dime.
+*   **Scenario Planning:** Simulate adding more PV power (+200%) or larger battery storage (up to 30kWh).
+*   **Accuracy Check:** The simulator identifies and utilizes only high-quality hourly data records for 100% reliable ROI forecasting.
+*   **Financial Impact:** Calculate the exact payback period of potential upgrades based on your *real* historical load profile.
 
 ### 🔋 Battery Health Guard
 *   **SOH Tracking:** Automatically estimates your Battery's **State of Health** and **Efficiency** based on real charge/discharge cycles over time.
 *   **Cycle Counter:** Tracks the estimated number of full cycles your battery has completed.
 *   **Degradation Monitoring:** Visualizes capacity loss to help you claim warranty if needed.
 
-### 💰 Financial ROI Tracker
+### 💰 Financial ROI Tracker & Calibration
 Solar is an investment. Track it like one.
 *   **Amortization Countdown:** See the exact date your system breaks even.
+*   **Hybrid Calibration:** Automatically syncs manual offsets with database-calculated totals for absolute accuracy.
 *   **Granular Tariffs:** Supports changing energy prices over time (e.g., price hikes in 2024).
-*   **CAPEX & OPEX:** Log installation costs, maintenance fees, or battery upgrades to keep your net profit calculation accurate.
+*   **CAPEX & OPEX:** Log installation costs, maintenance fees, or battery upgrades.
 
-### 📊 Deep Historical Analysis
+### 📊 Data Portability & Logic
+*   **History Importer:** Import Home Assistant or Fronius CSV data. The system automatically "explodes" daily totals into hourly profiles for detailed chart resolution.
 *   **Self-hosted Data:** Your data lives in a local SQLite database. No cloud delays, no data retention limits.
 *   **Efficiency Metrics:** Track your **Autonomy** (Grid Independence) and **Self-Consumption** ratio over days, months, or years.
 *   **Interactive Charts:** Zoomable, beautiful charts for Production, Load, Grid, and Battery.
