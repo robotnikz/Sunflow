@@ -30,6 +30,7 @@ try {
 const app = express();
 const multer = require('multer'); // New: File Uploads
 const Papa = require('papaparse'); // New: CSV Parsing
+const compression = require('compression'); // Performance: Gzip Compression
 
 const PORT = process.env.PORT || 3000;
 const REPO_OWNER = 'robotnikz';
@@ -71,15 +72,37 @@ const apiLimiter = rateLimit({
 });
 app.use('/api/', apiLimiter);
 
+// 4. Compression (Gzip): Reduces JSON payload size significantly
+app.use(compression());
+
 app.use(express.json());
-// Serve static files from the React build
-app.use(express.static(path.join(__dirname, 'dist')));
+
+// 5. Serve static files with Aggressive Caching (Immutable assets)
+// Vite generates filenames with hashes (e.g. index.12ea.js), so we can cache them "forever"
+app.use(express.static(path.join(__dirname, 'dist'), {
+    maxAge: '1y', // Cache for 1 year
+    immutable: true, // Content will never change for a given filename
+    etag: false, // Don't check server for changes
+    setHeaders: (res, path) => {
+        // Only cache actual assets (js, css, images) aggressively
+        // HTML files should never be cached as they are the entry point
+        if (path.endsWith('.html')) {
+            res.setHeader('Cache-Control', 'no-cache');
+        }
+    }
+}));
 
 // Database Setup
 const db = new sqlite3.Database(DB_FILE, (err) => {
     if (err) console.error("Error opening database:", err.message);
     else {
         console.log(`Connected to SQLite database at ${DB_FILE}`);
+        // Performance Optimization: Use WAL Mode (Write-Ahead Logging) for better concurrency
+        db.run('PRAGMA journal_mode = WAL;', (err) => {
+            if(err) console.error("Failed to enable WAL mode:", err);
+            else console.log("SQLite WAL mode enabled.");
+        });
+
         db.serialize(() => {
             // Main Log Table
             db.run(`CREATE TABLE IF NOT EXISTS energy_log (
@@ -159,7 +182,13 @@ const DEFAULT_APPLIANCES = [
   { id: 'ev', name: 'Car (1h Charge)', watts: 3700, kwhEstimate: 3.7, iconName: 'car', color: 'text-emerald-400' },
 ];
 
+// In-Memory Cache for Config to reduce disk I/O
+let configCache = null;
+
 const getConfig = () => {
+    // Return cache if available
+    if (configCache) return configCache;
+
     let config = { inverterIp: '', currency: 'EUR', systemStartDate: new Date().toISOString().split('T')[0] };
     if (fs.existsSync(CONFIG_FILE)) {
         try {
@@ -192,6 +221,9 @@ const getConfig = () => {
             minCyclesForSoh: 50
         };
     }
+    
+    // Update Cache
+    configCache = config;
     return config;
 };
 
@@ -200,23 +232,20 @@ const saveConfig = (cfg) => {
     if (typeof cfg !== 'object') return;
     
     // Merge with existing to ensure we don't lose fields
-    const current = getConfig();
+    // NOTE: Check cache first, or read from disk if cold
+    const current = configCache || getConfig(); 
     const diskConfig = {
         ...current,
         ...cfg
     };
+    
+    // Update Cache immediately
+    configCache = diskConfig;
+    
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(diskConfig, null, 2));
 };
 
-const fetchFroniusData = async (ip) => {
-    try {
-        const url = `http://${ip}/solar_api/v1/GetPowerFlowRealtimeData.fcgi`;
-        const response = await axios.get(url, { timeout: 3000 });
-        return response.data;
-    } catch (error) {
-        return null;
-    }
-};
+// Moved fetchFroniusData below to be near cache logic
 
 // Helper: Get Local SQLite-compatible Timestamp (YYYY-MM-DD HH:MM:SS)
 const getLocalTimestamp = (date = new Date()) => {
@@ -230,8 +259,37 @@ let solcastCache = {
     data: null
 };
 
+// --- FRONIUS INVERTER CACHE (Throttling) ---
+// Prevents overloading the inverter if multiple dashboard clients are open
+let inverterCache = {
+    timestamp: 0,
+    data: null
+};
 
-// --- NOTIFICATION LOGIC ---
+const fetchFroniusData = async (ip) => {
+    const now = Date.now();
+    // Return cached data if request is within 1000ms (1 second) of the last one
+    if (inverterCache.data && (now - inverterCache.timestamp < 1000)) {
+        return inverterCache.data;
+    }
+
+    try {
+        const url = `http://${ip}/solar_api/v1/GetPowerFlowRealtimeData.fcgi`;
+        const response = await axios.get(url, { timeout: 3000 });
+        
+        // Update Cache
+        inverterCache = {
+            timestamp: now,
+            data: response.data
+        };
+        
+        return response.data;
+    } catch (error) {
+        return null;
+    }
+};
+
+// Helper: Get Local SQLite-compatible Timestamp (YYYY-MM-DD HH:MM:SS)
 const notifyState = {
     previousSoc: 0,
     previousStatus: 1, 
@@ -339,6 +397,90 @@ const checkBatteryHealthNotification = (config, nominalCapacity) => {
         });
     });
 };
+
+// --- RETENTION & AGGREGATION LOGIC ---
+
+/**
+ * Runs periodically to move high-resolution data older than 7 days 
+ * into the long-term energy_data table (aggregated hourly) and cleans up energy_log.
+ */
+const runRetentionPolicy = () => {
+    const RETENTION_DAYS = 7;
+    const now = new Date();
+    const cutoffDate = new Date(now);
+    cutoffDate.setDate(cutoffDate.getDate() - RETENTION_DAYS);
+    const cutoffTs = getLocalTimestamp(cutoffDate);
+
+    console.log(`[Retention] Checking for data older than ${cutoffTs}...`);
+
+    db.serialize(() => {
+        // 1. Aggregate hourly data from energy_log into energy_data
+        // We calculate AVG Power (Watts) over the hour. Since it's 1 hour, Avg Watts = Watt-hours.
+        const aggSql = `
+            INSERT OR IGNORE INTO energy_data (
+                timestamp, 
+                production_wh, 
+                grid_feed_in_wh, 
+                grid_consumption_wh, 
+                battery_charge_wh, 
+                battery_discharge_wh, 
+                load_wh
+            )
+            SELECT 
+                strftime('%Y-%m-%d %H:00:00', timestamp) as ts,
+                AVG(power_pv) as production_wh,
+                AVG(CASE WHEN power_grid < 0 THEN ABS(power_grid) ELSE 0 END) as grid_feed_in_wh,
+                AVG(CASE WHEN power_grid > 0 THEN power_grid ELSE 0 END) as grid_consumption_wh,
+                AVG(CASE WHEN power_battery < 0 THEN ABS(power_battery) ELSE 0 END) as battery_charge_wh,
+                AVG(CASE WHEN power_battery > 0 THEN power_battery ELSE 0 END) as battery_discharge_wh,
+                AVG(power_load) as load_wh
+            FROM energy_log
+            WHERE timestamp < ?
+            GROUP BY ts
+        `;
+
+        db.run(aggSql, [cutoffTs], function(err) {
+            if (err) {
+                console.error("[Retention] Aggregation failed:", err.message);
+                return;
+            }
+            if (this.changes > 0) {
+                console.log(`[Retention] Archived ${this.changes} hourly records to long-term storage.`);
+            }
+
+            // 2. Delete the old detailed logs
+            // Only delete what we have safely aggregated (filtered by same cutoff)
+            db.run("DELETE FROM energy_log WHERE timestamp < ?", [cutoffTs], function(err) {
+                if (err) {
+                    console.error("[Retention] Cleanup failed:", err.message);
+                } else if (this.changes > 0) {
+                    console.log(`[Retention] Cleaned up ${this.changes} old minute-level records.`);
+                    
+                    // Trigger calibration to keep totals safe
+                    updateCalibrationFromDatabase();
+                }
+            });
+
+            // 3. Maintenance: Optimization (VACUUM)
+            // Run occasionally (e.g. if we are in the early morning hours 03:00 - 04:00) to shrink DB file
+            // Since this runs hourly, it will hit once a day.
+            const hour = new Date().getHours();
+            if (hour === 3) {
+                console.log("[Retention] Running Database VACUUM to reclaim disk space...");
+                db.run("VACUUM;", (vErr) => {
+                    if (vErr) console.error("VACUUM failed:", vErr);
+                    else console.log("Database optimized successfully.");
+                });
+            }
+        });
+    });
+};
+
+// Run Retention Policy every hour
+setInterval(runRetentionPolicy, 60 * 60 * 1000);
+// Run once on startup after a small delay
+setTimeout(runRetentionPolicy, 30 * 1000);
+
 
 // Polling Job - 1 Minute Interval
 setInterval(async () => {
@@ -593,15 +735,20 @@ app.get('/api/forecast', async (req, res) => {
 
     const now = Date.now();
     const currentHour = new Date().getHours();
-    const isDaytime = currentHour >= 5 && currentHour < 21; 
-    const CACHE_DURATION = 96 * 60 * 1000;
+    
+    // User Request: Only fetch between 06:00 and 18:00
+    const isDaytime = currentHour >= 6 && currentHour < 18; 
+    
+    // Calculated: 12 hours window / 10 allowed requests = 1.2 hours (72 mins)
+    // We use 75 minutes to be safest and evenly distribute ~10 calls per day.
+    const CACHE_DURATION = 75 * 60 * 1000; 
 
     // 1. Return fresh cache
     if (solcastCache.data && (now - solcastCache.timestamp < CACHE_DURATION)) {
         return res.json(solcastCache.data);
     }
 
-    // 2. If NIGHT TIME, return stale cache or empty
+    // 2. If OUTSIDE WINDOW, return stale cache or empty
     if (!isDaytime) {
          if (solcastCache.data) return res.json(solcastCache.data);
          return res.json({ forecasts: [] });
@@ -1300,20 +1447,40 @@ app.get('/api/history', (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
         const tariffs = tariffRows.map(t => ({ validFrom: t.valid_from, costPerKwh: t.cost_per_kwh, feedInTariff: t.feed_in_tariff }));
         
+        // Revised to use UNION ALL for seamless history across recent (Log) and archived (Energy Data)
+        const s = queryTimeClause.match(/timestamp >= '([^']+)'/)?.[1];
+        const e = queryTimeClause.match(/timestamp < '([^']+)'/)?.[1];
+
         const query = `
-            SELECT 
-                l.timestamp, l.power_pv, l.power_load, l.power_grid, l.power_battery, l.soc, l.status_code,
-                d.grid_consumption_wh, d.grid_feed_in_wh, d.battery_charge_wh, d.battery_discharge_wh, d.production_wh, d.load_wh
-            FROM energy_log l
-            LEFT JOIN energy_data d ON l.timestamp = d.timestamp
-            WHERE ${queryTimeClause.replace(/timestamp/g, "l.timestamp")} 
-            ORDER BY l.timestamp ASC
+            SELECT * FROM (
+                SELECT 
+                    timestamp,
+                    power_pv, power_load, power_grid, power_battery, soc, status_code,
+                    NULL as production_wh, NULL as grid_consumption_wh, NULL as grid_feed_in_wh, 
+                    NULL as battery_charge_wh, NULL as battery_discharge_wh, NULL as load_wh,
+                    1 as is_high_res
+                FROM energy_log 
+                WHERE timestamp >= ? AND timestamp < ?
+                
+                UNION ALL
+                
+                SELECT 
+                    timestamp,
+                    NULL as power_pv, NULL as power_load, NULL as power_grid, NULL as power_battery, NULL as soc, NULL as status_code,
+                    production_wh, grid_consumption_wh, grid_feed_in_wh, 
+                    battery_charge_wh, battery_discharge_wh, load_wh,
+                    0 as is_high_res
+                FROM energy_data 
+                WHERE timestamp >= ? AND timestamp < ?
+            )
+            ORDER BY timestamp ASC
         `;
 
-        db.all(query, [], (err, rows) => {
+        db.all(query, [s, e, s, e], (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
             
             let stats = { production: 0, consumption: 0, imported: 0, exported: 0, batteryCharged: 0, batteryDischarged: 0, autonomy: 0, selfConsumption: 0, costSaved: 0, earnings: 0 };
+
 
             // Robust Date Comparison
             const startMs = start.getTime();
@@ -1523,7 +1690,7 @@ app.get('/api/history', (req, res) => {
 app.get('/api/energy', (req, res) => {
     const { start, end } = req.query;
     
-    // Determine table: energy_log for day/week, energy_data for month/year
+    // Unified Query handling both recent and archived data
     let query = `
         SELECT 
             timestamp, 
@@ -1536,12 +1703,14 @@ app.get('/api/energy', (req, res) => {
     let params = [];
 
     if (start && end) {
+        // If range is large (> 60 days), force aggregation from energy_data for performance
+        // If range is small but OLD, the UNION below handles it automatically.
         const startTime = new Date(start);
         const endTime = new Date(end);
         const diffDays = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60 * 24);
 
         if (diffDays > 62) {
-            query = `
+             query = `
                 SELECT 
                     timestamp, 
                     production_wh as production, 
@@ -1553,59 +1722,87 @@ app.get('/api/energy', (req, res) => {
                 ORDER BY timestamp ASC
             `;
             params = [start, end];
-
-            db.all(query, params, (err, rows) => {
-                if (err) return res.status(500).json({ error: err.message });
-
-                const monthlyData = {};
-                rows.forEach(row => {
-                    const month = row.timestamp.substring(0, 7);
-                    if (!monthlyData[month]) {
-                        monthlyData[month] = { p: 0, c: 0, g: 0, b: 0, count: 0 };
-                    }
-                    monthlyData[month].p += row.production;
-                    monthlyData[month].c += row.consumption;
-                    monthlyData[month].g += row.grid;
-                    monthlyData[month].b += row.battery;
-                    monthlyData[month].count++;
-                });
-
-                const aggregatedRows = Object.keys(monthlyData).map(month => {
-                    const d = monthlyData[month];
-                    const n = d.count || 1;
-                    return {
-                        timestamp: `${month}-01 00:00:00`,
-                        production: d.p / n,
-                        consumption: d.c / n,
-                        grid: d.g / n,
-                        battery: d.b / n
-                    };
-                });
-                return res.json(aggregatedRows);
-            });
-            return;
+             // ... handling aggregated result below ...
+        } else {
+            // Mixed Mode: Union of Log (Recent) and Data (Archived)
+            query = `
+                SELECT 
+                    timestamp, 
+                    power_pv as production,
+                    power_load as consumption,
+                    power_grid as grid,
+                    power_battery as battery
+                FROM energy_log
+                WHERE timestamp BETWEEN ? AND ?
+                
+                UNION ALL
+                
+                SELECT 
+                    timestamp, 
+                    production_wh as production, 
+                    load_wh as consumption,
+                    (grid_consumption_wh - grid_feed_in_wh) as grid,
+                    (battery_discharge_wh - battery_charge_wh) as battery
+                FROM energy_data
+                WHERE timestamp BETWEEN ? AND ?
+                ORDER BY timestamp ASC
+            `;
+            params = [start, end, start, end];
         }
-
-        query = `
-            SELECT 
-                timestamp, 
-                power_pv as production,
-                power_load as consumption,
-                power_grid as grid,
-                power_battery as battery
-            FROM energy_log
-            WHERE timestamp BETWEEN ? AND ?
-            ORDER BY timestamp ASC
-        `;
-        params = [start, end];
     } else {
         query += ` ORDER BY timestamp DESC LIMIT 288`; 
+    }
+
+    // Common Execution
+    if (params.length > 0 && query.includes("FROM energy_data") && !query.includes("UNION ALL")) {
+         // This block handles the "Large Range" monthly aggregation logic
+         db.all(query, params, (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            const monthlyData = {};
+            rows.forEach(row => {
+                const month = row.timestamp.substring(0, 7);
+                if (!monthlyData[month]) {
+                    monthlyData[month] = { p: 0, c: 0, g: 0, b: 0, count: 0 };
+                }
+                monthlyData[month].p += row.production;
+                monthlyData[month].c += row.consumption;
+                monthlyData[month].g += row.grid;
+                monthlyData[month].b += row.battery;
+                monthlyData[month].count++;
+            });
+
+            const aggregatedRows = Object.keys(monthlyData).map(month => {
+                const d = monthlyData[month];
+                const n = d.count || 1;
+                return {
+                    timestamp: `${month}-01 00:00:00`,
+                    production: d.p / n,
+                    consumption: d.c / n,
+                    grid: d.g / n,
+                    battery: d.b / n
+                };
+            });
+            return res.json(aggregatedRows);
+        });
+        return;
     }
 
     db.all(query, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!start) rows.reverse();
-        res.json(rows);
+        
+        // De-duplicate timestamps if using UNION (prefer Log if exists, though overlap should be minimal due to cleanup)
+        // With UNION ALL, if we have overlap, we might get double points. 
+        // Simple distinct by timestamp:
+        const seen = new Set();
+        const cleanRows = [];
+        for (const r of rows) {
+            if (!seen.has(r.timestamp)) {
+                seen.add(r.timestamp);
+                cleanRows.push(r);
+            }
+        }
+        res.json(cleanRows);
     });
 });
 
@@ -1764,6 +1961,19 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`SunFlow Backend running on http://localhost:${PORT}`);
 });
+
+// Graceful Shutdown: Close DB connection ensures journal is flushed
+const shutdown = () => {
+    console.log("Shutting down...");
+    db.close((err) => {
+        if (err) console.error("Error closing DB:", err.message);
+        else console.log("Database connection closed.");
+        process.exit(0);
+    });
+};
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
