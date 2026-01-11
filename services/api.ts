@@ -9,8 +9,8 @@ export const getRealtimeData = async (): Promise<InverterData> => {
   return res.json();
 };
 
-export const getHistory = async (range: TimeRange, startDate?: string, endDate?: string): Promise<HistoryData> => {
-  let url = `${API_BASE}/api/history?range=${range}`;
+export const getHistory = async (range: TimeRange, startDate?: string, endDate?: string, offset: number = 0): Promise<HistoryData & { windowStart?: string, windowEnd?: string }> => {
+  let url = `${API_BASE}/api/history?range=${range}&offset=${offset}`;
   if (range === 'custom' && startDate && endDate) {
     url += `&start=${startDate}&end=${endDate}`;
   }
