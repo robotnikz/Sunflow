@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/robotnikz/Sunflow/compare/v1.3.6...v1.4.0) (2026-01-11)
+
+
+### Features
+
+* history graphs now show the current day, week, etc. Also added an option to go back in time on the graphs. ([857c5a4](https://github.com/robotnikz/Sunflow/commit/857c5a4082ed887b21fc485569dce74f1386d300))
+
 ## [1.3.6](https://github.com/robotnikz/Sunflow/compare/v1.3.5...v1.3.6) (2026-01-11)
 
 
