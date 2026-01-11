@@ -1,4 +1,3 @@
-
 /**
  * Backend Server for SunFlow
  */
@@ -1044,36 +1043,70 @@ app.get('/api/history', (req, res) => {
         else groupBy = 1440;                  
     } else {
         const now = new Date();
+        const offset = parseInt(req.query.offset) || 0;
+        let start, end;
+
+        const getStartOfWeek = (d) => {
+             const date = new Date(d);
+             const day = date.getDay();
+             const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+             date.setDate(diff);
+             date.setHours(0,0,0,0);
+             return date;
+        };
+
         switch(range) {
             case 'hour':
-                const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-                queryTimeClause = `timestamp >= '${getLocalTimestamp(oneHourAgo)}'`;
+                // offset is hours
+                const startHour = new Date(now);
+                startHour.setHours(startHour.getHours() + offset);
+                startHour.setMinutes(0, 0, 0);
+                start = startHour;
+                end = new Date(startHour);
+                end.setHours(end.getHours() + 1);
                 groupBy = 1; 
                 break;
             case 'day': 
-                const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-                queryTimeClause = `timestamp >= '${getLocalTimestamp(yesterday)}'`; 
+                // offset is days
+                const startDay = new Date(now);
+                startDay.setDate(startDay.getDate() + offset);
+                startDay.setHours(0, 0, 0, 0);
+                start = startDay;
+                end = new Date(startDay);
+                end.setDate(end.getDate() + 1);
                 groupBy = 1; 
                 break;
             case 'week': 
-                const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-                queryTimeClause = `timestamp >= '${getLocalTimestamp(lastWeek)}'`; 
+                // offset is weeks
+                const refDate = new Date(now);
+                refDate.setDate(refDate.getDate() + (offset * 7));
+                start = getStartOfWeek(refDate);
+                end = new Date(start);
+                end.setDate(end.getDate() + 7);
                 groupBy = 5; 
                 break;
             case 'month': 
-                const lastMonth = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-                queryTimeClause = `timestamp >= '${getLocalTimestamp(lastMonth)}'`; 
+                // offset is months
+                start = new Date(now.getFullYear(), now.getMonth() + offset, 1, 0, 0, 0);
+                end = new Date(now.getFullYear(), now.getMonth() + offset + 1, 1, 0, 0, 0);
                 groupBy = 30; 
                 break;
             case 'year': 
-                const lastYear = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-                queryTimeClause = `timestamp >= '${getLocalTimestamp(lastYear)}'`; 
+                // offset is years
+                start = new Date(now.getFullYear() + offset, 0, 1, 0, 0, 0);
+                end = new Date(now.getFullYear() + offset + 1, 0, 1, 0, 0, 0); 
                 groupBy = 1440; 
                 break;
             default: 
-                const defaultYesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-                queryTimeClause = `timestamp >= '${getLocalTimestamp(defaultYesterday)}'`;
+                const defaultStart = new Date(now);
+                defaultStart.setHours(0, 0, 0, 0);
+                start = defaultStart;
+                end = new Date(now); // This case logic is fallback
                 groupBy = 1;
+        }
+
+        if (start && end) {
+             queryTimeClause = `timestamp >= '${getLocalTimestamp(start)}' AND timestamp < '${getLocalTimestamp(end)}'`;
         }
     }
 
