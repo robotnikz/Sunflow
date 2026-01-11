@@ -1,3 +1,15 @@
+# [1.6.0](https://github.com/robotnikz/Sunflow/compare/v1.5.0...v1.6.0) (2026-01-11)
+
+
+### Bug Fixes
+
+* **tests:** resolve typescript errors in test suite ([ffb5e89](https://github.com/robotnikz/Sunflow/commit/ffb5e89a5dd77d71b62aa9c69828d41f3b677c5f))
+
+
+### Features
+
+* **core:** enhance ROI accuracy, server performance and test coverage ([c19a480](https://github.com/robotnikz/Sunflow/commit/c19a480c43a5cc848a54b5953232d7f32274679c))
+
 # [1.5.0](https://github.com/robotnikz/Sunflow/compare/v1.4.0...v1.5.0) (2026-01-11)
 
 
