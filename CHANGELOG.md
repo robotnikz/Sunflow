@@ -1,3 +1,15 @@
+# [1.5.0](https://github.com/robotnikz/Sunflow/compare/v1.4.0...v1.5.0) (2026-01-11)
+
+
+### Bug Fixes
+
+* **settings:** import missing getConfig in SettingsModal ([35c14c6](https://github.com/robotnikz/Sunflow/commit/35c14c6287fdb632be2cca1b625a4373200d068c))
+
+
+### Features
+
+* enhance history visualization, csv imports, and ROI simulation accuracy ([61e2194](https://github.com/robotnikz/Sunflow/commit/61e21947b67206a529ec664c5cc1cdd0d87d7881))
+
 # [1.4.0](https://github.com/robotnikz/Sunflow/compare/v1.3.6...v1.4.0) (2026-01-11)
 
 
