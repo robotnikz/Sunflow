@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend, BarChart, Bar, Cell } from 'recharts';
 
 interface EnergyChartProps {
   history: Array<{
@@ -9,6 +9,7 @@ interface EnergyChartProps {
     consumption: number;
     grid?: number;
     battery?: number;
+    is_aggregated?: boolean;
   }>;
   timeRange: string;
 }
@@ -18,28 +19,26 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history, timeRange }) => {
     return <div className="flex items-center justify-center h-full text-slate-500">No historical data available yet.</div>;
   }
 
+  const isAggregated = history[0]?.is_aggregated || ['week', 'month', 'year'].includes(timeRange);
+  const unit = isAggregated ? 'kWh' : 'Watts';
+
   // Dynamic Tick Formatting based on selected timeRange
   const formatTick = (ts: string) => {
     const d = new Date(ts);
     
     switch(timeRange) {
         case 'hour':
-            // 14:05
             return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         case 'day':
-            // 14:00
             return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         case 'week':
-            // Mon 10 (Short Day, Date)
             return d.toLocaleDateString([], { weekday: 'short', day: '2-digit' });
         case 'month':
-            // 12.05 (Day.Month)
             return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
         case 'year':
-            // Jan 24 (Month Year)
-            return d.toLocaleDateString([], { month: 'short', year: '2-digit' });
+            return d.toLocaleDateString([], { month: 'short' });
         case 'custom':
-            return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
         default:
             return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
@@ -53,30 +52,25 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history, timeRange }) => {
     Battery: h.battery || 0
   }));
 
-  // Calculate gradient offset for Grid
+  // Calculate gradient offsets (for AreaChart)
   const gridMax = Math.max(...data.map((i) => i.Grid));
   const gridMin = Math.min(...data.map((i) => i.Grid));
-  
-  let gridOff = 0;
-  if (gridMax <= 0) gridOff = 0;
-  else if (gridMin >= 0) gridOff = 1;
-  else gridOff = gridMax / (gridMax - gridMin);
+  let gridOff = gridMax / (gridMax - gridMin) || 0;
+  if (gridMax <= 0) gridOff = 0; else if (gridMin >= 0) gridOff = 1;
 
-  // Calculate gradient offset for Battery
   const batMax = Math.max(...data.map((i) => i.Battery));
   const batMin = Math.min(...data.map((i) => i.Battery));
-  
-  let batOff = 0;
-  if (batMax <= 0) batOff = 0;
-  else if (batMin >= 0) batOff = 1;
-  else batOff = batMax / (batMax - batMin);
+  let batOff = batMax / (batMax - batMin) || 0;
+  if (batMax <= 0) batOff = 0; else if (batMin >= 0) batOff = 1;
 
   // --- CUSTOM TOOLTIP COMPONENT ---
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload || !payload.length) return null;
 
     const d = new Date(label);
-    const dateStr = d.toLocaleString();
+    const dateStr = isAggregated 
+        ? (timeRange === 'year' ? d.toLocaleDateString([], { month: 'long', year: 'numeric' }) : d.toLocaleDateString())
+        : d.toLocaleString();
 
     return (
       <div className="bg-slate-900 border border-slate-600 p-3 rounded-lg shadow-2xl antialiased" style={{ boxShadow: '0 10px 30px -10px rgba(0,0,0,0.8)' }}>
@@ -92,21 +86,14 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history, timeRange }) => {
             let labelText = name;
             let textColor = '#e2e8f0';
 
-            if (name === 'Production') {
-              textColor = '#FACC15'; // Yellow-400
-            } else if (name === 'Consumption') {
-              textColor = '#60A5FA'; // Blue-400
-            } else if (name === 'Battery') {
-              textColor = '#C084FC'; // Purple-400
-              labelText = val > 0 ? "Discharging" : "Charging";
+            if (name === 'Production') textColor = '#FACC15'; 
+            else if (name === 'Consumption') textColor = '#60A5FA'; 
+            else if (name === 'Battery') {
+              textColor = '#C084FC'; 
+              labelText = val > 0 ? "Discharged" : "Charged";
             } else if (name === 'Grid') {
-              if (val > 0) {
-                 textColor = '#F87171'; // Red-400
-                 labelText = "Importing";
-              } else {
-                 textColor = '#34D399'; // Emerald-400
-                 labelText = "Exporting";
-              }
+              if (val > 0) { textColor = '#F87171'; labelText = "Imported"; }
+              else { textColor = '#34D399'; labelText = "Exported"; }
             }
 
             return (
@@ -115,7 +102,7 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history, timeRange }) => {
                     {labelText}:
                  </span>
                  <span className="text-slate-100 font-mono font-bold tracking-tight">
-                    {absVal} W
+                    {absVal} {unit}
                  </span>
               </div>
             );
@@ -134,9 +121,7 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history, timeRange }) => {
           if (entry.value === 'Production') textColorClass = "text-yellow-400";
           if (entry.value === 'Consumption') textColorClass = "text-blue-400";
           if (entry.value === 'Battery') textColorClass = "text-purple-400";
-          
           const isGrid = entry.value === 'Grid';
-
           return (
             <div key={`item-${index}`} className="flex items-center gap-2">
               <div 
@@ -144,7 +129,7 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history, timeRange }) => {
                 className={`w-3 h-3 rounded-full ${isGrid ? 'bg-gradient-to-r from-red-500 to-green-500' : ''}`}
               />
               <span className={`text-sm font-bold ${textColorClass} ${isGrid ? 'bg-clip-text text-transparent bg-gradient-to-r from-red-400 to-green-400' : ''}`}>
-                {isGrid ? 'Grid Power' : entry.value}
+                {isGrid ? (isAggregated ? 'Grid Balance' : 'Grid Power') : entry.value}
               </span>
             </div>
           );
@@ -152,6 +137,30 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history, timeRange }) => {
       </div>
     );
   };
+
+  if (isAggregated) {
+    return (
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+          <XAxis dataKey="rawTime" tickFormatter={formatTick} stroke="#94a3b8" fontSize={11} tickLine={false} dy={10} />
+          <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} label={{ value: 'kWh', angle: -90, position: 'insideLeft', fill: '#64748b' }} />
+          <Tooltip content={<CustomTooltip />} cursor={{ fill: '#334155', opacity: 0.4 }} isAnimationActive={false} />
+          <Legend content={renderLegend} />
+          <ReferenceLine y={0} stroke="#475569" strokeDasharray="3 3" />
+          
+          <Bar dataKey="Production" fill="#EAB308" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="Consumption" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="Grid" radius={[4, 4, 4, 4]}>
+            {data.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={entry.Grid > 0 ? '#EF4444' : '#10B981'} />
+            ))}
+          </Bar>
+          <Bar dataKey="Battery" fill="#A855F7" radius={[4, 4, 4, 4]} />
+        </BarChart>
+      </ResponsiveContainer>
+    );
+  }
 
   return (
     <ResponsiveContainer width="100%" height="100%">

@@ -28,6 +28,9 @@ try {
 }
 
 const app = express();
+const multer = require('multer'); // New: File Uploads
+const Papa = require('papaparse'); // New: CSV Parsing
+
 const PORT = process.env.PORT || 3000;
 const REPO_OWNER = 'robotnikz';
 const REPO_NAME = 'Sunflow';
@@ -37,6 +40,14 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)){
     fs.mkdirSync(DATA_DIR, { recursive: true });
 }
+
+const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)){
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+// Upload config for middleware
+const upload = multer({ dest: UPLOADS_DIR });
 
 const DB_FILE = path.join(DATA_DIR, 'solar_data.db');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
@@ -119,6 +130,18 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
                 amount REAL NOT NULL,
                 type TEXT NOT NULL, -- 'one_time' or 'yearly'
                 date DATE NOT NULL
+            )`);
+
+            // Main data table for long-term storage from imports
+            db.run(`CREATE TABLE IF NOT EXISTS energy_data (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME UNIQUE,
+                production_wh REAL,
+                grid_feed_in_wh REAL,
+                grid_consumption_wh REAL,
+                battery_charge_wh REAL,
+                battery_discharge_wh REAL,
+                load_wh REAL
             )`);
         });
     }
@@ -215,6 +238,8 @@ const notifyState = {
     smartAdviceCounters: {}, 
     lastSmartAdviceSent: 0, 
     lastSohCheck: 0, // Track when we last checked battery health
+    notifiedFull: false, // Prevent notification bouncing at 100%
+    notifiedLow: false,  // Prevent notification bouncing at low levels
 };
 
 const sendDiscordNotification = async (webhookUrl, title, description, color, fields = []) => {
@@ -367,15 +392,22 @@ setInterval(async () => {
         }
         notifyState.previousStatus = statusCode;
 
-        // 2. Battery SOC
+        // 2. Battery SOC (with Hysteresis to prevent bouncing)
         if (nConfig.triggers.batteryFull) {
-            if (soc === 100 && notifyState.previousSoc < 100) {
+            if (soc === 100 && !notifyState.notifiedFull) {
                 await sendDiscordNotification(nConfig.discordWebhook, "🔋 Battery Full", "Storage has reached 100% capacity.", 5763719); 
+                notifyState.notifiedFull = true;
+            } else if (soc < 95) {
+                notifyState.notifiedFull = false; // Reset only when dropped below 95%
             }
         }
+        
         if (nConfig.triggers.batteryEmpty) {
-            if (soc <= 7 && notifyState.previousSoc > 7) {
+            if (soc <= 7 && !notifyState.notifiedLow) {
                 await sendDiscordNotification(nConfig.discordWebhook, "🪫 Battery Low", `Storage level dropped to ${Math.round(soc)}%.`, 15105570); 
+                notifyState.notifiedLow = true;
+            } else if (soc > 15) {
+                notifyState.notifiedLow = false; // Reset only when charged above 15%
             }
         }
         notifyState.previousSoc = soc;
@@ -804,6 +836,100 @@ const getTariffForTime = (tariffs, timestamp) => {
     return activeTariff;
 };
 
+/**
+ * Automatically recalculates "Initial Values" (Calibration) based on all summary data in energy_data.
+ * This is called after every CSV import to ensure the ROI calculation matches the imported history.
+ */
+const updateCalibrationFromDatabase = (callback) => {
+    const config = getConfig();
+    db.all("SELECT * FROM tariffs ORDER BY valid_from ASC", [], (err, tariffRows) => {
+        if (err) return callback?.(err);
+        
+        const tariffs = tariffRows.map(t => ({
+            validFrom: t.valid_from,
+            costPerKwh: t.cost_per_kwh,
+            feedInTariff: t.feed_in_tariff
+        }));
+
+        // Use a UNION approach to ensure we capture all data (Summaries + Real-time)
+        const query = `
+            WITH all_ts AS (
+                SELECT timestamp FROM energy_log
+                UNION
+                SELECT timestamp FROM energy_data
+            )
+            SELECT 
+                t.timestamp,
+                l.power_pv, l.power_load, l.power_grid,
+                d.grid_consumption_wh, d.grid_feed_in_wh, d.production_wh, d.load_wh
+            FROM all_ts t
+            LEFT JOIN energy_log l ON t.timestamp = l.timestamp
+            LEFT JOIN energy_data d ON t.timestamp = d.timestamp
+            ORDER BY t.timestamp ASC
+        `;
+
+        db.all(query, [], (err, rows) => {
+            if (err) return callback?.(err);
+            
+            let totalProd = 0;
+            let totalImp = 0;
+            let totalExp = 0;
+            let totalReturn = 0;
+
+            rows.forEach((r, idx) => {
+                let prod, imp, exp, cons;
+
+                // Priority for Summary Data (energy_data)
+                if (r.production_wh !== null && r.production_wh !== undefined) {
+                    prod = (r.production_wh || 0) / 1000;
+                    imp = (r.grid_consumption_wh || 0) / 1000;
+                    exp = (r.grid_feed_in_wh || 0) / 1000;
+                    cons = (r.load_wh || 0) / 1000;
+                } else {
+                    // Fallback to Power Integration (energy_log)
+                    let durationHours = 1/60; 
+                    if (idx < rows.length - 1) {
+                        const current = new Date(r.timestamp);
+                        const next = new Date(rows[idx+1].timestamp);
+                        const diffMs = next.getTime() - current.getTime();
+                        if (diffMs > 60000) durationHours = diffMs / (1000 * 60 * 60);
+                        if (durationHours > 24) durationHours = 1/60;
+                    }
+
+                    prod = (r.power_pv || 0) * durationHours / 1000;
+                    if (r.power_grid > 0) {
+                        imp = (r.power_grid) * durationHours / 1000;
+                        exp = 0;
+                    } else {
+                        imp = 0;
+                        exp = Math.abs(r.power_grid) * durationHours / 1000;
+                    }
+                    cons = (r.power_load || 0) * durationHours / 1000;
+                }
+                
+                totalProd += prod;
+                totalImp += imp;
+                totalExp += exp;
+
+                const tariff = getTariffForTime(tariffs, r.timestamp);
+                const selfCons = Math.max(0, cons - imp);
+                totalReturn += (selfCons * tariff.costPerKwh) + (exp * tariff.feedInTariff);
+            });
+
+            // We store the DB-calculated sums separately so the UI can combine them with manual offsets.
+            config.dbTotals = {
+                production: Math.round(totalProd),
+                import: Math.round(totalImp),
+                export: Math.round(totalExp),
+                financialReturn: Math.round(totalReturn * 100) / 100
+            };
+
+            saveConfig(config);
+            callback?.(null);
+        });
+    });
+};
+
 // ROI / Amortization Endpoint
 app.get('/api/roi', (req, res) => {
     const config = getConfig();
@@ -844,7 +970,21 @@ app.get('/api/roi', (req, res) => {
                 }
             });
 
-            const query = "SELECT timestamp, power_pv, power_load, power_grid FROM energy_log ORDER BY timestamp ASC";
+            const query = `
+                WITH all_ts AS (
+                    SELECT timestamp FROM energy_log
+                    UNION
+                    SELECT timestamp FROM energy_data
+                )
+                SELECT 
+                    t.timestamp,
+                    l.power_pv, l.power_load, l.power_grid,
+                    d.grid_consumption_wh, d.grid_feed_in_wh, d.production_wh, d.load_wh
+                FROM all_ts t
+                LEFT JOIN energy_log l ON t.timestamp = l.timestamp
+                LEFT JOIN energy_data d ON t.timestamp = d.timestamp
+                ORDER BY t.timestamp ASC
+            `;
             
             db.all(query, [], (err, rows) => {
                 if (err) return res.status(500).json({ error: err.message });
@@ -854,7 +994,6 @@ app.get('/api/roi', (req, res) => {
                 let totalDbExportedKwh = 0;
                 let totalDbDays = 0;
 
-                const sampleDurationHours = 1 / 60;
                 const ninetyDaysAgo = new Date();
                 ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
                 let recentDbExport = 0;
@@ -868,15 +1007,35 @@ app.get('/api/roi', (req, res) => {
                      if (totalDbDays < 0.01) totalDbDays = 0.01;
                 }
 
-                rows.forEach(r => {
+                rows.forEach((r, idx) => {
                     const tsDate = new Date(r.timestamp);
                     const tariff = getTariffForTime(tariffList, r.timestamp);
-                    const cons = (r.power_load || 0) * sampleDurationHours / 1000;
-                    let imp = 0;
-                    let exp = 0;
+                    
+                    let cons, imp, exp;
 
-                    if (r.power_grid > 0) imp = (r.power_grid) * sampleDurationHours / 1000;
-                    else exp = Math.abs(r.power_grid) * sampleDurationHours / 1000;
+                    if (r.production_wh !== null && r.production_wh !== undefined) {
+                        cons = (r.load_wh || 0) / 1000;
+                        imp = (r.grid_consumption_wh || 0) / 1000;
+                        exp = (r.grid_feed_in_wh || 0) / 1000;
+                    } else {
+                        let durationHours = 1/60; 
+                        if (idx < rows.length - 1) {
+                            const current = new Date(r.timestamp);
+                            const next = new Date(rows[idx+1].timestamp);
+                            const diffMs = next.getTime() - current.getTime();
+                            if (diffMs > 60000) durationHours = diffMs / (1000 * 60 * 60);
+                            if (durationHours > 24) durationHours = 1/60;
+                        }
+
+                        cons = (r.power_load || 0) * durationHours / 1000;
+                        if (r.power_grid > 0) {
+                            imp = (r.power_grid) * durationHours / 1000;
+                            exp = 0;
+                        } else {
+                            imp = 0;
+                            exp = Math.abs(r.power_grid) * durationHours / 1000;
+                        }
+                    }
 
                     const selfPoweredKwh = Math.max(0, cons - imp);
                     const saved = selfPoweredKwh * tariff.costPerKwh;
@@ -1022,6 +1181,41 @@ app.get('/api/roi', (req, res) => {
     });
 });
 
+/**
+ * NEW: Simulation Data Endpoint
+ * Returns hourly aggregated data for efficient client-side simulation
+ */
+app.get('/api/simulation-data', (req, res) => {
+    // We combine high-resolution logs and low-resolution energy summaries.
+    // Grouping by hour is the common denominator for battery simulation.
+    // We remove the 1-year limit from the subqueries to allow the planner 
+    // to analyze the full available history.
+    const query = `
+        SELECT 
+            ts,
+            AVG(pv) as p_pv,
+            AVG(load) as p_load
+        FROM (
+            SELECT strftime('%Y-%m-%d %H:00:00', timestamp) as ts, power_pv as pv, power_load as load FROM energy_log
+            UNION ALL
+            SELECT strftime('%Y-%m-%d %H:00:00', timestamp) as ts, production_wh as pv, load_wh as load FROM energy_data
+        )
+        WHERE pv IS NOT NULL AND load IS NOT NULL
+        GROUP BY ts
+        ORDER BY ts ASC
+    `;
+
+    db.all(query, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        const optimized = rows.map(r => ({
+            t: new Date(r.ts).getTime(),
+            p: Math.round(r.p_pv),
+            l: Math.round(r.p_load)
+        }));
+        res.json(optimized);
+    });
+});
+
 // HISTORY
 app.get('/api/history', (req, res) => {
     const range = req.query.range || 'day'; 
@@ -1030,21 +1224,18 @@ app.get('/api/history', (req, res) => {
     let queryTimeClause = "";
     let groupBy = 1; 
 
+    // Variable declaration for boundary checks
+    let start, end;
+
     if (range === 'custom' && startDate && endDate) {
-        const startTs = `${startDate} 00:00:00`;
-        const endTs = `${endDate} 23:59:59`;
-        queryTimeClause = `timestamp BETWEEN '${startTs}' AND '${endTs}'`;
-        const d1 = new Date(startDate);
-        const d2 = new Date(endDate);
-        const diffDays = Math.ceil(Math.abs(d2 - d1) / (1000 * 60 * 60 * 24));
-        if (diffDays <= 2) groupBy = 1;       
-        else if (diffDays <= 7) groupBy = 5;  
-        else if (diffDays <= 31) groupBy = 30; 
-        else groupBy = 1440;                  
+        start = new Date(startDate);
+        start.setHours(0,0,0,0);
+        end = new Date(endDate);
+        end.setDate(end.getDate() + 1);
+        end.setHours(0,0,0,0);
     } else {
         const now = new Date();
         const offset = parseInt(req.query.offset) || 0;
-        let start, end;
 
         const getStartOfWeek = (d) => {
              const date = new Date(d);
@@ -1057,7 +1248,6 @@ app.get('/api/history', (req, res) => {
 
         switch(range) {
             case 'hour':
-                // offset is hours
                 const startHour = new Date(now);
                 startHour.setHours(startHour.getHours() + offset);
                 startHour.setMinutes(0, 0, 0);
@@ -1067,7 +1257,6 @@ app.get('/api/history', (req, res) => {
                 groupBy = 1; 
                 break;
             case 'day': 
-                // offset is days
                 const startDay = new Date(now);
                 startDay.setDate(startDay.getDate() + offset);
                 startDay.setHours(0, 0, 0, 0);
@@ -1077,7 +1266,6 @@ app.get('/api/history', (req, res) => {
                 groupBy = 1; 
                 break;
             case 'week': 
-                // offset is weeks
                 const refDate = new Date(now);
                 refDate.setDate(refDate.getDate() + (offset * 7));
                 start = getStartOfWeek(refDate);
@@ -1086,50 +1274,107 @@ app.get('/api/history', (req, res) => {
                 groupBy = 5; 
                 break;
             case 'month': 
-                // offset is months
                 start = new Date(now.getFullYear(), now.getMonth() + offset, 1, 0, 0, 0);
                 end = new Date(now.getFullYear(), now.getMonth() + offset + 1, 1, 0, 0, 0);
                 groupBy = 30; 
                 break;
             case 'year': 
-                // offset is years
                 start = new Date(now.getFullYear() + offset, 0, 1, 0, 0, 0);
                 end = new Date(now.getFullYear() + offset + 1, 0, 1, 0, 0, 0); 
                 groupBy = 1440; 
                 break;
             default: 
-                const defaultStart = new Date(now);
-                defaultStart.setHours(0, 0, 0, 0);
-                start = defaultStart;
-                end = new Date(now); // This case logic is fallback
+                start = new Date(now);
+                start.setHours(0, 0, 0, 0);
+                end = new Date(start);
+                end.setDate(end.getDate() + 1);
                 groupBy = 1;
         }
+    }
 
-        if (start && end) {
-             queryTimeClause = `timestamp >= '${getLocalTimestamp(start)}' AND timestamp < '${getLocalTimestamp(end)}'`;
-        }
+    if (start && end) {
+         queryTimeClause = `timestamp >= '${getLocalTimestamp(start)}' AND timestamp < '${getLocalTimestamp(end)}'`;
     }
 
     db.all("SELECT * FROM tariffs ORDER BY valid_from ASC", [], (err, tariffRows) => {
         if (err) return res.status(500).json({ error: err.message });
         const tariffs = tariffRows.map(t => ({ validFrom: t.valid_from, costPerKwh: t.cost_per_kwh, feedInTariff: t.feed_in_tariff }));
-        const query = `SELECT timestamp, power_pv, power_load, power_grid, power_battery, soc, status_code FROM energy_log WHERE ${queryTimeClause} ORDER BY timestamp ASC`;
+        
+        const query = `
+            SELECT 
+                l.timestamp, l.power_pv, l.power_load, l.power_grid, l.power_battery, l.soc, l.status_code,
+                d.grid_consumption_wh, d.grid_feed_in_wh, d.battery_charge_wh, d.battery_discharge_wh, d.production_wh, d.load_wh
+            FROM energy_log l
+            LEFT JOIN energy_data d ON l.timestamp = d.timestamp
+            WHERE ${queryTimeClause.replace(/timestamp/g, "l.timestamp")} 
+            ORDER BY l.timestamp ASC
+        `;
 
         db.all(query, [], (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
-            const sampleDurationHours = 1 / 60; 
+            
             let stats = { production: 0, consumption: 0, imported: 0, exported: 0, batteryCharged: 0, batteryDischarged: 0, autonomy: 0, selfConsumption: 0, costSaved: 0, earnings: 0 };
 
-            rows.forEach(r => {
+            // Robust Date Comparison
+            const startMs = start.getTime();
+            const endMs = end.getTime();
+
+            rows.forEach((r, idx) => {
+                const rowDate = new Date(r.timestamp);
+                const rowMs = rowDate.getTime();
+                
+                // Strict boundary check (prevents next year/month leaking into stats)
+                if (rowMs < startMs || rowMs >= endMs) return;
+
                 const tariff = getTariffForTime(tariffs, r.timestamp);
-                const prod = (r.power_pv || 0) * sampleDurationHours / 1000;
-                const cons = (r.power_load || 0) * sampleDurationHours / 1000;
-                let imp = 0; let exp = 0;
-                if (r.power_grid > 0) imp = (r.power_grid) * sampleDurationHours / 1000;
-                else exp = Math.abs(r.power_grid) * sampleDurationHours / 1000;
-                if (r.power_battery > 0) stats.batteryCharged += r.power_battery * sampleDurationHours / 1000;
-                else stats.batteryDischarged += Math.abs(r.power_battery) * sampleDurationHours / 1000;
-                stats.production += prod; stats.consumption += cons; stats.imported += imp; stats.exported += exp;
+                
+                // If we have gross energy data from energy_data (CSV import), use it directly
+                let prod, cons, imp, exp, b_c, b_d;
+
+                if (r.grid_consumption_wh !== null && r.grid_consumption_wh !== undefined) {
+                    // Data exists in energy_data table (Hourly Wh)
+                    prod = (r.production_wh || 0) / 1000;
+                    cons = (r.load_wh || 0) / 1000;
+                    imp = (r.grid_consumption_wh || 0) / 1000;
+                    exp = (r.grid_feed_in_wh || 0) / 1000;
+                    b_c = (r.battery_charge_wh || 0) / 1000;
+                    b_d = (r.battery_discharge_wh || 0) / 1000;
+                } else {
+                    // Real-time data from energy_log (Watts) - Calculate as net
+                    let durationHours = 1/60; 
+                    if (idx < rows.length - 1) {
+                        const current = new Date(r.timestamp);
+                        const next = new Date(rows[idx+1].timestamp);
+                        const diffMs = next.getTime() - current.getTime();
+                        if (diffMs > 60000) durationHours = diffMs / (1000 * 60 * 60);
+                        if (durationHours > 24) durationHours = 1/60;
+                    }
+
+                    prod = (r.power_pv || 0) * durationHours / 1000;
+                    cons = (r.power_load || 0) * durationHours / 1000;
+                    if (r.power_grid > 0) {
+                        imp = (r.power_grid) * durationHours / 1000;
+                        exp = 0;
+                    } else {
+                        imp = 0;
+                        exp = Math.abs(r.power_grid) * durationHours / 1000;
+                    }
+                    if (r.power_battery > 0) {
+                        b_d = (r.power_battery) * durationHours / 1000;
+                        b_c = 0;
+                    } else {
+                        b_d = 0;
+                        b_c = Math.abs(r.power_battery) * durationHours / 1000;
+                    }
+                }
+
+                stats.production += prod; 
+                stats.consumption += cons; 
+                stats.imported += imp; 
+                stats.exported += exp;
+                stats.batteryCharged += b_c;
+                stats.batteryDischarged += b_d;
+
                 const selfPoweredKwh = Math.max(0, cons - imp);
                 stats.costSaved += selfPoweredKwh * tariff.costPerKwh;
                 stats.earnings += exp * tariff.feedInTariff;
@@ -1141,55 +1386,377 @@ app.get('/api/history', (req, res) => {
 
             const chartData = [];
             
-            // AGGREGATION LOGIC (JS-side for complex multi-field averaging)
-            // Note: For huge datasets, moving this to SQL GROUP BY is better, but requires complex 'strftime' logic for variable buckets.
-            // Current limit (1 year ~ 525k rows) is handled reasonably by Node.js, but optimized SQL is future work.
-            for (let i = 0; i < rows.length; i += groupBy) {
-                let chunkPv = 0, chunkCons = 0, chunkGrid = 0, chunkBatt = 0, chunkSoc = 0;
-                let chunkAutonomy = 0, chunkSelfCon = 0;
-                let count = 0;
-                const startTime = rows[i].timestamp;
-                const status = rows[i].status_code !== undefined ? rows[i].status_code : 1;
+            if (range === 'year' || range === 'month' || range === 'week') {
+                // AGGREGATED VIEW (Bars)
+                // range='year' -> aggregate by month
+                // range='month'/'week' -> aggregate by day
+                const groups = {};
+                
+                rows.forEach((r, idx) => {
+                    const rowDate = new Date(r.timestamp);
+                    const rowMs = rowDate.getTime();
+                    
+                    // Strict boundary check to avoid "leaking" next year/month points into chart
+                    if (rowMs < startMs || rowMs >= endMs) return;
 
-                for (let j = 0; j < groupBy && (i + j) < rows.length; j++) {
-                    const r = rows[i + j];
-                    chunkPv += r.power_pv || 0;
-                    chunkCons += r.power_load || 0;
-                    chunkGrid += r.power_grid || 0;
-                    chunkBatt += r.power_battery || 0;
-                    chunkSoc += r.soc || 0;
+                    let key = "";
+                    if (range === 'year') {
+                         key = `${rowDate.getFullYear()}-${String(rowDate.getMonth() + 1).padStart(2, '0')}-01 00:00:00`;
+                    } else {
+                         key = `${rowDate.getFullYear()}-${String(rowDate.getMonth() + 1).padStart(2, '0')}-${String(rowDate.getDate()).padStart(2, '0')} 00:00:00`;
+                    }
 
-                    let pImp = r.power_grid > 0 ? r.power_grid : 0;
-                    let pExp = r.power_grid < 0 ? Math.abs(r.power_grid) : 0;
+                    if (!groups[key]) groups[key] = { p: 0, c: 0, g_in: 0, g_out: 0, b_c: 0, b_d: 0, socTotal: 0, count: 0 };
                     
-                    let ptAuto = r.power_load > 0 ? ((r.power_load - pImp) / r.power_load) * 100 : 0;
-                    if (ptAuto < 0) ptAuto = 0;
-                    
-                    let ptSelf = r.power_pv > 0 ? ((r.power_pv - pExp) / r.power_pv) * 100 : 0;
-                    
-                    chunkAutonomy += ptAuto;
-                    chunkSelfCon += ptSelf;
-                    
-                    count++;
-                }
+                    let p, c, i, e, bc, bd, s;
+                    if (r.grid_consumption_wh !== null && r.grid_consumption_wh !== undefined) {
+                        p = r.production_wh || 0;
+                        c = r.load_wh || 0;
+                        i = r.grid_consumption_wh || 0;
+                        e = r.grid_feed_in_wh || 0;
+                        bc = r.battery_charge_wh || 0;
+                        bd = r.battery_discharge_wh || 0;
+                        s = r.soc || 0;
+                    } else {
+                        let durationHours = 1/60; 
+                        if (idx < rows.length - 1) {
+                            const current = new Date(r.timestamp);
+                            const next = new Date(rows[idx+1].timestamp);
+                            const diffMs = next.getTime() - current.getTime();
+                            if (diffMs > 60000) durationHours = diffMs / (1000 * 60 * 60);
+                            if (durationHours > 24) durationHours = 1/60;
+                        }
+                        p = (r.power_pv || 0) * durationHours;
+                        c = (r.power_load || 0) * durationHours;
+                        i = r.power_grid > 0 ? r.power_grid * durationHours : 0;
+                        e = r.power_grid < 0 ? Math.abs(r.power_grid) * durationHours : 0;
+                        bd = r.power_battery > 0 ? r.power_battery * durationHours : 0;
+                        bc = r.power_battery < 0 ? Math.abs(r.power_battery) * durationHours : 0;
+                        s = r.soc || 0;
+                    }
 
-                if (count > 0) {
+                    groups[key].p += p;
+                    groups[key].c += c;
+                    groups[key].g_in += i;
+                    groups[key].g_out += e;
+                    groups[key].b_c += bc;
+                    groups[key].b_d += bd;
+                    groups[key].socTotal += s;
+                    groups[key].count++;
+                });
+
+                Object.keys(groups).sort().forEach(key => {
+                    const g = groups[key];
+                    const n = g.count || 1;
                     chartData.push({
-                        timestamp: startTime,
-                        production: Math.round(chunkPv / count),
-                        consumption: Math.round(chunkCons / count),
-                        grid: Math.round(chunkGrid / count),
-                        battery: Math.round(chunkBatt / count),
-                        soc: Math.round(chunkSoc / count),
-                        autonomy: Math.round(chunkAutonomy / count),
-                        selfConsumption: Math.round(chunkSelfCon / count),
-                        status: status
+                        timestamp: key,
+                        production: Math.round(g.p / 10) / 100, // Wh to kWh rounded to 2 decimals
+                        consumption: Math.round(g.c / 10) / 100,
+                        grid: Math.round((g.g_in - g.g_out) / 10) / 100,
+                        battery: Math.round((g.b_d - g.b_c) / 10) / 100,
+                        soc: Math.round(g.socTotal / n),
+                        autonomy: g.c > 0 ? Math.round(Math.max(0, g.c - g.g_in) / g.c * 100) : 0,
+                        selfConsumption: g.p > 0 ? Math.round(Math.max(0, g.p - g.g_out) / g.p * 100) : 0,
+                        is_aggregated: true // Flag for frontend
                     });
+                });
+
+            } else {
+                // HIGH RESOLUTION VIEW (Area)
+                const targetPoints = 400;
+                const adaptiveGroupBy = rows.length > targetPoints ? Math.ceil(rows.length / targetPoints) : 1;
+
+                for (let i = 0; i < rows.length; i += adaptiveGroupBy) {
+                    let chunkPv = 0, chunkCons = 0, chunkGrid = 0, chunkBatt = 0, chunkSoc = 0;
+                    let chunkAutonomy = 0, chunkSelfCon = 0;
+                    let count = 0;
+                    const startTime = rows[i].timestamp;
+                    const status = rows[i].status_code !== undefined ? rows[i].status_code : 1;
+
+                    for (let j = 0; j < adaptiveGroupBy && (i + j) < rows.length; j++) {
+                        const r = rows[i + j];
+                        // If power is 0 but energy is present (CSV import), use Energy Wh as average Power W
+                        const pPv = (r.power_pv || 0) || (r.production_wh || 0);
+                        const pLoad = (r.power_load || 0) || (r.load_wh || 0);
+                        const pGrid = (r.power_grid || 0) || ((r.grid_consumption_wh || 0) - (r.grid_feed_in_wh || 0));
+                        const pBatt = (r.power_battery || 0) || ((r.battery_discharge_wh || 0) - (r.battery_charge_wh || 0));
+
+                        chunkPv += pPv;
+                        chunkCons += pLoad;
+                        chunkGrid += pGrid;
+                        chunkBatt += pBatt;
+                        chunkSoc += r.soc || 0;
+
+                        let pImp = pGrid > 0 ? pGrid : 0;
+                        let pExp = pGrid < 0 ? Math.abs(pGrid) : 0;
+                        
+                        let ptAuto = (pLoad > 0) ? ((pLoad - pImp) / pLoad) * 100 : 0;
+                        if (ptAuto < 0) ptAuto = 0;
+                        let ptSelf = (pPv > 0) ? ((pPv - pExp) / pPv) * 100 : 0;
+                        
+                        chunkAutonomy += ptAuto;
+                        chunkSelfCon += ptSelf;
+                        count++;
+                    }
+
+                    if (count > 0) {
+                        chartData.push({
+                            timestamp: startTime,
+                            production: Math.round(chunkPv / count),
+                            consumption: Math.round(chunkCons / count),
+                            grid: Math.round(chunkGrid / count),
+                            battery: Math.round(chunkBatt / count),
+                            soc: Math.round(chunkSoc / count),
+                            autonomy: Math.round(chunkAutonomy / count),
+                            selfConsumption: Math.round(chunkSelfCon / count),
+                            status: status
+                        });
+                    }
                 }
             }
             
             res.json({ chart: chartData, stats });
         });
+    });
+});
+
+app.get('/api/energy', (req, res) => {
+    const { start, end } = req.query;
+    
+    // Determine table: energy_log for day/week, energy_data for month/year
+    let query = `
+        SELECT 
+            timestamp, 
+            power_pv as production,
+            power_load as consumption,
+            power_grid as grid,
+            power_battery as battery
+        FROM energy_log
+    `;
+    let params = [];
+
+    if (start && end) {
+        const startTime = new Date(start);
+        const endTime = new Date(end);
+        const diffDays = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60 * 24);
+
+        if (diffDays > 62) {
+            query = `
+                SELECT 
+                    timestamp, 
+                    production_wh as production, 
+                    load_wh as consumption,
+                    (grid_consumption_wh - grid_feed_in_wh) as grid,
+                    (battery_discharge_wh - battery_charge_wh) as battery
+                FROM energy_data
+                WHERE timestamp BETWEEN ? AND ?
+                ORDER BY timestamp ASC
+            `;
+            params = [start, end];
+
+            db.all(query, params, (err, rows) => {
+                if (err) return res.status(500).json({ error: err.message });
+
+                const monthlyData = {};
+                rows.forEach(row => {
+                    const month = row.timestamp.substring(0, 7);
+                    if (!monthlyData[month]) {
+                        monthlyData[month] = { p: 0, c: 0, g: 0, b: 0, count: 0 };
+                    }
+                    monthlyData[month].p += row.production;
+                    monthlyData[month].c += row.consumption;
+                    monthlyData[month].g += row.grid;
+                    monthlyData[month].b += row.battery;
+                    monthlyData[month].count++;
+                });
+
+                const aggregatedRows = Object.keys(monthlyData).map(month => {
+                    const d = monthlyData[month];
+                    const n = d.count || 1;
+                    return {
+                        timestamp: `${month}-01 00:00:00`,
+                        production: d.p / n,
+                        consumption: d.c / n,
+                        grid: d.g / n,
+                        battery: d.b / n
+                    };
+                });
+                return res.json(aggregatedRows);
+            });
+            return;
+        }
+
+        query = `
+            SELECT 
+                timestamp, 
+                power_pv as production,
+                power_load as consumption,
+                power_grid as grid,
+                power_battery as battery
+            FROM energy_log
+            WHERE timestamp BETWEEN ? AND ?
+            ORDER BY timestamp ASC
+        `;
+        params = [start, end];
+    } else {
+        query += ` ORDER BY timestamp DESC LIMIT 288`; 
+    }
+
+    db.all(query, params, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!start) rows.reverse();
+        res.json(rows);
+    });
+});
+
+/**
+ * IMPORT CSV API
+ * Handles file upload and parses CSV data into the database
+ */
+app.post('/api/import-csv', upload.single('file'), (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const mapping = JSON.parse(req.body.mapping || '{}');
+    const filePath = req.file.path;
+    const fileContent = fs.readFileSync(filePath, 'utf8');
+
+    Papa.parse(fileContent, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+             const rows = results.data;
+             if (rows.length === 0) {
+                 if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                 return res.json({ success: true, imported: 0 });
+             }
+
+             // Sort rows by date to find min/max
+             const dateRows = rows.map(r => ({ ...r, _d: new Date(r[mapping.timestamp]) }))
+                                 .filter(r => !isNaN(r._d.getTime()));
+                                 
+             if (dateRows.length === 0) {
+                 if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                 return res.json({ success: true, imported: 0 });
+             }
+
+             const minD = new Date(Math.min(...dateRows.map(r => r._d)));
+             const maxD = new Date(Math.max(...dateRows.map(r => r._d)));
+
+             // Robust check: Is this a summary import (energy values) or live log import (power values)?
+             const isEnergyMapping = mapping.energy_pv !== undefined || 
+                                     mapping.energy_production !== undefined || 
+                                     mapping.energy_load !== undefined ||
+                                     mapping.production_wh !== undefined;
+
+             db.serialize(() => {
+                 db.run("BEGIN TRANSACTION");
+                 
+                 if (isEnergyMapping) {
+                     // Summary Delete: Wipe the ENTIRE year(s) to prevent mixed data and double counting.
+                     const startYear = minD.getFullYear();
+                     const endYear = maxD.getFullYear();
+                     
+                     for (let y = startYear; y <= endYear; y++) {
+                         // We use strings for SQLite timestamp comparison
+                         const yearStart = `${y}-01-01 00:00:00`;
+                         const nextYearStart = `${y+1}-01-01 00:00:00`;
+                         db.run("DELETE FROM energy_log WHERE timestamp >= ? AND timestamp < ?", [yearStart, nextYearStart]);
+                         db.run("DELETE FROM energy_data WHERE timestamp >= ? AND timestamp < ?", [yearStart, nextYearStart]);
+                     }
+                 } else {
+                     // Standard Delete: Just the range covered by the file
+                     const deleteStart = getLocalTimestamp(minD).substring(0, 10) + " 00:00:00";
+                     const deleteEnd = getLocalTimestamp(maxD).substring(0, 10) + " 23:59:59";
+                     db.run("DELETE FROM energy_log WHERE timestamp BETWEEN ? AND ?", [deleteStart, deleteEnd]);
+                     db.run("DELETE FROM energy_data WHERE timestamp BETWEEN ? AND ?", [deleteStart, deleteEnd]);
+                 }
+
+                 const stmtLog = db.prepare(`INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, status_code) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+                 const stmtData = db.prepare(`INSERT INTO energy_data (timestamp, production_wh, grid_consumption_wh, grid_feed_in_wh, battery_charge_wh, battery_discharge_wh, load_wh) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+
+                 let count = 0;
+
+                 dateRows.forEach(row => {
+                     const dbTs = getLocalTimestamp(row._d);
+                     const parseVal = (key) => {
+                         if (!key || row[key] === undefined) return 0;
+                         let valStr = String(row[key]).trim();
+                         valStr = valStr.replace(/[^\d.,-]/g, '').replace(',', '.');
+                         const val = parseFloat(valStr);
+                         return isNaN(val) ? 0 : val;
+                     };
+
+                     if (isEnergyMapping) {
+                         const e_pv = parseVal(mapping.energy_pv);
+                         const e_load = parseVal(mapping.energy_load);
+                         const e_grid_in = parseVal(mapping.energy_grid_in);
+                         const e_grid_out = parseVal(mapping.energy_grid_out);
+                         const e_bat_c = parseVal(mapping.energy_bat_charge);
+                         const e_bat_d = parseVal(mapping.energy_bat_discharge);
+                         
+                         // Fill log with indicator. Since imported energy is usually hourly, Wh = W average for that hour.
+                         stmtLog.run(dbTs, e_pv, e_load, e_grid_in - e_grid_out, e_bat_d - e_bat_c, 0, 1); 
+                         stmtData.run(dbTs, e_pv, e_grid_in, e_grid_out, e_bat_c, e_bat_d, e_load);
+                     } else {
+                         const p_pv = parseVal(mapping.power_pv);
+                         const p_load = parseVal(mapping.power_load);
+                         const p_grid = parseVal(mapping.power_grid);
+                         const p_batt = parseVal(mapping.power_battery);
+                         const soc = parseVal(mapping.soc);
+                         stmtLog.run(dbTs, p_pv, p_load, p_grid, p_batt, soc, 1);
+                     }
+                     count++;
+                 });
+
+                 stmtLog.finalize();
+                 stmtData.finalize();
+                 
+                 db.run("COMMIT", (err) => {
+                     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                     if (err) return res.status(500).json({ error: "Commit failed: " + err.message });
+                     
+                     // Recalculate calibration values after every successful import
+                     updateCalibrationFromDatabase((calibErr) => {
+                        if (calibErr) console.error("Auto-calibration failed:", calibErr);
+                        res.json({ success: true, imported: count });
+                     });
+                 });
+             });
+        },
+        error: (err) => {
+             if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+             res.status(500).json({ error: "CSV Parsing failed: " + err.message });
+        }
+    });
+});
+
+/**
+ * PREVIEW CSV API
+ * Returns the headers and first 5 rows to help user map columns
+ */
+app.post('/api/preview-csv', upload.single('file'), (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const filePath = req.file.path;
+    const fileContent = fs.readFileSync(filePath, 'utf8');
+    
+    // Parse partial
+    Papa.parse(fileContent, {
+        header: true,
+        preview: 5,
+        skipEmptyLines: true,
+        complete: (results) => {
+            fs.unlinkSync(filePath); // Cleanup temp file immediately
+            res.json({ headers: results.meta.fields, preview: results.data });
+        },
+        error: (err) => {
+             fs.unlinkSync(filePath);
+             res.status(500).json({ error: err.message });
+        }
     });
 });
 

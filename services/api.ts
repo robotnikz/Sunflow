@@ -1,5 +1,5 @@
 
-import { InverterData, SystemConfig, HistoryData, TimeRange, Tariff, Expense, RoiData, SystemInfo, ForecastData, BatteryHealthData } from '../types';
+import { InverterData, SystemConfig, HistoryData, TimeRange, Tariff, Expense, RoiData, SystemInfo, ForecastData, BatteryHealthData, SimulationDataPoint } from '../types';
 
 const API_BASE = ''; 
 
@@ -28,8 +28,14 @@ export const getRoiData = async (): Promise<RoiData> => {
 
 export const getBatteryHealth = async (): Promise<BatteryHealthData> => {
   const res = await fetch(`${API_BASE}/api/battery-health`);
-  if (!res.ok) throw new Error("Battery health data failed");
+  if (!res.ok) throw new Error("Battery Health data call failed");
   return res.json();
+};
+
+export const getSimulationData = async (): Promise<SimulationDataPoint[]> => {
+    const res = await fetch(`${API_BASE}/api/simulation-data`);
+    if (!res.ok) throw new Error("Simulation data call failed");
+    return res.json();
 };
 
 export const getConfig = async (): Promise<SystemConfig> => {
@@ -106,4 +112,38 @@ export const deleteExpense = async (id: number): Promise<void> => {
     method: 'DELETE'
   });
   if (!res.ok) throw new Error("Failed to delete expense");
+};
+
+// --- Data Import API ---
+
+export interface CsvPreview {
+    headers: string[];
+    preview: any[]; // Array of rows
+}
+
+export const previewCsv = async (file: File): Promise<CsvPreview> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const res = await fetch(`${API_BASE}/api/preview-csv`, {
+        method: 'POST',
+        body: formData
+    });
+    
+    if (!res.ok) throw new Error("CSV Preview Failed");
+    return res.json();
+};
+
+export const importCsv = async (file: File, mapping: any): Promise<{success: boolean, imported: number, failed: number}> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('mapping', JSON.stringify(mapping));
+    
+    const res = await fetch(`${API_BASE}/api/import-csv`, {
+        method: 'POST',
+        body: formData
+    });
+    
+    if (!res.ok) throw new Error("CSV Import Failed");
+    return res.json();
 };

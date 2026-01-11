@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { SystemConfig, Tariff, Expense, Appliance } from '../types';
-import { X, Save, Plus, Trash2, Calendar, DollarSign, Euro, PoundSterling, MapPin, Zap, History, HelpCircle, Calculator, CheckCircle2, AlertTriangle, ArrowRight, TrendingUp, SunMedium, Battery, Edit, Link2, Send, Sliders, Plug, Activity, Scale, Check, Bell } from 'lucide-react';
+import { X, Save, Plus, Trash2, Calendar, DollarSign, Euro, PoundSterling, MapPin, Zap, History, HelpCircle, Calculator, CheckCircle2, AlertTriangle, ArrowRight, TrendingUp, SunMedium, Battery, Edit, Link2, Send, Sliders, Plug, Activity, Scale, Check, Bell, Upload } from 'lucide-react';
 import { getTariffs, addTariff, deleteTariff, getExpenses, addExpense, deleteExpense } from '../services/api';
 import { ICON_MAP } from './SmartRecommendations';
+import CsvImporter from './CsvImporter';
 
 interface SettingsModalProps {
   currentConfig: SystemConfig;
@@ -165,7 +166,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
   const [isEditingAppliance, setIsEditingAppliance] = useState(false);
 
 
-  const [activeTab, setActiveTab] = useState<'general' | 'notifications' | 'tariffs' | 'expenses' | 'appliances' | 'history'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'notifications' | 'tariffs' | 'expenses' | 'appliances' | 'history' | 'import'>('general');
 
   useEffect(() => {
     loadData();
@@ -410,6 +411,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
           <button onClick={() => setActiveTab('history')} className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors flex items-center justify-center gap-2 ${activeTab === 'history' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}>
             <History size={16} /> Calibration
           </button>
+          <button onClick={() => setActiveTab('import')} className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors flex items-center justify-center gap-2 ${activeTab === 'import' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'}`}>
+            <Upload size={16} /> Data Import
+          </button>
         </div>
         
         {/* Content */}
@@ -616,7 +620,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
           )}
           {activeTab === 'history' && (
             <form onSubmit={handleConfigSubmit} className="space-y-8">
-                 {/* (Standard History Form) */}
                  <div className="bg-slate-900 border border-slate-700 rounded-xl p-5 shadow-inner">
                     <h3 className="text-slate-200 text-sm font-bold mb-3 flex items-center gap-2"><Calculator size={16} className="text-blue-400"/> ROI Calibration Checklist</h3>
                     <div className="space-y-3">
@@ -626,17 +629,116 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                     </div>
                 </div>
                 <div className="space-y-6 pt-4 border-t border-slate-700 mt-6">
-                    <h3 className="text-slate-300 font-bold flex items-center gap-2"><History size={18}/> Pre-App History (Legacy Data)</h3>
-                    <div className="bg-purple-900/20 border border-purple-800 p-4 rounded-lg mb-4"><p className="text-sm text-purple-200 flex items-start gap-2"><HelpCircle size={18} className="shrink-0 mt-0.5"/><span><strong>Was the system running before you installed SunFlow?</strong><br/>Enter the <i>Total Lifetime</i> values from your inverter/meter below. SunFlow will calculate the difference between these values and the data it has recorded to estimate your total lifetime earnings accurately.</span></p></div>
-                    <div><label className="block text-sm font-medium text-white mb-2 flex items-center gap-2"><DollarSign size={16} className="text-green-400"/> Legacy Financial Return</label><div className="flex gap-2"><div className="flex-1 flex items-center bg-slate-900 border border-slate-600 rounded-lg overflow-hidden focus-within:border-yellow-500 transition-colors"><div className="shrink-0 pl-3 pr-2 text-slate-400 font-bold border-r border-slate-700/50">{getCurrencySymbol()}</div><input type="number" step="0.01" value={formData.initialValues?.financialReturn ?? ''} onChange={(e) => setFormData({...formData, initialValues: { ...formData.initialValues || {}, financialReturn: e.target.value as any }})} className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" placeholder="0.00"/></div><button type="button" onClick={handleEstimateFinancials} className="px-3 bg-slate-700 hover:bg-slate-600 rounded-lg border border-slate-600 text-slate-300 transition-colors flex items-center gap-1" title="Estimate based on kWh values below"><Calculator size={16} /> <span className="text-xs font-medium hidden sm:inline">Auto-Calc</span></button></div></div>
+                    <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-slate-300 font-bold flex items-center gap-2"><History size={18}/> Pre-App History (Legacy Data)</h3>
+                        <button 
+                            type="button" 
+                            onClick={() => setActiveTab('import')}
+                            className="text-[10px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-1 rounded hover:bg-blue-500/20 transition-colors flex items-center gap-1"
+                        >
+                            <Upload size={10} /> Tip: Import HA History
+                        </button>
+                    </div>
+                    
+                    <div className="bg-purple-900/20 border border-purple-800 p-4 rounded-lg mb-4">
+                        <p className="text-sm text-purple-200 flex items-start gap-2">
+                            <HelpCircle size={18} className="shrink-0 mt-0.5"/>
+                            <span>
+                                <strong>Was the system running before you installed SunFlow?</strong><br/>
+                                Enter the <i>Total Lifetime</i> values from your inverter or utility meter below. 
+                                <br/><span className="text-xs text-purple-300/80 block mt-1">
+                                    💡 <strong>Pro-Tip:</strong> You can upload your historical data from Home Assistant via the <strong>Data Import</strong> tab. 
+                                    SunFlow will then calculate these values automatically for you after every import!
+                                </span>
+                            </span>
+                        </p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-white mb-2 flex items-center gap-2">
+                            <DollarSign size={16} className="text-green-400"/> Financial Return (Manual Offset)
+                        </label>
+                        <div className="flex gap-4">
+                            <div className="flex-1 flex items-center bg-slate-900 border border-slate-600 rounded-lg overflow-hidden focus-within:border-yellow-500 transition-colors">
+                                <div className="shrink-0 pl-3 pr-2 text-slate-400 font-bold border-r border-slate-700/50">{getCurrencySymbol()}</div>
+                                <input 
+                                    type="number" 
+                                    step="0.01" 
+                                    value={formData.initialValues?.financialReturn ?? ''} 
+                                    onChange={(e) => setFormData({...formData, initialValues: { ...formData.initialValues || {}, financialReturn: e.target.value as any }})} 
+                                    className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0" 
+                                    placeholder="0.00"
+                                />
+                            </div>
+                            <div className="flex-1 bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2 flex items-center justify-between">
+                                <span className="text-xs text-slate-500 uppercase font-bold">In Database:</span>
+                                <span className="text-sm font-bold text-emerald-400">
+                                    {getCurrencySymbol()} {((formData as any).dbTotals?.financialReturn || 0).toFixed(2)}
+                                </span>
+                            </div>
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-2">
+                            The "Manual Offset" is added to the values calculated from your database. Use this for returns earned BEFORE SunFlow started recording.
+                        </p>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
-                         <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700/50"><label className="block text-xs font-bold text-yellow-500 uppercase mb-2">Total Solar Production</label><div className="flex items-center bg-slate-800 border border-slate-600 rounded-lg overflow-hidden focus-within:border-yellow-500 transition-colors"><input type="number" step="0.1" value={formData.initialValues?.production ?? ''} onChange={(e) => setFormData({...formData, initialValues: { ...formData.initialValues || {}, production: e.target.value as any }})} className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0" placeholder="0"/><div className="shrink-0 px-3 py-2 bg-slate-700 text-slate-200 text-xs font-bold border-l border-slate-600">kWh</div></div></div>
-                         <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700/50"><label className="block text-xs font-bold text-green-500 uppercase mb-2">Total Grid Export</label><div className="flex items-center bg-slate-800 border border-slate-600 rounded-lg overflow-hidden focus-within:border-green-500 transition-colors"><input type="number" step="0.1" value={formData.initialValues?.export ?? ''} onChange={(e) => setFormData({...formData, initialValues: { ...formData.initialValues || {}, export: e.target.value as any }})} className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0" placeholder="0"/><div className="shrink-0 px-3 py-2 bg-slate-700 text-slate-200 text-xs font-bold border-l border-slate-600">kWh</div></div></div>
-                         <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700/50"><label className="block text-xs font-bold text-red-400 uppercase mb-2">Total Grid Import</label><div className="flex items-center bg-slate-800 border border-slate-600 rounded-lg overflow-hidden focus-within:border-red-500 transition-colors"><input type="number" step="0.1" value={formData.initialValues?.import ?? ''} onChange={(e) => setFormData({...formData, initialValues: { ...formData.initialValues || {}, import: e.target.value as any }})} className="flex-1 bg-transparent border-none px-3 py-2 text-white focus:outline-none placeholder-slate-600 min-w-0" placeholder="0"/><div className="shrink-0 px-3 py-2 bg-slate-700 text-slate-200 text-xs font-bold border-l border-slate-600">kWh</div></div></div>
+                         <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/50 space-y-3">
+                             <div>
+                                <label className="block text-[10px] font-bold text-yellow-500 uppercase mb-1">Total Solar Yield</label>
+                                <div className="text-xl font-bold text-white">{( (formData.initialValues?.production || 0) + ((formData as any).dbTotals?.production || 0) ).toLocaleString()} <span className="text-xs text-slate-500 font-normal">kWh</span></div>
+                             </div>
+                             <div className="pt-2 border-t border-slate-700/50">
+                                <label className="block text-[9px] text-slate-500 uppercase mb-1">Manual Offset</label>
+                                <div className="flex items-center bg-slate-800 border border-slate-600 rounded-md overflow-hidden transition-colors">
+                                    <input type="number" step="1" value={formData.initialValues?.production ?? ''} onChange={(e) => setFormData({...formData, initialValues: { ...formData.initialValues || {}, production: parseInt(e.target.value) || 0 }})} className="w-full bg-transparent border-none px-2 py-1 text-sm text-white focus:outline-none" placeholder="0"/>
+                                    <div className="px-2 text-[10px] text-slate-500 font-bold border-l border-slate-600">kWh</div>
+                                </div>
+                             </div>
+                         </div>
+
+                         <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/50 space-y-3">
+                             <div>
+                                <label className="block text-[10px] font-bold text-green-500 uppercase mb-1">Total Grid Export</label>
+                                <div className="text-xl font-bold text-white">{( (formData.initialValues?.export || 0) + ((formData as any).dbTotals?.export || 0) ).toLocaleString()} <span className="text-xs text-slate-500 font-normal">kWh</span></div>
+                             </div>
+                             <div className="pt-2 border-t border-slate-700/50">
+                                <label className="block text-[9px] text-slate-500 uppercase mb-1">Manual Offset</label>
+                                <div className="flex items-center bg-slate-800 border border-slate-600 rounded-md overflow-hidden transition-colors">
+                                    <input type="number" step="1" value={formData.initialValues?.export ?? ''} onChange={(e) => setFormData({...formData, initialValues: { ...formData.initialValues || {}, export: parseInt(e.target.value) || 0 }})} className="w-full bg-transparent border-none px-2 py-1 text-sm text-white focus:outline-none" placeholder="0"/>
+                                    <div className="px-2 text-[10px] text-slate-500 font-bold border-l border-slate-600">kWh</div>
+                                </div>
+                             </div>
+                         </div>
+
+                         <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/50 space-y-3">
+                             <div>
+                                <label className="block text-[10px] font-bold text-red-400 uppercase mb-1">Total Grid Import</label>
+                                <div className="text-xl font-bold text-white">{( (formData.initialValues?.import || 0) + ((formData as any).dbTotals?.import || 0) ).toLocaleString()} <span className="text-xs text-slate-500 font-normal">kWh</span></div>
+                             </div>
+                             <div className="pt-2 border-t border-slate-700/50">
+                                <label className="block text-[9px] text-slate-500 uppercase mb-1">Manual Offset</label>
+                                <div className="flex items-center bg-slate-800 border border-slate-600 rounded-md overflow-hidden transition-colors">
+                                    <input type="number" step="1" value={formData.initialValues?.import ?? ''} onChange={(e) => setFormData({...formData, initialValues: { ...formData.initialValues || {}, import: parseInt(e.target.value) || 0 }})} className="w-full bg-transparent border-none px-2 py-1 text-sm text-white focus:outline-none" placeholder="0"/>
+                                    <div className="px-2 text-[10px] text-slate-500 font-bold border-l border-slate-600">kWh</div>
+                                </div>
+                             </div>
+                         </div>
                     </div>
                 </div>
                 <div className="pt-4 flex justify-end gap-3 border-t border-slate-700 mt-6"><button type="submit" className="flex items-center gap-2 px-6 py-2 bg-yellow-500 text-slate-900 font-bold rounded-lg hover:bg-yellow-400 transition shadow-lg shadow-yellow-500/20"><Save size={18} /> Save Calibration</button></div>
             </form>
+          )}
+          {activeTab === 'import' && (
+             <CsvImporter onSuccess={async () => {
+                // When an import is successful, the server automatically recalculates calibration.
+                // We re-fetch the config here to show the new values in the Calibration tab.
+                try {
+                    const cfg = await getConfig();
+                    setFormData(cfg);
+                    // Also notify Dashboard to refresh stats
+                    onSave && onSave(cfg);
+                } catch(e) { console.error("Auto-refresh after import failed", e); }
+             }} />
           )}
 
         </div>
