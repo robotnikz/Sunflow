@@ -61,6 +61,7 @@ describe('SettingsModal Interaction', () => {
     expect(onSaveMock.mock.calls[0][0].inverterIp).toBe('192.168.1.100');
   });
 
+
   it('konfiguriert Battery Health Notification korrekt', async () => {
     render(<SettingsModal currentConfig={mockConfig} onSave={onSaveMock} onClose={onCloseMock} />);
     
@@ -91,5 +92,61 @@ describe('SettingsModal Interaction', () => {
     const savedConfig = onSaveMock.mock.calls[0][0];
     expect(savedConfig.notifications.triggers.batteryHealth).toBe(true);
     expect(savedConfig.notifications.sohThreshold).toBe(80);
+  });
+
+  it('zeigt Calibration Tab und berechnet Summen korrekt', async () => {
+      // Config mit DB Totals
+      const configWithDb = {
+          ...mockConfig,
+          initialValues: { production: 1000, import: 500, export: 200, financialReturn: 50 },
+          dbTotals: { production: 5000, import: 200, export: 4000, financialReturn: 100 }
+      };
+
+      const { container } = render(<SettingsModal currentConfig={configWithDb} onSave={onSaveMock} onClose={onCloseMock} />);
+      
+      // Suche den Tab für History/Calibration. 
+      // Der Text im Button ist "Calibration" (Zeile 413), nicht "History" (Icon)!
+      const calibTab = screen.getAllByRole('button', { name: /Calibration/i })[0]; 
+      fireEvent.click(calibTab);
+
+      await waitFor(() => {
+          expect(screen.getByText(/Pre-App History/i)).toBeInTheDocument();
+      });
+
+      // Prüfen ob Summen korrekt angezeigt werden (Initial + DB)
+      // Production: 1000 + 5000 = 6,000
+      // Note: Value is inside a div along with a span "kWh", so strict string match fails. Use Regex.
+      // Locale might vary, so we match 6 followed by any separator and 000
+      expect(screen.getByText(/6[,\.\s]?000/)).toBeInTheDocument();
+      
+      // Eingabewert ändern (Manual Offset)
+      const prodInputs = container.querySelectorAll('input[type="number"]');
+      // Es gibt viele Inputs, wir suchen den für Production Offset (Value = 1000)
+      const offsetInput = Array.from(prodInputs).find(i => (i as HTMLInputElement).value === '1000');
+      
+      if(offsetInput) {
+          fireEvent.change(offsetInput, { target: { value: '2000' } });
+          fireEvent.click(screen.queryAllByRole('button', { name: /Save Calibration/i })[0]); // Manchmal mehrfach gematcht
+          
+          await waitFor(() => {
+              expect(onSaveMock).toHaveBeenCalled();
+          });
+          
+          // Check ob neuer Wert (2000) im Save-Call war
+          expect(onSaveMock.mock.calls[0][0].initialValues.production).toBe(2000);
+      } else {
+          throw new Error("Offset Input not found");
+      }
+  });
+
+  it('navigiert zum Import Tab', async () => {
+      render(<SettingsModal currentConfig={mockConfig} onSave={onSaveMock} onClose={onCloseMock} />);
+      const importTab = screen.getByRole('button', { name: /Data Import/i });
+      fireEvent.click(importTab);
+      
+      await waitFor(() => {
+          // Prüft ob CsvImporter gerendert wird (Key Text)
+          expect(screen.getAllByText(/Click to upload/i).length).toBeGreaterThan(0);
+      });
   });
 });
