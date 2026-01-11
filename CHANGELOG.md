@@ -1,3 +1,11 @@
+## [1.3.7](https://github.com/robotnikz/Sunflow/compare/v1.3.6...v1.3.7) (2026-01-11)
+
+
+### Bug Fixes
+
+* expenses, prices are not visisble anymore ([d40355c](https://github.com/robotnikz/Sunflow/commit/d40355cf3878830c814ea5a0244301bf6b7474c8))
+* version not visible in header ([e6a7c12](https://github.com/robotnikz/Sunflow/commit/e6a7c122b64647e7ba6c89c78163cdf8a8177705))
+
 ## [1.3.6](https://github.com/robotnikz/Sunflow/compare/v1.3.5...v1.3.6) (2026-01-11)
 
 
