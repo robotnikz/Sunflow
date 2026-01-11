@@ -1,3 +1,10 @@
+## [1.3.6](https://github.com/robotnikz/Sunflow/compare/v1.3.5...v1.3.6) (2026-01-11)
+
+
+### Bug Fixes
+
+* trigger release ([42f48dd](https://github.com/robotnikz/Sunflow/commit/42f48dd916d4757e58f0aa39c5c31d2d4120e6a6))
+
 ## [1.3.5](https://github.com/robotnikz/Sunflow/compare/v1.3.4...v1.3.5) (2026-01-10)
 
 
