@@ -14,7 +14,7 @@ import WeatherWidget from './WeatherWidget';
 import SmartRecommendations from './SmartRecommendations';
 import BatteryHealthWidget from './BatteryHealthWidget';
 import { getHistory, getRoiData, getForecast, getBatteryHealth } from '../services/api';
-import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp, ShieldCheck, Download } from 'lucide-react';
+import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp, ShieldCheck, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface DashboardProps {
   data: InverterData | null;
@@ -41,6 +41,7 @@ const SkeletonCard = ({ height = "h-64" }: { height?: string }) => (
 
 const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigger }) => {
   const [timeRange, setTimeRange] = useState<TimeRange>('day');
+  const [timeOffset, setTimeOffset] = useState(0);
   
   // Main History State (for Charts & Stats) - Controlled by TimeRange selector
   const [history, setHistory] = useState<HistoryData | null>(null);
@@ -67,7 +68,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
     // Refresh history every 60s (Standard monitoring interval)
     const interval = setInterval(fetchHistory, 60000); 
     return () => clearInterval(interval);
-  }, [timeRange, startDate, endDate, refreshTrigger]); 
+  }, [timeRange, startDate, endDate, refreshTrigger, timeOffset]); 
 
   // 2. Fetch Status History (Fixed 24h for Timeline)
   useEffect(() => {
@@ -179,7 +180,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
 
     setLoadingHist(true);
     try {
-      const hist = await getHistory(timeRange, startDate, endDate);
+      const hist = await getHistory(timeRange, startDate, endDate, timeOffset);
       setHistory(hist);
     } catch (e) {
       console.error("History fetch failed", e);
@@ -360,11 +361,30 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                 Statistics & Analysis
             </h2>
             <div className="flex flex-wrap items-center gap-2">
+                {timeRange !== 'custom' && (
+                  <div className="flex items-center bg-slate-900 rounded-lg p-1 border border-slate-700">
+                      <button 
+                        onClick={() => setTimeOffset(prev => prev - 1)}
+                        className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+                        title="Previous Period"
+                      >
+                         <ChevronLeft size={18} />
+                      </button>
+                      <button 
+                        onClick={() => setTimeOffset(prev => prev + 1)}
+                        disabled={timeOffset >= 0}
+                        className={`p-1.5 rounded-md transition-colors ${timeOffset >= 0 ? 'text-slate-600 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                        title="Next Period"
+                      >
+                         <ChevronRight size={18} />
+                      </button>
+                  </div>
+                )}
                 <div className="flex flex-wrap bg-slate-900 rounded-lg p-1 border border-slate-700">
                     {(['hour', 'day', 'week', 'month', 'year', 'custom'] as TimeRange[]).map((range) => (
                         <button
                             key={range}
-                            onClick={() => setTimeRange(range)}
+                            onClick={() => { setTimeRange(range); setTimeOffset(0); }}
                             className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
                                 timeRange === range 
                                 ? 'bg-slate-700 text-white shadow ring-1 ring-slate-600' 
