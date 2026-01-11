@@ -20,10 +20,13 @@ const semver = require('semver');
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Robust package.json loading
-let packageJson = { version: "0.0.0" };
+// Robust package.json loading for versioning
+let packageJson = { version: "1.3.5" }; 
 try {
-    packageJson = require(path.join(__dirname, 'package.json'));
+    const pkgPath = path.join(__dirname, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+        packageJson = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    }
 } catch (e) {
     console.error("Failed to load package.json:", e.message);
 }
@@ -170,16 +173,16 @@ const sendDiscordNotification = async (webhookUrl, title, description, color, fi
 };
 
 let solcastCache = { timestamp: 0, data: null };
-const notifyState = { previousSoc: 0, previousStatus: 1, smartAdviceCounters: {}, lastSmartAdviceSent: 0, lastSohCheck: 0 };
+const notifyState = { previousSoc: 0, previousStatus: 1, lastSmartAdviceSent: 0, lastSohCheck: 0 };
 
 setInterval(async () => {
     const config = getConfig();
     if (!config.inverterIp) return;
     const rawData = await fetchFroniusData(config.inverterIp);
     let p_pv = 0, p_load = 0, p_grid = 0, p_batt = 0, soc = 0, e_day = 0;
-    let statusCode = 0;
+    let statusCode = 1;
+
     if (rawData && rawData.Body && rawData.Body.Data) {
-        const apiCode = rawData.Head?.Status?.Code;
         const site = rawData.Body.Data.Site;
         const inverters = rawData.Body.Data.Inverters;
         const inverterKey = Object.keys(inverters)[0]; 
@@ -190,29 +193,28 @@ setInterval(async () => {
         p_grid = site.P_Grid || 0;
         p_batt = site.P_Akku || 0;
         e_day = site.E_Day || 0;
-        if (apiCode === 0) {
-            const deviceStatus = inverterData?.StatusCode;
-            if (deviceStatus === 7) statusCode = 1; 
-            else if (deviceStatus === 8 || deviceStatus === 9) statusCode = 3; 
-            else if (deviceStatus >= 10) statusCode = 2; 
-            else { statusCode = (Math.abs(p_pv) < 5 && Math.abs(p_batt) < 10) ? 3 : 1; }
-        } else { statusCode = 2; }
-    } else { statusCode = 0; }
-    
-    // Notifications Logic
-    if (config.notifications?.enabled && config.notifications?.discordWebhook) {
-        const nConfig = config.notifications;
-        if (nConfig.triggers.errors && statusCode === 2 && notifyState.previousStatus !== 2) {
-            await sendDiscordNotification(nConfig.discordWebhook, "⚠️ Inverter Error", "The inverter is reporting an error state.", 15158332); 
+
+        // Simple status detection
+        const apiCode = rawData.Head?.Status?.Code;
+        if (apiCode !== 0) statusCode = 2; // Error
+        else if (Math.abs(p_pv) < 5 && Math.abs(p_batt) < 10) statusCode = 3; // Idle
+        else statusCode = 1; // Running
+
+        // Notifications
+        if (config.notifications?.enabled && config.notifications?.discordWebhook) {
+            const nConfig = config.notifications;
+            if (nConfig.triggers.errors && statusCode === 2 && notifyState.previousStatus !== 2) {
+                await sendDiscordNotification(nConfig.discordWebhook, "⚠️ Inverter Error", "The inverter is reporting an error state.", 15158332); 
+            }
+            if (nConfig.triggers.batteryFull && soc === 100 && notifyState.previousSoc < 100) {
+                await sendDiscordNotification(nConfig.discordWebhook, "🔋 Battery Full", "Storage has reached 100% capacity.", 5763719); 
+            }
+            if (nConfig.triggers.batteryEmpty && soc <= 7 && notifyState.previousSoc > 7) {
+                await sendDiscordNotification(nConfig.discordWebhook, "🪫 Battery Low", `Storage level dropped to ${Math.round(soc)}%.`, 15105570); 
+            }
+            notifyState.previousSoc = soc;
+            notifyState.previousStatus = statusCode;
         }
-        notifyState.previousStatus = statusCode;
-        if (nConfig.triggers.batteryFull && soc === 100 && notifyState.previousSoc < 100) {
-            await sendDiscordNotification(nConfig.discordWebhook, "🔋 Battery Full", "Storage has reached 100% capacity.", 5763719); 
-        }
-        if (nConfig.triggers.batteryEmpty && soc <= 7 && notifyState.previousSoc > 7) {
-            await sendDiscordNotification(nConfig.discordWebhook, "🪫 Battery Low", `Storage level dropped to ${Math.round(soc)}%.`, 15105570); 
-        }
-        notifyState.previousSoc = soc;
     }
 
     const timestamp = getLocalTimestamp();
@@ -221,6 +223,7 @@ setInterval(async () => {
     stmt.finalize();
 }, 60 * 1000);
 
+// Info & Versioning
 let versionCache = { lastCheck: 0, data: { latestVersion: packageJson.version, updateAvailable: false, releaseUrl: '' } };
 const getVersionInfo = async () => {
     const now = Date.now();
@@ -228,15 +231,26 @@ const getVersionInfo = async () => {
     try {
         const response = await axios.get(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`, { headers: { 'User-Agent': 'Sunflow' }, timeout: 5000 });
         const cleanLatest = semver.clean(response.data?.tag_name);
-        versionCache = { lastCheck: now, data: { latestVersion: cleanLatest || packageJson.version, updateAvailable: semver.gt(cleanLatest, packageJson.version), releaseUrl: response.data.html_url } };
-    } catch (e) { versionCache.lastCheck = now - 3300000; }
+        versionCache = { 
+            lastCheck: now, 
+            data: { 
+                latestVersion: cleanLatest || packageJson.version, 
+                updateAvailable: cleanLatest ? semver.gt(cleanLatest, packageJson.version) : false, 
+                releaseUrl: response.data.html_url 
+            } 
+        };
+    } catch (e) { 
+        versionCache.lastCheck = now - 3300000; 
+    }
     return { version: packageJson.version, ...versionCache.data };
 };
 
-// --- ENDPOINTS ---
+// --- API ENDPOINTS ---
+
 app.get('/api/config', (req, res) => res.json(getConfig()));
 app.post('/api/config', (req, res) => { saveConfig(req.body); res.json({ success: true }); });
 app.get('/api/info', async (req, res) => res.json(await getVersionInfo()));
+
 app.post('/api/test-notification', async (req, res) => {
     const { webhookUrl } = req.body;
     await sendDiscordNotification(webhookUrl, "🔔 Test Notification", "SunFlow notifications are working correctly!", 16776960);
@@ -255,7 +269,7 @@ app.get('/api/forecast', async (req, res) => {
 });
 
 app.get('/api/tariffs', (req, res) => {
-    db.all("SELECT id, valid_from as validFrom, cost_per_kwh as costPerKwh, feed_in_tariff as feedInTariff FROM tariffs ORDER BY valid_from ASC", (err, rows) => res.json(rows));
+    db.all("SELECT id, valid_from as validFrom, cost_per_kwh as costPerKwh, feed_in_tariff as feedInTariff FROM tariffs ORDER BY valid_from ASC", (err, rows) => res.json(rows || []));
 });
 app.post('/api/tariffs', (req, res) => {
     const { validFrom, costPerKwh, feedInTariff } = req.body;
@@ -265,7 +279,7 @@ app.post('/api/tariffs', (req, res) => {
 app.delete('/api/tariffs/:id', (req, res) => db.run("DELETE FROM tariffs WHERE id = ?", req.params.id, () => res.json({ success: true })));
 
 app.get('/api/expenses', (req, res) => {
-    db.all("SELECT id, name, amount, type, date FROM expenses ORDER BY date ASC", (err, rows) => res.json(rows));
+    db.all("SELECT id, name, amount, type, date FROM expenses ORDER BY date ASC", (err, rows) => res.json(rows || []));
 });
 app.post('/api/expenses', (req, res) => {
     const { name, amount, type, date } = req.body;
@@ -276,12 +290,15 @@ app.delete('/api/expenses/:id', (req, res) => db.run("DELETE FROM expenses WHERE
 
 app.get('/api/data', async (req, res) => {
     const config = getConfig();
+    if (!config.inverterIp) return res.status(400).json({ error: "No Inverter IP" });
     const rawData = await fetchFroniusData(config.inverterIp);
-    if (!rawData) return res.status(500).json({ error: "No Inverter Data" });
+    if (!rawData || !rawData.Body || !rawData.Body.Data) return res.status(502).json({ error: "Inverter Offline" });
     const site = rawData.Body.Data.Site;
+    const inverters = rawData.Body.Data.Inverters;
+    const inverterKey = Object.keys(inverters)[0];
     res.json({
         power: { pv: Math.round(site.P_PV || 0), load: Math.round(Math.abs(site.P_Load || 0)), grid: Math.round(site.P_Grid || 0), battery: Math.round(site.P_Akku || 0) },
-        battery: { soc: rawData.Body.Data.Inverters[Object.keys(rawData.Body.Data.Inverters)[0]]?.SOC || 0, state: site.P_Akku < -10 ? 'charging' : site.P_Akku > 10 ? 'discharging' : 'idle' },
+        battery: { soc: inverters[inverterKey]?.SOC || 0, state: site.P_Akku < -10 ? 'charging' : site.P_Akku > 10 ? 'discharging' : 'idle' },
         energy: { today: { production: (site.E_Day || 0) / 1000 } },
         autonomy: Math.round(site.rel_Autonomy || 0),
         selfConsumption: Math.round(site.rel_SelfConsumption || 0)
@@ -290,8 +307,9 @@ app.get('/api/data', async (req, res) => {
 
 app.get('/api/battery-health', (req, res) => {
     db.all("SELECT strftime('%Y-%m-%d', timestamp) as date, SUM(CASE WHEN power_battery < -10 THEN ABS(power_battery) ELSE 0 END) as total_charge_w, SUM(CASE WHEN power_battery > 10 THEN power_battery ELSE 0 END) as total_discharge_w, MIN(soc) as min_soc, MAX(soc) as max_soc FROM energy_log WHERE power_battery != 0 GROUP BY date ORDER BY date ASC", [], (err, rows) => {
-        let totalCycles = 0, weightedEffSum = 0, totalEffSamples = 0, latestCapacity = 0;
-        const dataPoints = rows.map(r => {
+        if (err) return res.status(500).json({ error: err.message });
+        let totalCycles = 0, latestCapacity = 0, weightedEffSum = 0, totalEffSamples = 0;
+        const dataPoints = (rows || []).map(r => {
             const chargedKwh = (r.total_charge_w / 60) / 1000;
             const dischargedKwh = (r.total_discharge_w / 60) / 1000;
             if (chargedKwh > 0.5) { weightedEffSum += Math.min(99, (dischargedKwh / chargedKwh) * 100); totalEffSamples++; }
@@ -304,6 +322,7 @@ app.get('/api/battery-health', (req, res) => {
 });
 
 const getTariffForTime = (tariffs, timestamp) => {
+    if (!tariffs || tariffs.length === 0) return { costPerKwh: 0.30, feedInTariff: 0.08 };
     let activeTariff = tariffs[0];
     const datePart = timestamp.substring(0, 10);
     for (const t of tariffs) { if (t.validFrom <= datePart) activeTariff = t; else break; }
@@ -313,18 +332,18 @@ const getTariffForTime = (tariffs, timestamp) => {
 app.get('/api/roi', (req, res) => {
     const config = getConfig();
     db.all("SELECT * FROM expenses", [], (err, expenses) => {
-        db.all("SELECT id, valid_from as validFrom, cost_per_kwh as costPerKwh, feed_in_tariff as feedInTariff FROM tariffs ORDER BY valid_from ASC", [], (err, tariffs) => {
+        db.all("SELECT valid_from as validFrom, cost_per_kwh as costPerKwh, feed_in_tariff as feedInTariff FROM tariffs ORDER BY valid_from ASC", [], (err, tariffs) => {
             db.all("SELECT timestamp, power_load, power_grid FROM energy_log", [], (err, rows) => {
                 let dbReturned = 0;
-                rows.forEach(r => {
+                (rows || []).forEach(r => {
                     const t = getTariffForTime(tariffs, r.timestamp);
                     const imp = r.power_grid > 0 ? r.power_grid / 60000 : 0;
                     const exp = r.power_grid < 0 ? Math.abs(r.power_grid) / 60000 : 0;
                     const self = Math.max(0, (r.power_load / 60000) - imp);
                     dbReturned += (self * t.costPerKwh) + (exp * t.feedInTariff);
                 });
-                let totalInvested = expenses.reduce((sum, e) => sum + e.amount, 0);
-                res.json({ totalInvested, totalReturned: dbReturned + (config.initialValues?.financialReturn || 0), netValue: (dbReturned + (config.initialValues?.financialReturn || 0)) - totalInvested, roiPercent: totalInvested > 0 ? ((dbReturned + (config.initialValues?.financialReturn || 0)) / totalInvested) * 100 : 0, expenses });
+                let totalInvested = (expenses || []).reduce((sum, e) => sum + e.amount, 0);
+                res.json({ totalInvested, totalReturned: dbReturned + (config.initialValues?.financialReturn || 0), netValue: (dbReturned + (config.initialValues?.financialReturn || 0)) - totalInvested, roiPercent: totalInvested > 0 ? ((dbReturned + (config.initialValues?.financialReturn || 0)) / totalInvested) * 100 : 0, expenses: expenses || [] });
             });
         });
     });
@@ -349,10 +368,10 @@ app.get('/api/history', (req, res) => {
     const eLimit = offset === 0 ? getLocalTimestamp(now) : getLocalTimestamp(endObj);
     const queryTime = `timestamp BETWEEN '${getLocalTimestamp(startObj)}' AND '${eLimit}'`;
 
-    db.all("SELECT id, valid_from as validFrom, cost_per_kwh as costPerKwh, feed_in_tariff as feedInTariff FROM tariffs ORDER BY valid_from ASC", [], (err, tariffs) => {
+    db.all("SELECT valid_from as validFrom, cost_per_kwh as costPerKwh, feed_in_tariff as feedInTariff FROM tariffs ORDER BY valid_from ASC", [], (err, tariffs) => {
         db.all(`SELECT * FROM energy_log WHERE ${queryTime} ORDER BY timestamp ASC`, [], (err, rows) => {
             let stats = { production: 0, consumption: 0, imported: 0, exported: 0, costSaved: 0, earnings: 0 };
-            rows.forEach(r => {
+            (rows || []).forEach(r => {
                 const t = getTariffForTime(tariffs, r.timestamp);
                 const imp = r.power_grid > 0 ? r.power_grid / 60000 : 0;
                 const exp = r.power_grid < 0 ? Math.abs(r.power_grid) / 60000 : 0;
@@ -361,7 +380,7 @@ app.get('/api/history', (req, res) => {
                 stats.costSaved += self * t.costPerKwh; stats.earnings += exp * t.feedInTariff;
             });
             const chartData = [];
-            for (let i = 0; i < rows.length; i += groupBy) {
+            for (let i = 0; i < (rows || []).length; i += groupBy) {
                 let chunk = { p: 0, l: 0, g: 0, b: 0, s: 0, count: 0 };
                 for (let j = 0; j < groupBy && (i + j) < rows.length; j++) {
                     const r = rows[i + j]; chunk.p += r.power_pv; chunk.l += r.power_load; chunk.g += r.power_grid; chunk.b += r.power_battery; chunk.s += r.soc; chunk.count++;
