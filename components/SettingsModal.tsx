@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { SystemConfig, Tariff, Expense, Appliance } from '../types';
 import { X, Save, Plus, Trash2, Calendar, DollarSign, Euro, PoundSterling, MapPin, Zap, History, HelpCircle, Calculator, CheckCircle2, AlertTriangle, ArrowRight, TrendingUp, SunMedium, Battery, Edit, Link2, Send, Sliders, Plug, Activity, Scale, Check, Bell, Upload } from 'lucide-react';
-import { getTariffs, addTariff, deleteTariff, getExpenses, addExpense, deleteExpense } from '../services/api';
+import { getTariffs, addTariff, deleteTariff, getExpenses, addExpense, deleteExpense, getConfig } from '../services/api';
 import { ICON_MAP } from './SmartRecommendations';
 import CsvImporter from './CsvImporter';
 
