@@ -17,5 +17,4 @@ services:
       - ./sunflow-data:/app/data
       
     environment:
-      # Set your timezone for correct logging
       - TZ=Europe/Berlin
