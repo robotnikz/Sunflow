@@ -20,12 +20,16 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@types/multer": "^2.0.0",
+    "@types/papaparse": "^5.5.2",
     "axios": "^1.7.9",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.0.0",
     "lucide-react": "^0.454.0",
+    "multer": "^2.0.2",
+    "papaparse": "^5.5.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.15.0",
@@ -33,6 +37,8 @@
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
     "@testing-library/jest-dom": "^6.5.0",
     "@testing-library/react": "^16.0.0",
     "@types/node": "^22.10.1",
@@ -44,13 +50,11 @@
     "eslint": "^9.9.0",
     "jsdom": "^25.0.0",
     "postcss": "^8.4.49",
+    "semantic-release": "^24.2.0",
     "tailwindcss": "^3.4.16",
     "typescript": "^5.7.2",
     "vite": "^5.4.11",
-    "vitest": "^2.1.0",
-    "semantic-release": "^24.2.0",
-    "@semantic-release/git": "^10.0.1",
-    "@semantic-release/changelog": "^6.0.3"
+    "vitest": "^2.1.0"
   },
   "release": {
     "branches": [

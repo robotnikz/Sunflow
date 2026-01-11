@@ -57,6 +57,12 @@ export interface SystemConfig {
     export?: number; // kWh
     financialReturn?: number; // Money amount already saved/earned before app installation
   };
+  dbTotals?: {
+    production?: number;
+    import?: number;
+    export?: number;
+    financialReturn?: number;
+  };
   appliances?: Appliance[]; // Custom list of user devices
   notifications?: NotificationConfig;
 }
@@ -103,6 +109,12 @@ export interface InverterData {
   autonomy: number;      // Realtime %
   selfConsumption: number; // Realtime %
 }
+
+export type SimulationDataPoint = {
+    t: number; // timestamp
+    p: number; // pv power
+    l: number; // load power
+};
 
 export interface HistoryData {
   chart: Array<{

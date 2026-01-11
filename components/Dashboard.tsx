@@ -13,8 +13,9 @@ import AmortizationWidget from './AmortizationWidget';
 import WeatherWidget from './WeatherWidget';
 import SmartRecommendations from './SmartRecommendations';
 import BatteryHealthWidget from './BatteryHealthWidget';
+import ScenarioPlanner from './ScenarioPlanner';
 import { getHistory, getRoiData, getForecast, getBatteryHealth } from '../services/api';
-import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp, ShieldCheck, Download, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp, ShieldCheck, Download, ChevronLeft, ChevronRight, History } from 'lucide-react';
 
 interface DashboardProps {
   data: InverterData | null;
@@ -189,6 +190,52 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
     }
   };
 
+  const getTimeLabel = () => {
+    const now = new Date();
+    if (timeRange === 'custom') {
+       return `${new Date(startDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()}`;
+    }
+    
+    const getStartOfWeek = (d: Date) => {
+        const date = new Date(d);
+        const day = date.getDay();
+        const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+        date.setDate(diff);
+        date.setHours(0,0,0,0);
+        return date;
+    };
+
+    switch(timeRange) {
+        case 'hour': {
+            const d = new Date(now);
+            d.setHours(d.getHours() + timeOffset);
+            return d.toLocaleString('en-US', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+        }
+        case 'day': {
+            const d = new Date(now);
+            d.setDate(d.getDate() + timeOffset);
+            return d.toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+        case 'week': {
+            const refDate = new Date(now);
+            refDate.setDate(refDate.getDate() + (timeOffset * 7));
+            const start = getStartOfWeek(refDate);
+            const end = new Date(start);
+            end.setDate(end.getDate() + 6);
+            return `${start.toLocaleDateString('en-US', { day: '2-digit', month: '2-digit' })} - ${end.toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
+        }
+        case 'month': {
+            const d = new Date(now.getFullYear(), now.getMonth() + timeOffset, 1);
+            return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        }
+        case 'year': {
+            const d = new Date(now.getFullYear() + timeOffset, 0, 1);
+            return d.getFullYear().toString();
+        }
+        default: return '';
+    }
+  };
+
   const handleDownloadCSV = () => {
       if (!history || !history.chart) return;
 
@@ -294,6 +341,11 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
         </div>
       </div>
 
+      {/* --- FEATURE: SCENARIO PLANNER --- */}
+      <div className="animate-fade-in mb-6">
+        <ScenarioPlanner config={config} />
+      </div>
+
       {/* --- SECTION 2: SYSTEM HEALTH & FORECAST --- */}
       {/* Reverted to 3 Columns for cleaner look. Battery Health moved to History Section. */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
@@ -356,10 +408,16 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
       <div className="flex flex-col bg-slate-800/60 backdrop-blur p-2 rounded-xl border border-slate-700/50 mt-4 gap-4 sticky top-[70px] z-20 shadow-lg">
         
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-            <h2 className="text-lg font-semibold text-slate-200 px-2 flex items-center gap-2">
-                <Calendar size={18} className="text-blue-400"/>
-                Statistics & Analysis
-            </h2>
+            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 w-full sm:w-auto">
+                <h2 className="text-lg font-semibold text-slate-200 px-2 flex items-center gap-2 shrink-0">
+                    <Calendar size={18} className="text-blue-400"/>
+                    Statistics & Analysis
+                </h2>
+                <div className="px-4 py-1.5 bg-slate-900/80 border border-slate-700/50 rounded-full text-blue-400 text-sm font-bold shadow-inner animate-fade-in flex items-center gap-2">
+                    <History size={14} className="opacity-50"/>
+                    {getTimeLabel()}
+                </div>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
                 {timeRange !== 'custom' && (
                   <div className="flex items-center bg-slate-900 rounded-lg p-1 border border-slate-700">
