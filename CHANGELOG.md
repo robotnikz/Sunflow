@@ -1,3 +1,10 @@
+## [1.3.6](https://github.com/robotnikz/Sunflow/compare/v1.3.5...v1.3.6) (2026-01-11)
+
+
+### Bug Fixes
+
+* timeframe in history graphs now show no "cross-day", means e.g. beginning at midnight for the day. ([dff2d9f](https://github.com/robotnikz/Sunflow/commit/dff2d9f83ef8868cd87d77d5938eab3f053f7af1))
+
 ## [1.3.5](https://github.com/robotnikz/Sunflow/compare/v1.3.4...v1.3.5) (2026-01-10)
 
 
