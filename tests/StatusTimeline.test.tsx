@@ -6,6 +6,7 @@ import React from 'react';
 
 describe('StatusTimeline Component', () => {
     it('zeigt Loading State wenn keine Daten', () => {
+        // @ts-expect-error Testing null prop handling
         render(<StatusTimeline history={null} />);
         expect(screen.getByText(/Waiting for data logs/i)).toBeInTheDocument();
     });

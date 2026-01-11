@@ -12,7 +12,7 @@ describe('WeatherWidget Component', () => {
     });
 
     it('zeigt Temperatur und Wetter Code an', () => {
-        const mockConfig = { inverterIp: '1.2.3', currency: 'EUR', latitude: 50, longitude: 10 };
+        const mockConfig = { inverterIp: '1.2.3', currency: 'EUR', latitude: '50', longitude: '10' };
         const mockWeather = {
             current: {
                 temp: 22.5,
@@ -26,7 +26,7 @@ describe('WeatherWidget Component', () => {
     });
     
     it('zeigt Nacht-Modus an', () => {
-        const mockConfig = { inverterIp: '1.2.3', currency: 'EUR', latitude: 50, longitude: 10 };
+        const mockConfig = { inverterIp: '1.2.3', currency: 'EUR', latitude: '50', longitude: '10' };
         const mockWeather = {
             current: {
                 temp: 15,
