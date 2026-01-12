@@ -1,5 +1,5 @@
 # Build Stage
-FROM node:20-slim AS builder
+FROM node:25-slim AS builder
 WORKDIR /app
 
 # Copy package files first for better caching
@@ -15,7 +15,7 @@ COPY . .
 RUN npm run build
 
 # Production Stage
-FROM node:20-slim
+FROM node:25-slim
 WORKDIR /app
 
 # Install only production dependencies
