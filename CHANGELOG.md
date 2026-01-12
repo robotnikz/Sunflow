@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/robotnikz/Sunflow/compare/v1.6.0...v1.7.0) (2026-01-12)
+
+
+### Features
+
+* **scenario-planner:** add timeframe selector and baseline autonomy ([93c20ad](https://github.com/robotnikz/Sunflow/commit/93c20ada4ab7f8f617386633326ebb3a28c71459))
+
 # [1.6.0](https://github.com/robotnikz/Sunflow/compare/v1.5.0...v1.6.0) (2026-01-11)
 
 
