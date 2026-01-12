@@ -1,10 +1,20 @@
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import SmartRecommendations from '../components/SmartRecommendations';
 import { Appliance } from '../types';
 
 describe('SmartRecommendations Logic', () => {
+  // Freeze time to avoid flakiness around midnight in CI (forecast logic is "remaining today").
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T12:00:00.000Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   const mockAppliances: Appliance[] = [
     { id: 'washing', name: 'Washing Machine', watts: 2000, kwhEstimate: 1.0, iconName: 'shirt', color: 'text-blue-400' },
     { id: 'phone', name: 'Phone Charger', watts: 15, kwhEstimate: 0.02, iconName: 'smartphone', color: 'text-gray-400' }
