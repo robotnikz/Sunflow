@@ -7,6 +7,43 @@ interface ScenarioPlannerProps {
     config: SystemConfig;
 }
 
+type SimulationWindow = 'week' | 'month' | 'halfYear' | 'year';
+
+const WINDOW_DAYS: Record<SimulationWindow, number> = {
+    week: 7,
+    month: 30,
+    halfYear: 182,
+    year: 365,
+};
+
+const WINDOW_LABEL: Record<SimulationWindow, string> = {
+    week: 'Last week',
+    month: 'Last month',
+    halfYear: 'Last 6 months',
+    year: 'Last 365 days',
+};
+
+const toLocalDateKey = (timestampMs: number): string => {
+    const d = new Date(timestampMs);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+};
+
+const getWindowBounds = (window: SimulationWindow): { startMs: number; endMs: number; expectedDays: number } => {
+    const expectedDays = WINDOW_DAYS[window];
+    // Use local-day boundaries: [start, end) where end is start of tomorrow.
+    const end = new Date();
+    end.setHours(0, 0, 0, 0);
+    end.setDate(end.getDate() + 1);
+
+    const start = new Date(end);
+    start.setDate(start.getDate() - expectedDays);
+
+    return { startMs: start.getTime(), endMs: end.getTime(), expectedDays };
+};
+
 const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
     const [data, setData] = useState<SimulationDataPoint[]>([]);
     const [tariffs, setTariffs] = useState<Tariff[]>([]);
@@ -20,31 +57,40 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
     const [costPerKwp, setCostPerKwp] = useState<number>(1000);
     const [costPerKwhBat, setCostPerKwhBat] = useState<number>(400);
 
+    const [simulationWindow, setSimulationWindow] = useState<SimulationWindow>('year');
+
     const [isOpen, setIsOpen] = useState(false);
 
+    const windowBounds = useMemo(() => getWindowBounds(simulationWindow), [simulationWindow]);
+
+    const windowedData = useMemo(() => {
+        if (data.length === 0) return [];
+        return data.filter(d => d.t >= windowBounds.startMs && d.t < windowBounds.endMs);
+    }, [data, windowBounds.startMs, windowBounds.endMs]);
+
     const dataCoverage = useMemo(() => {
-        if (data.length === 0) return { days: 0, percent: 0, missingDays: 365, quality: 0 };
+        if (windowedData.length === 0) return { days: 0, percent: 0, missingDays: windowBounds.expectedDays, quality: 0 };
         
-        // Group points by date to check for completeness
+        // Group points by local date to check for completeness
         const dayCounts: Record<string, number> = {};
-        data.forEach(d => {
-            const date = new Date(d.t).toISOString().split('T')[0];
-            dayCounts[date] = (dayCounts[date] || 0) + 1;
+        windowedData.forEach(d => {
+            const dateKey = toLocalDateKey(d.t);
+            dayCounts[dateKey] = (dayCounts[dateKey] || 0) + 1;
         });
 
         // A day is "complete" if it has at least 23 hourly data points
         const completeDays = Object.values(dayCounts).filter(count => count >= 23).length;
         const totalDaysWithSomeData = Object.keys(dayCounts).length;
 
-        const days = completeDays; 
-        const missingDays = Math.max(0, 365 - days);
-        const percent = Math.min(100, Math.round((days / 365) * 100));
+        const days = completeDays;
+        const missingDays = Math.max(0, windowBounds.expectedDays - days);
+        const percent = Math.min(100, Math.round((days / windowBounds.expectedDays) * 100));
         
         // Quality factor: how many of the days that have data are actually "hourly" resolution
         const quality = totalDaysWithSomeData > 0 ? (completeDays / totalDaysWithSomeData) * 100 : 0;
 
         return { days, percent, missingDays, quality };
-    }, [data]);
+    }, [windowedData, windowBounds.expectedDays]);
 
     useEffect(() => {
         if (isOpen && data.length === 0) {
@@ -74,23 +120,23 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
 
     // The Simulation Core
     const results = useMemo(() => {
-        if (data.length === 0) return null;
+        if (windowedData.length === 0) return null;
 
         // NEW: Filter data to only include days that are "complete" (>= 23 hours)
         // to ensure the simulation is statistically sound.
         const dayCounts: Record<string, number> = {};
-        data.forEach(d => {
-            const date = new Date(d.t).toISOString().split('T')[0];
-            dayCounts[date] = (dayCounts[date] || 0) + 1;
+        windowedData.forEach(d => {
+            const dateKey = toLocalDateKey(d.t);
+            dayCounts[dateKey] = (dayCounts[dateKey] || 0) + 1;
         });
 
         const validDates = new Set(
             Object.keys(dayCounts).filter(date => dayCounts[date] >= 23)
         );
 
-        const filteredData = data.filter(d => {
-            const date = new Date(d.t).toISOString().split('T')[0];
-            return validDates.has(date);
+        const filteredData = windowedData.filter(d => {
+            const dateKey = toLocalDateKey(d.t);
+            return validDates.has(dateKey);
         });
 
         if (filteredData.length === 0) return null;
@@ -159,7 +205,8 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
             exportedOriginal,
             exportedSimulated
         };
-    }, [data, addedPvPercent, addedBatteryKwh, config.batteryCapacity]);
+    }, [windowedData, addedPvPercent, addedBatteryKwh, config.batteryCapacity]);
+
 
     // Financial Calculation
     const financials = useMemo(() => {
@@ -184,8 +231,8 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         let estimatedBaseKwp = 5;
         if (config.systemCapacity && config.systemCapacity > 0) {
              estimatedBaseKwp = config.systemCapacity;
-        } else if (data.length > 0) {
-            const maxP = Math.max(...data.map(d => d.p));
+        } else if (windowedData.length > 0) {
+            const maxP = Math.max(...windowedData.map(d => d.p));
             estimatedBaseKwp = Math.ceil(maxP / 1000); // 4500W -> 5kWp
         }
 
@@ -203,7 +250,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
             estimatedBaseKwp
         };
 
-    }, [results, costPerKwp, costPerKwhBat, addedPvPercent, addedBatteryKwh, data, activeTariff]);
+    }, [results, costPerKwp, costPerKwhBat, addedPvPercent, addedBatteryKwh, windowedData, activeTariff, config.systemCapacity, dataCoverage.days]);
 
 
     if (!isOpen) {
@@ -236,7 +283,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                         Upgrade Simulator
                     </h2>
                     <p className="text-slate-400 text-sm mt-1">
-                        Based on your last 12 months. Financials at {activeTariff.costPerKwh.toFixed(2)} {config.currency}/kWh buy & {activeTariff.feedInTariff.toFixed(2)} {config.currency}/kWh sell.
+                        Based on {WINDOW_LABEL[simulationWindow].toLowerCase()} (until today). Financials at {activeTariff.costPerKwh.toFixed(2)} {config.currency}/kWh buy & {activeTariff.feedInTariff.toFixed(2)} {config.currency}/kWh sell.
                     </p>
                  </div>
                  <button 
@@ -247,6 +294,26 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                  </button>
              </div>
 
+             {/* Timeframe Selector */}
+             <div className="flex flex-wrap items-center gap-2 mb-6">
+                 <div className="text-xs text-slate-400 font-bold uppercase tracking-wide">Timeframe</div>
+                 <div className="flex bg-slate-900 border border-slate-700 rounded-lg p-1">
+                     {(Object.keys(WINDOW_LABEL) as SimulationWindow[]).map((key) => (
+                         <button
+                             key={key}
+                             onClick={() => setSimulationWindow(key)}
+                             className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                                 simulationWindow === key
+                                     ? 'bg-purple-600 text-white'
+                                     : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                             }`}
+                         >
+                             {WINDOW_LABEL[key]}
+                         </button>
+                     ))}
+                 </div>
+             </div>
+
              {loading && (
                  <div className="text-center py-10 text-slate-400">Loading historical data...</div>
              )}
@@ -254,10 +321,10 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
              {!loading && !results && data.length > 0 && (
                  <div className="text-center py-10 bg-slate-900/50 rounded-xl border border-dashed border-slate-700">
                      <AlertTriangle className="text-yellow-500 mx-auto mb-3" size={48} />
-                     <h3 className="text-white font-bold text-lg">No hourly data found</h3>
+                     <h3 className="text-white font-bold text-lg">No usable hourly data in selected timeframe</h3>
                      <p className="text-slate-400 text-sm max-w-md mx-auto mt-2">
-                         The simulator requires at least one full day (24h) of hourly data to calculate battery behavior. 
-                         Your current imports only contain daily totals.
+                         The simulator requires at least one full day (24h) of hourly data in the selected timeframe to calculate battery behavior.
+                         Try selecting a longer timeframe or import hourly-resolution data.
                      </p>
                  </div>
              )}
@@ -339,19 +406,19 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                 <div className="flex gap-3 items-start">
                                     <Info size={18} className="text-blue-400 shrink-0 mt-0.5" />
                                     <div className="text-xs text-blue-200 leading-relaxed">
-                                        <strong>Accuracy Check:</strong> 1 year of hourly data is required for highly accurate ROI simulations that account for all seasons.
-                                        {dataCoverage.days < 365 ? (
+                                        <strong>Accuracy Check:</strong> More complete days means more reliable results.
+                                        {dataCoverage.days < windowBounds.expectedDays ? (
                                             <div className="mt-2 space-y-1">
                                                 <p className="text-yellow-400 font-medium">
                                                     ⚠️ Found <strong>{dataCoverage.days} complete days</strong> with hourly resolution.
                                                 </p>
                                                 <p className="opacity-80">
-                                                    You need <strong>{dataCoverage.missingDays} more full days</strong> for a 100% reliable 12-month baseline.
+                                                    You need <strong>{dataCoverage.missingDays} more full days</strong> for a 100% reliable baseline for this timeframe.
                                                 </p>
                                             </div>
                                         ) : (
                                             <p className="mt-2 text-emerald-400 font-medium flex items-center gap-1">
-                                                <CheckCircle2 size={12} /> Full 12-month baseline reached ({dataCoverage.days} days available)!
+                                                <CheckCircle2 size={12} /> Baseline reached ({dataCoverage.days} days available)!
                                             </p>
                                         )}
                                     </div>
@@ -376,21 +443,36 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                 <div className="flex justify-between mb-2">
                                     <span className="text-slate-400 font-medium">Autonomy Boost</span>
                                     <div className="flex gap-2">
-                                            <span className="text-slate-500 line-through">{results.autonomyOriginal.toFixed(1)}%</span>
-                                            <span className="text-white font-bold text-lg">{results.autonomySimulated.toFixed(1)}%</span>
+                                            {(addedPvPercent === 0 && addedBatteryKwh === 0) ? (
+                                                <span className="text-white font-bold text-lg">{results.autonomyOriginal.toFixed(1)}%</span>
+                                            ) : (
+                                                <>
+                                                    <span className="text-slate-500 line-through">{results.autonomyOriginal.toFixed(1)}%</span>
+                                                    <span className="text-white font-bold text-lg">{results.autonomySimulated.toFixed(1)}%</span>
+                                                </>
+                                            )}
                                     </div>
                                 </div>
                                 <div className="h-4 w-full bg-slate-800 rounded-full overflow-hidden relative">
                                     {/* Original Marker */}
-                                    <div 
-                                        className="h-full bg-slate-600 absolute top-0 left-0"
-                                        style={{ width: `${results.autonomyOriginal}%` }}
-                                    />
-                                    {/* New Marker (only the diff) */}
-                                    <div 
-                                        className="h-full bg-gradient-to-r from-blue-600 to-purple-500 absolute top-0 left-0 transition-all duration-500 opacity-80"
-                                        style={{ width: `${results.autonomySimulated}%` }}
-                                    />
+                                    {(addedPvPercent === 0 && addedBatteryKwh === 0) ? (
+                                        <div 
+                                            className="h-full bg-gradient-to-r from-blue-600 to-purple-500 absolute top-0 left-0 transition-all duration-500 opacity-80"
+                                            style={{ width: `${results.autonomyOriginal}%` }}
+                                        />
+                                    ) : (
+                                        <>
+                                            <div 
+                                                className="h-full bg-slate-600 absolute top-0 left-0"
+                                                style={{ width: `${results.autonomyOriginal}%` }}
+                                            />
+                                            {/* New Marker (only the diff) */}
+                                            <div 
+                                                className="h-full bg-gradient-to-r from-blue-600 to-purple-500 absolute top-0 left-0 transition-all duration-500 opacity-80"
+                                                style={{ width: `${results.autonomySimulated}%` }}
+                                            />
+                                        </>
+                                    )}
                                 </div>
                             </div>
 
