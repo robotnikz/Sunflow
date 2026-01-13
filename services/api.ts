@@ -1,5 +1,5 @@
 
-import { InverterData, SystemConfig, HistoryData, TimeRange, Tariff, Expense, RoiData, SystemInfo, ForecastData, BatteryHealthData, SimulationDataPoint } from '../types';
+import { InverterData, SystemConfig, HistoryData, TimeRange, Tariff, Expense, RoiData, SystemInfo, ForecastData, BatteryHealthData, SimulationDataPoint, AwattarComparisonResponse, AwattarComparePeriod } from '../types';
 
 const API_BASE = ''; 
 
@@ -147,3 +147,40 @@ export const importCsv = async (file: File, mapping: any): Promise<{success: boo
     if (!res.ok) throw new Error("CSV Import Failed");
     return res.json();
 };
+
+// --- Dynamic Tariff Comparison (aWATTar) ---
+
+export interface AwattarComparisonParams {
+  period?: AwattarComparePeriod;
+  from?: string; // YYYY-MM-DD
+  to?: string;   // YYYY-MM-DD
+  country?: 'DE' | 'AT';
+  postalCode?: string;
+  surchargeCt?: number;
+  vatPercent?: number;
+}
+
+export const getAwattarComparison = async (params: AwattarComparisonParams = {}): Promise<AwattarComparisonResponse> => {
+  const qs = new URLSearchParams();
+  if (params.period) qs.set('period', params.period);
+  if (params.from) qs.set('from', params.from);
+  if (params.to) qs.set('to', params.to);
+  if (params.country) qs.set('country', params.country);
+  if (params.postalCode) qs.set('postalCode', params.postalCode);
+  if (params.surchargeCt !== undefined) qs.set('surchargeCt', String(params.surchargeCt));
+  if (params.vatPercent !== undefined) qs.set('vatPercent', String(params.vatPercent));
+
+  const res = await fetch(`${API_BASE}/api/dynamic-pricing/awattar/compare?${qs.toString()}`);
+  if (!res.ok) {
+    let msg = 'Failed to fetch aWATTar comparison';
+    try {
+      const j = await res.json();
+      if (j?.error) msg = j.error;
+    } catch {
+      // ignore
+    }
+    throw new Error(msg);
+  }
+  return res.json();
+};
+

@@ -31,6 +31,21 @@ describe('Dashboard Component', () => {
     (api.getRoiData as any).mockResolvedValue({ totalInvested: 1000, totalReturned: 100, netValue: -900, roiPercent: 10, breakEvenDate: null, expenses: [] });
     (api.getForecast as any).mockResolvedValue({ forecasts: [] });
     (api.getBatteryHealth as any).mockResolvedValue({ dataPoints: [], totalCycles: 0 });
+    (api.getAwattarComparison as any).mockResolvedValue({
+      provider: 'awattar',
+      country: 'DE',
+      postalCode: '',
+      period: 'month',
+      range: { from: '2026-01-01T00:00:00', to: '2026-02-01T00:00:00' },
+      assumptions: { marketPriceUnit: 'Eur/MWh', marketToKwhFactor: 1 / 1000, surchargeCt: 0, vatPercent: 0 },
+      coverage: { hoursWithEnergy: 0, hoursWithPrices: 0, hoursUsed: 0 },
+      totals: {
+        fixed: { importCost: 0, exportRevenue: 0, net: 0 },
+        dynamic: { importCost: 0, exportRevenue: 0, net: 0 },
+        delta: { net: 0 }
+      },
+      seriesDaily: []
+    });
   });
 
   it('zeigt Skeleton Loader, solange Historie lädt', async () => {

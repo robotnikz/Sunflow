@@ -14,6 +14,7 @@ import WeatherWidget from './WeatherWidget';
 import SmartRecommendations from './SmartRecommendations';
 import BatteryHealthWidget from './BatteryHealthWidget';
 import ScenarioPlanner from './ScenarioPlanner';
+import DynamicTariffComparison from './DynamicTariffComparison';
 import { getHistory, getRoiData, getForecast, getBatteryHealth } from '../services/api';
 import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp, ShieldCheck, Download, ChevronLeft, ChevronRight, History } from 'lucide-react';
 
@@ -341,11 +342,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
         </div>
       </div>
 
-      {/* --- FEATURE: SCENARIO PLANNER --- */}
-      <div className="animate-fade-in mb-6">
-        <ScenarioPlanner config={config} />
-      </div>
-
       {/* --- SECTION 2: SYSTEM HEALTH & FORECAST --- */}
       {/* Reverted to 3 Columns for cleaner look. Battery Health moved to History Section. */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
@@ -403,6 +399,16 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
         {/* Pass statusHistory (fixed 24h) instead of variable history */}
         <StatusTimeline history={statusHistory?.chart || []} />
       </div>
+
+            {/* --- FEATURE: SCENARIO PLANNER (moved under status) --- */}
+            <div className="animate-fade-in">
+                <ScenarioPlanner config={config} />
+            </div>
+
+            {/* --- FEATURE: DYNAMIC TARIFF COMPARISON (aWATTar) --- */}
+            <div className="animate-fade-in">
+                <DynamicTariffComparison config={config} />
+            </div>
 
       {/* --- SECTION 4: HISTORICAL ANALYSIS CONTROLS --- */}
       <div className="flex flex-col bg-slate-800/60 backdrop-blur p-2 rounded-xl border border-slate-700/50 mt-4 gap-4 sticky top-[70px] z-20 shadow-lg">
