@@ -69,7 +69,6 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
   const [from, setFrom] = useState<string>(stored?.from || '');
   const [to, setTo] = useState<string>(stored?.to || '');
   const [country, setCountry] = useState<'DE' | 'AT'>(stored?.country || defaultsFromConfig?.country || 'DE');
-  const [postalCode, setPostalCode] = useState<string>(stored?.postalCode || defaultsFromConfig?.postalCode || '');
   const [surchargeCt, setSurchargeCt] = useState<number>(
     stored?.surchargeCt ?? defaultsFromConfig?.surchargeCt ?? 0
   );
@@ -108,9 +107,9 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
 
   // Keep UI state stable across dashboard refreshes/re-renders
   useEffect(() => {
-    saveLocal({ isOpen, period, from, to, country, postalCode, surchargeCt, vatPercent });
+    saveLocal({ isOpen, period, from, to, country, surchargeCt, vatPercent });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, period, from, to, country, postalCode, surchargeCt, vatPercent]);
+  }, [isOpen, period, from, to, country, surchargeCt, vatPercent]);
 
   const apply = async () => {
     if (!canApply) return;
@@ -121,7 +120,6 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
       const params: any = {};
 
       params.country = country;
-      params.postalCode = postalCode;
       params.surchargeCt = clamp(Number(surchargeCt || 0), -1000, 5000);
       params.vatPercent = clamp(Number(vatPercent || 0), 0, 50);
 
@@ -147,7 +145,7 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
       setResult(data);
 
       saveResultLocal(data as any);
-      saveLocal({ isOpen, period, from, to, country, postalCode, surchargeCt: params.surchargeCt ?? surchargeCt, vatPercent: params.vatPercent ?? vatPercent });
+      saveLocal({ isOpen, period, from, to, country, surchargeCt: params.surchargeCt ?? surchargeCt, vatPercent: params.vatPercent ?? vatPercent });
     } catch (e: any) {
       setResult(null);
       saveResultLocal(null);
@@ -216,7 +214,7 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 p-4 rounded-xl shadow-lg border border-white/10 flex items-center justify-between group transition-all"
+        className="w-full bg-gradient-to-r from-indigo-700/60 to-purple-700/60 hover:from-indigo-600/60 hover:to-purple-600/60 p-4 rounded-xl shadow-lg border border-white/10 flex items-center justify-between group transition-all"
       >
         <div className="flex items-center gap-3">
           <div className="p-2 bg-white/20 rounded-lg">
@@ -252,7 +250,7 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
           </h2>
           <p className="text-slate-400 text-sm mt-1 flex items-center gap-2">
             <Info size={14} className="text-slate-500" />
-            {'aWATTar provides market prices; add surcharge + VAT to approximate your all-in tariff.'}
+            {'aWATTar provides market (exchange) prices. Add “Surcharge” + VAT to approximate your all-in retail tariff.'}
           </p>
         </div>
 
@@ -336,29 +334,17 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
             Location
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[10px] text-slate-500 font-bold uppercase">Country</label>
-              <select
-                value={country}
-                onChange={e => setCountry(e.target.value as any)}
-                className="mt-1 w-full bg-slate-800 border border-slate-600 text-white text-sm rounded px-3 py-1.5 focus:border-indigo-500 focus:outline-none"
-              >
-                <option value="DE">DE</option>
-                <option value="AT">AT</option>
-              </select>
-              <div className="text-[10px] text-slate-600 mt-1">aWATTar is country-based (DE/AT).</div>
-            </div>
-            <div>
-              <label className="text-[10px] text-slate-500 font-bold uppercase">Postal code (optional)</label>
-              <input
-                value={postalCode}
-                onChange={e => setPostalCode(e.target.value)}
-                placeholder="e.g. 1010"
-                className="mt-1 w-full bg-slate-800 border border-slate-600 text-white text-sm rounded px-3 py-1.5 focus:border-indigo-500 focus:outline-none"
-              />
-              <div className="text-[10px] text-slate-600 mt-1">Used only for display/inference.</div>
-            </div>
+          <div>
+            <label className="text-[10px] text-slate-500 font-bold uppercase">Country</label>
+            <select
+              value={country}
+              onChange={e => setCountry(e.target.value as any)}
+              className="mt-1 w-full bg-slate-800 border border-slate-600 text-white text-sm rounded px-3 py-1.5 focus:border-indigo-500 focus:outline-none"
+            >
+              <option value="DE">DE</option>
+              <option value="AT">AT</option>
+            </select>
+            <div className="text-[10px] text-slate-600 mt-1">aWATTar is country-based (DE/AT).</div>
           </div>
         </div>
 
@@ -378,6 +364,9 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
                 onChange={e => setSurchargeCt(Number(e.target.value))}
                 className="mt-1 w-full bg-slate-800 border border-slate-600 text-white text-sm rounded px-3 py-1.5 focus:border-indigo-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
+              <div className="text-[10px] text-slate-600 mt-1">
+                Added to the market price before VAT. Typical use: fees, margin, balancing costs, etc.
+              </div>
             </div>
             <div>
               <label className="text-[10px] text-slate-500 font-bold uppercase">VAT (%)</label>
@@ -388,9 +377,12 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
                 onChange={e => setVatPercent(Number(e.target.value))}
                 className="mt-1 w-full bg-slate-800 border border-slate-600 text-white text-sm rounded px-3 py-1.5 focus:border-indigo-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
+              <div className="text-[10px] text-slate-600 mt-1">
+                Applied on top: (market + surcharge) × (1 + VAT).
+              </div>
             </div>
             <div className="col-span-2 text-[10px] text-slate-600">
-              Tip: set VAT to 20% (AT) / 19% (DE) + your supplier add-ons.
+              Tip: set VAT to 20% (AT) / 19% (DE). Example: market 10ct + surcharge 5ct @ 19% VAT ⇒ ~17.85ct/kWh.
             </div>
           </div>
         </div>
