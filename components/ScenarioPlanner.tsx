@@ -257,7 +257,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         return (
              <button 
                 onClick={() => setIsOpen(true)}
-                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 p-4 rounded-xl shadow-lg border border-white/10 flex items-center justify-between group transition-all"
+                className="w-full bg-gradient-to-r from-indigo-700/60 to-purple-700/60 hover:from-indigo-600/60 hover:to-purple-600/60 p-4 rounded-xl shadow-lg border border-white/10 flex items-center justify-between group transition-all"
             >
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-white/20 rounded-lg">
@@ -287,8 +287,9 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                     </p>
                  </div>
                  <button 
+                          type="button"
                     onClick={() => setIsOpen(false)}
-                    className="text-slate-500 hover:text-white"
+                          className="px-3 py-2 rounded-lg border bg-slate-900/40 border-slate-700 text-slate-300 hover:bg-slate-900/60 transition-colors text-sm font-medium"
                  >
                     Close
                  </button>

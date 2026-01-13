@@ -155,7 +155,6 @@ export interface AwattarComparisonParams {
   from?: string; // YYYY-MM-DD
   to?: string;   // YYYY-MM-DD
   country?: 'DE' | 'AT';
-  postalCode?: string;
   surchargeCt?: number;
   vatPercent?: number;
 }
@@ -166,7 +165,6 @@ export const getAwattarComparison = async (params: AwattarComparisonParams = {})
   if (params.from) qs.set('from', params.from);
   if (params.to) qs.set('to', params.to);
   if (params.country) qs.set('country', params.country);
-  if (params.postalCode) qs.set('postalCode', params.postalCode);
   if (params.surchargeCt !== undefined) qs.set('surchargeCt', String(params.surchargeCt));
   if (params.vatPercent !== undefined) qs.set('vatPercent', String(params.vatPercent));
 
