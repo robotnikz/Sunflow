@@ -1,3 +1,10 @@
+## [1.9.1](https://github.com/robotnikz/Sunflow/compare/v1.9.0...v1.9.1) (2026-01-13)
+
+
+### Bug Fixes
+
+* **ui:** simplify awattar compare inputs ([7e76f42](https://github.com/robotnikz/Sunflow/commit/7e76f42f9fc5b34ec75cea216ed2c069eef8b76c))
+
 # [1.9.0](https://github.com/robotnikz/Sunflow/compare/v1.8.0...v1.9.0) (2026-01-13)
 
 
