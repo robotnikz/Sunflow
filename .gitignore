@@ -30,6 +30,13 @@ sunflow-data/
 *.sqlite
 *.sqlite3
 
+# Backend runtime data (default DATA_DIR)
+data/uploads/
+data/*.db
+data/*.db-*
+data/*.sqlite
+data/*.sqlite*
+
 # OS Files
 .DS_Store
 Thumbs.db

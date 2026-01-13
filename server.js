@@ -11,6 +11,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import { pathToFileURL } from 'url';
 
 const require = createRequire(import.meta.url);
 const sqlite3 = require('sqlite3').verbose();
@@ -35,6 +36,15 @@ const compression = require('compression'); // Performance: Gzip Compression
 const PORT = process.env.PORT || 3000;
 const REPO_OWNER = 'robotnikz';
 const REPO_NAME = 'Sunflow';
+
+const IS_TEST = process.env.NODE_ENV === 'test' || !!process.env.VITEST;
+const IS_MAIN = (() => {
+    try {
+        return import.meta.url === pathToFileURL(process.argv[1]).href;
+    } catch {
+        return false;
+    }
+})();
 
 // Data Directory Setup (Crucial for Docker persistence)
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -477,13 +487,15 @@ const runRetentionPolicy = () => {
 };
 
 // Run Retention Policy every hour
-setInterval(runRetentionPolicy, 60 * 60 * 1000);
-// Run once on startup after a small delay
-setTimeout(runRetentionPolicy, 30 * 1000);
+if (!IS_TEST) {
+    setInterval(runRetentionPolicy, 60 * 60 * 1000);
+    // Run once on startup after a small delay
+    setTimeout(runRetentionPolicy, 30 * 1000);
+}
 
 
 // Polling Job - 1 Minute Interval
-setInterval(async () => {
+if (!IS_TEST) setInterval(async () => {
     const config = getConfig();
     if (!config.inverterIp) return;
 
@@ -659,6 +671,16 @@ let versionCache = {
 };
 
 const getVersionInfo = async () => {
+    // In tests (and optionally via env), avoid outbound network calls.
+    if (IS_TEST || process.env.DISABLE_UPDATE_CHECK === '1') {
+        return {
+            version: packageJson.version,
+            latestVersion: packageJson.version,
+            updateAvailable: false,
+            releaseUrl: ''
+        };
+    }
+
     const now = Date.now();
     const CACHE_DURATION = 60 * 60 * 1000; 
     
@@ -1961,19 +1983,35 @@ app.get(/.*/, (req, res) => {
     res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`SunFlow Backend running on http://localhost:${PORT}`);
-});
+let httpServer = null;
 
 // Graceful Shutdown: Close DB connection ensures journal is flushed
-const shutdown = () => {
+const shutdown = (exitProcess = true) => {
     console.log("Shutting down...");
+
+    if (httpServer) {
+        try {
+            httpServer.close();
+        } catch {
+            // ignore
+        }
+        httpServer = null;
+    }
+
     db.close((err) => {
         if (err) console.error("Error closing DB:", err.message);
         else console.log("Database connection closed.");
-        process.exit(0);
+        if (exitProcess) process.exit(0);
     });
 };
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+if (!IS_TEST && IS_MAIN) {
+    httpServer = app.listen(PORT, '0.0.0.0', () => {
+        console.log(`SunFlow Backend running on http://localhost:${PORT}`);
+    });
+
+    process.on('SIGINT', () => shutdown(true));
+    process.on('SIGTERM', () => shutdown(true));
+}
+
+export { app, shutdown };
