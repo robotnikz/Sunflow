@@ -19,6 +19,10 @@
 
 ---
 
+> [!IMPORTANT]
+> **Hardware requirement:** SunFlow is built specifically for the **Fronius Solar API** and targets the **Fronius Gen24 (Symo/Primo)** inverter family.
+> If you **don't have a Fronius Gen24 inverter with Solar API enabled**, SunFlow will not be able to read live data (other inverter brands/APIs are currently not supported).
+
 ## ⚡ What is SunFlow?
 
 SunFlow is not just another monitoring tool. While manufacturer apps are great for checking if your system is running, **SunFlow is designed for the system owner who wants to maximize value.**
