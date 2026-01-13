@@ -746,6 +746,170 @@ app.get('/api/info', async (req, res) => {
     res.json(info);
 });
 
+/**
+ * Dynamic Tariff Comparison (aWATTar)
+ * Compares historic total cost for fixed tariffs vs aWATTar hourly market prices.
+ * Note: aWATTar returns market prices (Eur/MWh). Users can add a surcharge + VAT to approximate all-in prices.
+ */
+app.get('/api/dynamic-pricing/awattar/compare', async (req, res) => {
+    try {
+        const config = getConfig();
+
+        const parseYmdLocal = (ymd) => {
+            const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(ymd);
+            if (!m) return null;
+            const year = Number(m[1]);
+            const month = Number(m[2]);
+            const day = Number(m[3]);
+            return new Date(year, month - 1, day);
+        };
+
+        const period = (req.query.period || 'month').toString().toLowerCase();
+        const hasExplicitCountry = req.query.country !== undefined && req.query.country !== null && req.query.country !== '';
+        let country = (req.query.country || config.dynamicTariff?.awattar?.country || 'DE').toString().toUpperCase();
+        const postalCode = (req.query.postalCode || config.dynamicTariff?.awattar?.postalCode || '').toString().trim();
+
+        // aWATTar prices are country-based (DE/AT). If no country was provided, try a best-effort inference from postal code.
+        if (!hasExplicitCountry && postalCode) {
+            if (/^\d{4}$/.test(postalCode)) country = 'AT';
+            if (/^\d{5}$/.test(postalCode)) country = 'DE';
+        }
+
+        const surchargeCt = clampNumber(req.query.surchargeCt ?? config.dynamicTariff?.awattar?.surchargeCt ?? 0, -1000, 5000, 0);
+        const vatPercent = clampNumber(req.query.vatPercent ?? config.dynamicTariff?.awattar?.vatPercent ?? 0, 0, 50, 0);
+        const surchargeEurPerKwh = surchargeCt / 100;
+
+        const fromParam = req.query.from ? req.query.from.toString() : null; // YYYY-MM-DD
+        const toParam = req.query.to ? req.query.to.toString() : null; // YYYY-MM-DD
+
+        const startDate = fromParam ? (parseYmdLocal(fromParam) || new Date(fromParam)) : getPeriodStart(period);
+        startDate.setHours(0, 0, 0, 0);
+
+        const endDate = toParam ? (parseYmdLocal(toParam) || new Date(toParam)) : new Date();
+        // Treat "to" as exclusive (start of that day). If omitted, include up to the current hour.
+        if (toParam) {
+            endDate.setHours(0, 0, 0, 0);
+        } else {
+            endDate.setMinutes(0, 0, 0);
+            endDate.setHours(endDate.getHours() + 1);
+        }
+
+        const startTs = formatHourKey(startDate);
+        const endTs = formatHourKey(endDate);
+        const startMs = startDate.getTime();
+        const endMs = endDate.getTime();
+
+        const priceMap = await fetchAwattarMarketdata({ country, startMs, endMs });
+
+        db.all("SELECT valid_from, cost_per_kwh, feed_in_tariff FROM tariffs ORDER BY valid_from ASC", [], (tErr, tariffRows) => {
+            if (tErr) return res.status(500).json({ error: tErr.message });
+
+            const tariffs = (tariffRows || []).map(t => ({
+                validFrom: t.valid_from,
+                costPerKwh: t.cost_per_kwh,
+                feedInTariff: t.feed_in_tariff
+            }));
+
+            if (tariffs.length === 0) {
+                return res.status(400).json({ error: "No tariffs configured" });
+            }
+
+            getHourlyGridEnergyKwh(startTs, endTs, (eErr, hours) => {
+                if (eErr) return res.status(500).json({ error: eErr.message });
+                if (!hours || hours.length === 0) {
+                    return res.status(400).json({ error: "No energy data available in the requested range" });
+                }
+
+                let usedHours = 0;
+                let fixedNet = 0;
+                let dynamicNet = 0;
+                let fixedImportCost = 0;
+                let dynamicImportCost = 0;
+                let exportRevenue = 0;
+
+                const daily = new Map();
+
+                for (const h of hours) {
+                    const marketEurPerKwh = priceMap.get(h.timestamp);
+                    if (marketEurPerKwh === undefined) continue;
+
+                    const tariff = getTariffForTime(tariffs, h.timestamp);
+                    const importKwh = h.importKwh || 0;
+                    const exportKwh = h.exportKwh || 0;
+
+                    const fixedHourImport = importKwh * tariff.costPerKwh;
+                    const dynamicPriceAllIn = (marketEurPerKwh + surchargeEurPerKwh) * (1 + vatPercent / 100);
+                    const dynamicHourImport = importKwh * dynamicPriceAllIn;
+                    const hourExportRevenue = exportKwh * tariff.feedInTariff;
+
+                    fixedImportCost += fixedHourImport;
+                    dynamicImportCost += dynamicHourImport;
+                    exportRevenue += hourExportRevenue;
+
+                    fixedNet += fixedHourImport - hourExportRevenue;
+                    dynamicNet += dynamicHourImport - hourExportRevenue;
+                    usedHours++;
+
+                    const dayKey = h.timestamp.substring(0, 10);
+                    const d = daily.get(dayKey) || { fixedNet: 0, dynamicNet: 0, importKwh: 0, exportKwh: 0 };
+                    d.fixedNet += fixedHourImport - hourExportRevenue;
+                    d.dynamicNet += dynamicHourImport - hourExportRevenue;
+                    d.importKwh += importKwh;
+                    d.exportKwh += exportKwh;
+                    daily.set(dayKey, d);
+                }
+
+                const seriesDaily = [...daily.entries()]
+                    .sort((a, b) => a[0].localeCompare(b[0]))
+                    .map(([date, v]) => ({
+                        date,
+                        fixedNet: Math.round(v.fixedNet * 100) / 100,
+                        dynamicNet: Math.round(v.dynamicNet * 100) / 100,
+                        importKwh: Math.round(v.importKwh * 1000) / 1000,
+                        exportKwh: Math.round(v.exportKwh * 1000) / 1000,
+                    }));
+
+                res.json({
+                    provider: 'awattar',
+                    country,
+                    postalCode,
+                    period,
+                    range: { from: startTs, to: endTs },
+                    assumptions: {
+                        marketPriceUnit: 'Eur/MWh',
+                        marketToKwhFactor: 1 / 1000,
+                        surchargeCt,
+                        vatPercent
+                    },
+                    coverage: {
+                        hoursWithEnergy: hours.length,
+                        hoursWithPrices: priceMap.size,
+                        hoursUsed: usedHours
+                    },
+                    totals: {
+                        fixed: {
+                            importCost: Math.round(fixedImportCost * 100) / 100,
+                            exportRevenue: Math.round(exportRevenue * 100) / 100,
+                            net: Math.round(fixedNet * 100) / 100,
+                        },
+                        dynamic: {
+                            importCost: Math.round(dynamicImportCost * 100) / 100,
+                            exportRevenue: Math.round(exportRevenue * 100) / 100,
+                            net: Math.round(dynamicNet * 100) / 100,
+                        },
+                        delta: {
+                            net: Math.round((dynamicNet - fixedNet) * 100) / 100
+                        }
+                    },
+                    seriesDaily
+                });
+            });
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message || 'Unknown error' });
+    }
+});
+
 // --- SOLCAST PROXY WITH CACHING ---
 // Cache variable is now defined globally above to be accessible by notification logic
 
@@ -1003,6 +1167,122 @@ const getTariffForTime = (tariffs, timestamp) => {
         }
     }
     return activeTariff;
+};
+
+// --- Dynamic Pricing (aWATTar) ---
+const getTimeZone = () => process.env.TZ || 'Europe/Berlin';
+
+const clampNumber = (value, min, max, fallback) => {
+    const num = Number(value);
+    if (Number.isNaN(num)) return fallback;
+    if (num < min) return min;
+    if (num > max) return max;
+    return num;
+};
+
+const formatHourKey = (dateOrMs) => {
+    const timeZone = getTimeZone();
+    const date = typeof dateOrMs === 'number' ? new Date(dateOrMs) : dateOrMs;
+    const local = date.toLocaleString('sv-SE', { timeZone, hour12: false });
+    // sv-SE yields "YYYY-MM-DD HH:mm:ss"; normalize to the hour.
+    return `${local.substring(0, 13)}:00:00`;
+};
+
+const getPeriodStart = (period) => {
+    const now = new Date();
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+
+    if (period === 'week') start.setDate(start.getDate() - 7);
+    else if (period === 'month') start.setDate(start.getDate() - 30);
+    else if (period === 'halfyear') start.setDate(start.getDate() - 182);
+    else if (period === 'year') start.setDate(start.getDate() - 365);
+    else start.setDate(start.getDate() - 7);
+
+    return start;
+};
+
+const getHourlyGridEnergyKwh = (startTs, endTs, callback) => {
+    // Prefer hourly summary table if present.
+    db.all(
+        `SELECT timestamp, grid_consumption_wh as import_wh, grid_feed_in_wh as export_wh
+         FROM energy_data
+         WHERE timestamp >= ? AND timestamp < ?
+         ORDER BY timestamp ASC`,
+        [startTs, endTs],
+        (err, rows) => {
+            if (err) return callback(err);
+            if (rows && rows.length > 0) {
+                const mapped = rows.map(r => ({
+                    timestamp: r.timestamp,
+                    importKwh: (r.import_wh || 0) / 1000,
+                    exportKwh: (r.export_wh || 0) / 1000,
+                }));
+                return callback(null, mapped);
+            }
+
+            // Fallback: integrate power_grid values from minute log.
+            db.all(
+                `SELECT timestamp, power_grid
+                 FROM energy_log
+                 WHERE timestamp >= ? AND timestamp < ?
+                 ORDER BY timestamp ASC`,
+                [startTs, endTs],
+                (err2, minuteRows) => {
+                    if (err2) return callback(err2);
+                    const buckets = new Map();
+
+                    minuteRows.forEach((r, idx) => {
+                        let durationHours = 1 / 60;
+                        if (idx < minuteRows.length - 1) {
+                            const current = new Date(r.timestamp);
+                            const next = new Date(minuteRows[idx + 1].timestamp);
+                            const diffMs = next.getTime() - current.getTime();
+                            if (diffMs > 60000) durationHours = diffMs / (1000 * 60 * 60);
+                            if (durationHours > 24) durationHours = 1 / 60;
+                        }
+
+                        const hourKey = `${r.timestamp.substring(0, 13)}:00:00`;
+                        const currentBucket = buckets.get(hourKey) || { importKwh: 0, exportKwh: 0 };
+                        const pGrid = r.power_grid || 0;
+                        if (pGrid > 0) currentBucket.importKwh += (pGrid * durationHours) / 1000;
+                        else currentBucket.exportKwh += (Math.abs(pGrid) * durationHours) / 1000;
+                        buckets.set(hourKey, currentBucket);
+                    });
+
+                    const mapped = [...buckets.entries()]
+                        .sort((a, b) => a[0].localeCompare(b[0]))
+                        .map(([timestamp, v]) => ({ timestamp, ...v }));
+                    callback(null, mapped);
+                }
+            );
+        }
+    );
+};
+
+const awattarCache = new Map();
+
+const fetchAwattarMarketdata = async ({ country, startMs, endMs }) => {
+    const c = (country || 'DE').toUpperCase();
+    const baseUrl = c === 'AT' ? 'https://api.awattar.at/v1/marketdata' : 'https://api.awattar.de/v1/marketdata';
+    const cacheKey = `${c}:${startMs}:${endMs}`;
+    if (awattarCache.has(cacheKey)) return awattarCache.get(cacheKey);
+
+    const url = `${baseUrl}?start=${startMs}&end=${endMs}`;
+    const response = await axios.get(url, { timeout: 10000 });
+    const data = response.data?.data || [];
+
+    // Map: local hour key -> €/kWh (marketprice is Eur/MWh)
+    const priceMap = new Map();
+    for (const item of data) {
+        const startTs = item.start_timestamp;
+        const marketEurPerKwh = typeof item.marketprice === 'number' ? item.marketprice / 1000 : null;
+        if (!startTs || marketEurPerKwh === null) continue;
+        priceMap.set(formatHourKey(startTs), marketEurPerKwh);
+    }
+
+    awattarCache.set(cacheKey, priceMap);
+    return priceMap;
 };
 
 /**
