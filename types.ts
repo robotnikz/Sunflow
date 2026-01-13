@@ -65,6 +65,64 @@ export interface SystemConfig {
   };
   appliances?: Appliance[]; // Custom list of user devices
   notifications?: NotificationConfig;
+
+  // Optional: defaults for dynamic tariff comparisons (used by backend if query params are omitted)
+  dynamicTariff?: {
+    awattar?: {
+      country?: 'DE' | 'AT';
+      postalCode?: string;
+      surchargeCt?: number; // ct/kWh (all-in add-on)
+      vatPercent?: number; // %
+    };
+  };
+}
+
+export type AwattarComparePeriod = 'week' | 'month' | 'halfyear' | 'year';
+
+export interface AwattarComparisonDaily {
+  date: string; // YYYY-MM-DD
+  fixedNet: number;
+  dynamicNet: number;
+  importKwh: number;
+  exportKwh: number;
+}
+
+export interface AwattarComparisonResponse {
+  provider: 'awattar';
+  country: 'DE' | 'AT' | string;
+  postalCode: string;
+  period: AwattarComparePeriod | string;
+  range: {
+    from: string; // hour key
+    to: string;   // hour key
+  };
+  assumptions: {
+    marketPriceUnit: string;
+    marketToKwhFactor: number;
+    surchargeCt: number;
+    vatPercent: number;
+  };
+  coverage: {
+    hoursWithEnergy: number;
+    hoursWithPrices: number;
+    hoursUsed: number;
+  };
+  totals: {
+    fixed: {
+      importCost: number;
+      exportRevenue: number;
+      net: number;
+    };
+    dynamic: {
+      importCost: number;
+      exportRevenue: number;
+      net: number;
+    };
+    delta: {
+      net: number; // dynamic - fixed
+    };
+  };
+  seriesDaily: AwattarComparisonDaily[];
 }
 
 export interface SystemInfo {
