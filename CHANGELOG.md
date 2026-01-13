@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/robotnikz/Sunflow/compare/v1.8.0...v1.9.0) (2026-01-13)
+
+
+### Features
+
+* **dashboard:** add aWATTar dynamic tariff comparison ([7a2f279](https://github.com/robotnikz/Sunflow/commit/7a2f27955aeeebd05a8b75e24c03fa001989b81c))
+
 # [1.8.0](https://github.com/robotnikz/Sunflow/compare/v1.7.0...v1.8.0) (2026-01-13)
 
 
