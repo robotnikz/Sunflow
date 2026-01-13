@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/robotnikz/Sunflow/compare/v1.7.0...v1.8.0) (2026-01-13)
+
+
+### Features
+
+* **tariffs:** compare fixed vs aWATTar prices ([f9121f9](https://github.com/robotnikz/Sunflow/commit/f9121f954f570d4428bfda3c1d3f8c0af2fa6e65))
+
 # [1.7.0](https://github.com/robotnikz/Sunflow/compare/v1.6.0...v1.7.0) (2026-01-12)
 
 
