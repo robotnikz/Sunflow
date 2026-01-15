@@ -157,6 +157,27 @@ describe('Backend API (auth/admin)', () => {
     expect(clearWebhook.status).toBe(200);
   });
 
+  it('rejects invalid JSON and non-JSON content-types on JSON write endpoints', async () => {
+    const badJson = await request(app)
+      .post('/api/tariffs')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Content-Type', 'application/json')
+      .send('{"validFrom":"2026-01-01",')
+      .buffer(true);
+
+    expect(badJson.status).toBe(400);
+    expect(badJson.body?.error).toBeDefined();
+
+    const plain = await request(app)
+      .post('/api/expenses')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Content-Type', 'text/plain')
+      .send('hello');
+
+    expect(plain.status).toBe(400);
+    expect(plain.body?.error).toBeDefined();
+  });
+
   it('protects tariff write endpoints and validates inputs', async () => {
     const get0 = await waitForTariffs(app);
     expect(get0.status).toBe(200);

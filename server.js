@@ -1031,7 +1031,9 @@ app.post('/api/config', requireAdmin, (req, res) => {
 });
 
 app.post('/api/test-notification', requireAdmin, async (req, res) => {
-    const { webhookUrl } = req.body;
+    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : null;
+    if (!body) return res.status(400).json({ error: 'Invalid JSON payload' });
+    const { webhookUrl } = body;
     if (!webhookUrl || typeof webhookUrl !== 'string') return res.status(400).json({ error: "Missing or invalid webhook URL" });
     if (!isAllowedDiscordWebhook(webhookUrl)) return res.status(400).json({ error: "Invalid Discord webhook URL" });
     
@@ -1298,7 +1300,9 @@ app.get('/api/tariffs', (req, res) => {
 });
 
 app.post('/api/tariffs', requireAdmin, (req, res) => {
-    const { validFrom, costPerKwh, feedInTariff } = req.body;
+    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : null;
+    if (!body) return res.status(400).json({ error: 'Invalid JSON payload' });
+    const { validFrom, costPerKwh, feedInTariff } = body;
     
     // Strict Input Validation
     if (!validFrom || typeof costPerKwh !== 'number' || typeof feedInTariff !== 'number') {
@@ -1348,7 +1352,9 @@ app.get('/api/expenses', (req, res) => {
 });
 
 app.post('/api/expenses', requireAdmin, (req, res) => {
-    const { name, amount, type, date } = req.body;
+    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : null;
+    if (!body) return res.status(400).json({ error: 'Invalid JSON payload' });
+    const { name, amount, type, date } = body;
     
     // Strict Input Validation
     if (typeof name !== 'string' || name.trim().length === 0 || typeof amount !== 'number' || !date || (type !== 'one_time' && type !== 'yearly')) {
@@ -2690,6 +2696,15 @@ app.use((err, req, res, next) => {
     if (res.headersSent) return next(err);
 
     const msg = String(err?.message || '');
+
+    // Body parser / JSON errors
+    if (err?.type === 'entity.parse.failed' || err instanceof SyntaxError) {
+        return res.status(400).json({ error: 'Invalid JSON payload' });
+    }
+
+    if (err?.type === 'entity.too.large') {
+        return res.status(413).json({ error: 'Request body too large' });
+    }
 
     // Multer errors for uploads
     const isMulterError = err?.name === 'MulterError' || (multer && err instanceof multer.MulterError);
