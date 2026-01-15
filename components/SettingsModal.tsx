@@ -416,13 +416,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
   const hasStartDate = !!formData.systemStartDate;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="sunflow-settings-title"
+                className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
         
         {/* Header */}
         <div className="p-6 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
-          <h2 className="text-xl font-bold text-white">System Settings</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white">
+                    <h2 id="sunflow-settings-title" className="text-xl font-bold text-white">System Settings</h2>
+                    <button aria-label="Close settings" onClick={onClose} className="text-slate-400 hover:text-white">
             <X size={24} />
           </button>
         </div>
@@ -544,7 +549,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                     <h3 className="text-slate-300 font-bold flex items-center gap-2"><Link2 size={18} className="text-blue-400"/> Discord Integration</h3>
                     <div className="flex items-center gap-2">
                          <span className="text-sm text-slate-400">Enable</span>
-                         <button type="button" role="switch" onClick={() => updateNotification({ enabled: !formData.notifications?.enabled })} className={`w-11 h-6 flex items-center rounded-full transition-colors ${formData.notifications?.enabled ? 'bg-green-500' : 'bg-slate-700'}`}>
+                                                 <button
+                                                     type="button"
+                                                     role="switch"
+                                                     aria-label="Enable notifications"
+                                                     aria-checked={!!formData.notifications?.enabled}
+                                                     onClick={() => updateNotification({ enabled: !formData.notifications?.enabled })}
+                                                     className={`w-11 h-6 flex items-center rounded-full transition-colors ${formData.notifications?.enabled ? 'bg-green-500' : 'bg-slate-700'}`}
+                                                 >
                              <div className={`w-4 h-4 rounded-full bg-white shadow-md transform transition-transform ${formData.notifications?.enabled ? 'translate-x-6' : 'translate-x-1'}`}></div>
                          </button>
                     </div>
