@@ -1016,8 +1016,12 @@ app.post('/api/config', requireAdmin, (req, res) => {
             return res.status(400).json({ error: 'Invalid notifications payload' });
         }
         if (patch.notifications.discordWebhook !== undefined) {
-            const w = patch.notifications.discordWebhook;
-            if (w !== '' && w !== undefined && w !== null && typeof w !== 'string') {
+            let w = patch.notifications.discordWebhook;
+            if (w === null) {
+                w = '';
+                patch.notifications.discordWebhook = '';
+            }
+            if (w !== '' && w !== undefined && typeof w !== 'string') {
                 return res.status(400).json({ error: 'Invalid Discord webhook URL' });
             }
             if (w && typeof w === 'string' && !isAllowedDiscordWebhook(w)) {

@@ -47,6 +47,9 @@ describe('Backend API (auth/admin)', () => {
     process.env.DISABLE_UPDATE_CHECK = '1';
     process.env.TZ = 'Europe/Berlin';
 
+    // Keep JSON body behavior testable (exercise 413 path)
+    process.env.JSON_BODY_LIMIT = '1kb';
+
     // Keep upload tests deterministic and fast
     process.env.UPLOAD_MAX_BYTES = '1024';
 
@@ -78,6 +81,7 @@ describe('Backend API (auth/admin)', () => {
       delete process.env.SUNFLOW_ADMIN_TOKEN;
       delete process.env.SUNFLOW_PROTECT_SECRETS;
       delete process.env.UPLOAD_MAX_BYTES;
+      delete process.env.JSON_BODY_LIMIT;
       delete process.env.DATA_DIR;
     }
   });
@@ -149,12 +153,42 @@ describe('Backend API (auth/admin)', () => {
       .set('Content-Type', 'application/json');
     expect(badWebhookType.status).toBe(400);
 
+    const badNotificationsArray = await request(app)
+      .post('/api/config')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ notifications: [] })
+      .set('Content-Type', 'application/json');
+    expect(badNotificationsArray.status).toBe(400);
+
     const clearWebhook = await request(app)
       .post('/api/config')
       .set('Authorization', `Bearer ${token}`)
       .send({ notifications: { discordWebhook: '' } })
       .set('Content-Type', 'application/json');
     expect(clearWebhook.status).toBe(200);
+
+    const clearWebhookNull = await request(app)
+      .post('/api/config')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ notifications: { discordWebhook: null } })
+      .set('Content-Type', 'application/json');
+    expect(clearWebhookNull.status).toBe(200);
+
+    const getAdmin = await request(app).get('/api/config').set('Authorization', `Bearer ${token}`);
+    expect(getAdmin.status).toBe(200);
+    expect(getAdmin.body.notifications?.discordWebhook).toBe('');
+  });
+
+  it('returns 413 when JSON body is too large', async () => {
+    const big = 'x'.repeat(3 * 1024);
+    const res = await request(app)
+      .post('/api/config')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Content-Type', 'application/json')
+      .send({ big });
+
+    expect(res.status).toBe(413);
+    expect(String(res.body?.error || '')).toContain('too large');
   });
 
   it('rejects invalid JSON and non-JSON content-types on JSON write endpoints', async () => {
