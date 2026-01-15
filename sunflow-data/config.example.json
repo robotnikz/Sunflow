@@ -1,0 +1,59 @@
+{
+  "inverterIp": "192.168.1.50",
+  "currency": "EUR",
+  "systemStartDate": "2023-01-01",
+  "latitude": "49.000000",
+  "longitude": "10.000000",
+  "systemCapacity": 10,
+  "batteryCapacity": 10,
+  "degradationRate": 0.5,
+  "inflationRate": 2,
+  "solcastApiKey": "",
+  "solcastSiteId": "",
+  "initialValues": {
+    "production": 0,
+    "import": 0,
+    "export": 0,
+    "financialReturn": 0
+  },
+  "appliances": [
+    {
+      "id": "washing",
+      "name": "Washing Machine",
+      "watts": 2200,
+      "kwhEstimate": 1,
+      "iconName": "shirt",
+      "color": "text-cyan-400"
+    },
+    {
+      "id": "dishwasher",
+      "name": "Dishwasher",
+      "watts": 2000,
+      "kwhEstimate": 1.2,
+      "iconName": "utensils",
+      "color": "text-teal-400"
+    }
+  ],
+  "notifications": {
+    "enabled": false,
+    "discordWebhook": "",
+    "triggers": {
+      "errors": true,
+      "batteryFull": true,
+      "batteryEmpty": true,
+      "batteryHealth": true,
+      "smartAdvice": true
+    },
+    "smartAdviceCooldownMinutes": 30,
+    "minCyclesForSoh": 10
+  },
+  "dbTotals": {
+    "production": 0,
+    "import": 0,
+    "export": 0,
+    "financialReturn": 0
+  },
+  "smartUsage": {
+    "reserveSocPct": 20
+  }
+}

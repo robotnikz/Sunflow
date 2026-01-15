@@ -141,6 +141,18 @@ docker run -d \
 
 Once running, access the dashboard at `http://localhost:3000`.
 
+> [!IMPORTANT]
+> **Secrets & Push Protection:** This repository has GitHub secret scanning push protection enabled.
+> Do **not** commit real secrets like Discord webhooks or API keys. If you accidentally exposed a secret, **rotate it immediately**.
+> For responsible disclosure, see [SECURITY.md](SECURITY.md).
+
+### Local config file
+
+For local development or self-hosting, create your runtime config file from the example:
+
+- Windows (PowerShell): `Copy-Item .\sunflow-data\config.example.json .\sunflow-data\config.json`
+- Linux/macOS: `cp ./sunflow-data/config.example.json ./sunflow-data/config.json`
+
 1.  Click the **Settings Icon** (top right).
 2.  **General:** Enter your Inverter IP (e.g., `192.168.1.50`) and System Capacity.
 3.  **Notifications:** Add your Discord Webhook URL to enable push notifications for Smart Suggestions and Alerts.

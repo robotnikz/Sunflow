@@ -25,7 +25,9 @@ logs/
 *.log
 
 # Database & Local Data (WICHTIG: Damit deine echte DB nicht im Repo landet)
-sunflow-data/
+# Ignore runtime data under sunflow-data/, but keep a tracked example config.
+sunflow-data/*
+!sunflow-data/config.example.json
 *.db
 *.sqlite
 *.sqlite3
