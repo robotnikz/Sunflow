@@ -1312,8 +1312,8 @@ app.post('/api/tariffs', requireAdmin, (req, res) => {
 });
 
 app.delete('/api/tariffs/:id', requireAdmin, (req, res) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid ID" });
 
     db.serialize(() => {
         db.get("SELECT count(*) as count FROM tariffs", (err, row) => {
@@ -1362,8 +1362,8 @@ app.post('/api/expenses', requireAdmin, (req, res) => {
 });
 
 app.delete('/api/expenses/:id', requireAdmin, (req, res) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid ID" });
 
     db.run("DELETE FROM expenses WHERE id = ?", id, function(err) {
         if (err) return res.status(500).json({ error: err.message });
