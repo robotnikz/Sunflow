@@ -1002,17 +1002,27 @@ app.get('/api/config', (req, res) => {
 app.post('/api/config', requireAdmin, (req, res) => {
     // Basic input hardening to avoid prototype pollution and accidental huge payloads.
     const patch = stripDangerousKeys(req.body);
-    if (!patch || typeof patch !== 'object') return res.status(400).json({ error: 'Invalid config payload' });
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+        return res.status(400).json({ error: 'Invalid config payload' });
+    }
 
     if (patch.inverterIp !== undefined) {
         const safeHost = sanitizeInverterHost(patch.inverterIp);
         if (!safeHost) return res.status(400).json({ error: 'Invalid inverterIp (expected host[:port])' });
         patch.inverterIp = safeHost;
     }
-    if (patch?.notifications?.discordWebhook !== undefined) {
-        const w = patch.notifications.discordWebhook;
-        if (w && !isAllowedDiscordWebhook(w)) {
-            return res.status(400).json({ error: 'Invalid Discord webhook URL' });
+    if (patch.notifications !== undefined) {
+        if (!patch.notifications || typeof patch.notifications !== 'object' || Array.isArray(patch.notifications)) {
+            return res.status(400).json({ error: 'Invalid notifications payload' });
+        }
+        if (patch.notifications.discordWebhook !== undefined) {
+            const w = patch.notifications.discordWebhook;
+            if (w !== '' && w !== undefined && w !== null && typeof w !== 'string') {
+                return res.status(400).json({ error: 'Invalid Discord webhook URL' });
+            }
+            if (w && typeof w === 'string' && !isAllowedDiscordWebhook(w)) {
+                return res.status(400).json({ error: 'Invalid Discord webhook URL' });
+            }
         }
     }
 

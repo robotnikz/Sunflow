@@ -127,6 +127,36 @@ describe('Backend API (auth/admin)', () => {
     expect(bad.status).toBe(400);
   });
 
+  it('validates /api/config payload shapes and types', async () => {
+    const badArray = await request(app)
+      .post('/api/config')
+      .set('Authorization', `Bearer ${token}`)
+      .send([])
+      .set('Content-Type', 'application/json');
+    expect(badArray.status).toBe(400);
+
+    const badNotificationsType = await request(app)
+      .post('/api/config')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ notifications: 'nope' })
+      .set('Content-Type', 'application/json');
+    expect(badNotificationsType.status).toBe(400);
+
+    const badWebhookType = await request(app)
+      .post('/api/config')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ notifications: { discordWebhook: 123 } })
+      .set('Content-Type', 'application/json');
+    expect(badWebhookType.status).toBe(400);
+
+    const clearWebhook = await request(app)
+      .post('/api/config')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ notifications: { discordWebhook: '' } })
+      .set('Content-Type', 'application/json');
+    expect(clearWebhook.status).toBe(200);
+  });
+
   it('protects tariff write endpoints and validates inputs', async () => {
     const get0 = await waitForTariffs(app);
     expect(get0.status).toBe(200);
