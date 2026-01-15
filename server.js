@@ -2458,7 +2458,8 @@ app.get('/api/energy', (req, res) => {
                     power_pv as production,
                     power_load as consumption,
                     power_grid as grid,
-                    power_battery as battery
+                    power_battery as battery,
+                    1 as is_high_res
                 FROM energy_log
                 WHERE timestamp BETWEEN ? AND ?
                 
@@ -2469,10 +2470,11 @@ app.get('/api/energy', (req, res) => {
                     production_wh as production, 
                     load_wh as consumption,
                     (grid_consumption_wh - grid_feed_in_wh) as grid,
-                    (battery_discharge_wh - battery_charge_wh) as battery
+                    (battery_discharge_wh - battery_charge_wh) as battery,
+                    0 as is_high_res
                 FROM energy_data
                 WHERE timestamp BETWEEN ? AND ?
-                ORDER BY timestamp ASC
+                ORDER BY timestamp ASC, is_high_res DESC
             `;
             params = [start, end, start, end];
         }
@@ -2518,9 +2520,17 @@ app.get('/api/energy', (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!start) rows.reverse();
         
-        // De-duplicate timestamps if using UNION (prefer Log if exists, though overlap should be minimal due to cleanup)
-        // With UNION ALL, if we have overlap, we might get double points. 
-        // Simple distinct by timestamp:
+        // De-duplicate timestamps if using UNION ALL.
+        // Prefer energy_log rows on collisions.
+        const hasRank = rows.some(r => r && Object.prototype.hasOwnProperty.call(r, 'is_high_res'));
+        if (hasRank) {
+            rows.sort((a, b) => {
+                const t = String(a.timestamp).localeCompare(String(b.timestamp));
+                if (t !== 0) return t;
+                return (Number(b.is_high_res) || 0) - (Number(a.is_high_res) || 0);
+            });
+        }
+
         const seen = new Set();
         const cleanRows = [];
         for (const r of rows) {
@@ -2529,7 +2539,16 @@ app.get('/api/energy', (req, res) => {
                 cleanRows.push(r);
             }
         }
-        res.json(cleanRows);
+
+        const output = cleanRows.map(r => ({
+            timestamp: r.timestamp,
+            production: r.production,
+            consumption: r.consumption,
+            grid: r.grid,
+            battery: r.battery,
+        }));
+
+        res.json(output);
     });
 });
 
