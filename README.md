@@ -150,6 +150,18 @@ Once running, access the dashboard at `http://localhost:3000`.
 
 ---
 
+## 🔒 Security & Hardening
+
+SunFlow is intended for self-hosting on a trusted network. If you expose it beyond your LAN, put it behind a reverse proxy with TLS and authentication.
+
+- **Optional admin token (recommended):** set `SUNFLOW_ADMIN_TOKEN` and call write endpoints with `Authorization: Bearer <token>`.
+- **CORS allowlist (recommended):** set `CORS_ORIGIN` to a comma-separated list of allowed browser origins (prod defaults to no cross-origin).
+- **Reverse proxy setups:** set `TRUST_PROXY=1` so rate limiting and IP logic work correctly.
+
+For details and additional recommendations see [AUDIT.md](AUDIT.md).
+
+---
+
 ## 🛠 Tech Stack
 
 *   **Frontend:** React 18, TypeScript, TailwindCSS, Recharts, Lucide Icons.

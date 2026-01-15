@@ -33,6 +33,15 @@ const multer = require('multer'); // New: File Uploads
 const Papa = require('papaparse'); // New: CSV Parsing
 const compression = require('compression'); // Performance: Gzip Compression
 
+app.disable('x-powered-by');
+
+// If running behind a reverse proxy (Traefik/Nginx/Caddy), set TRUST_PROXY=1 (or "true")
+// so rate limiting and IP-based logic use the correct client IP.
+if (process.env.TRUST_PROXY) {
+    const v = process.env.TRUST_PROXY;
+    app.set('trust proxy', v === 'true' ? 1 : v);
+}
+
 const PORT = process.env.PORT || 3000;
 const REPO_OWNER = 'robotnikz';
 const REPO_NAME = 'Sunflow';
@@ -58,7 +67,24 @@ if (!fs.existsSync(UPLOADS_DIR)){
 }
 
 // Upload config for middleware
-const upload = multer({ dest: UPLOADS_DIR });
+const upload = multer({
+    dest: UPLOADS_DIR,
+    limits: {
+        files: 1,
+        fileSize: Number(process.env.UPLOAD_MAX_BYTES || 15 * 1024 * 1024), // 15MB default
+        fieldSize: Number(process.env.UPLOAD_FIELD_MAX_BYTES || 256 * 1024),
+    },
+    fileFilter: (req, file, cb) => {
+        const name = String(file?.originalname || '').toLowerCase();
+        const isCsvByName = name.endsWith('.csv');
+        const mime = String(file?.mimetype || '').toLowerCase();
+        const isCsvByMime = mime.includes('csv') || mime === 'text/plain' || mime === 'application/octet-stream';
+        if (!isCsvByName && !isCsvByMime) {
+            return cb(new Error('Only CSV uploads are allowed'));
+        }
+        cb(null, true);
+    }
+});
 
 const DB_FILE = path.join(DATA_DIR, 'solar_data.db');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
@@ -71,7 +97,32 @@ app.use(helmet({
 }));
 
 // 2. CORS: Allow cross-origin requests (Dashboard usage)
-app.use(cors());
+const devCorsAllowlist = new Set([
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+]);
+const corsAllowlist = new Set(
+    String(process.env.CORS_ORIGIN || process.env.SUNFLOW_CORS_ORIGIN || '')
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+);
+const shouldEnableCors = process.env.CORS_DISABLED !== 'true' && process.env.SUNFLOW_CORS_DISABLED !== 'true';
+if (shouldEnableCors) {
+    // Secure-by-default: in production, only allow explicitly configured origins.
+    // In dev/test, allow common local dev origin to keep Vite proxy setups simple.
+    app.use(cors({
+        origin: (origin, cb) => {
+            if (!origin) return cb(null, true);
+            const isDev = process.env.NODE_ENV !== 'production';
+            if (corsAllowlist.size > 0) return cb(null, corsAllowlist.has(origin));
+            if (isDev) return cb(null, devCorsAllowlist.has(origin));
+            return cb(null, false);
+        },
+        methods: ['GET', 'POST', 'DELETE'],
+        maxAge: 600,
+    }));
+}
 
 // 3. Rate Limiting: Prevent brute-force or accidental DoS
 const apiLimiter = rateLimit({
@@ -85,7 +136,76 @@ app.use('/api/', apiLimiter);
 // 4. Compression (Gzip): Reduces JSON payload size significantly
 app.use(compression());
 
-app.use(express.json());
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '1mb' }));
+
+// Optional: protect write/admin routes via Bearer token.
+// If SUNFLOW_ADMIN_TOKEN is unset, everything remains open (backwards compatible).
+const requireAdmin = (req, res, next) => {
+    const token = process.env.SUNFLOW_ADMIN_TOKEN;
+    if (!token) return next();
+
+    const auth = String(req.headers.authorization || '');
+    if (auth === `Bearer ${token}`) return next();
+    return res.status(401).json({ error: 'Unauthorized' });
+};
+
+const isAdminRequest = (req) => {
+    const token = process.env.SUNFLOW_ADMIN_TOKEN;
+    if (!token) return true;
+    const auth = String(req.headers.authorization || '');
+    return auth === `Bearer ${token}`;
+};
+
+const sanitizeInverterHost = (host) => {
+    if (!host || typeof host !== 'string') return null;
+    const h = host.trim();
+    // Must be host[:port] only; reject URLs/paths/userinfo.
+    if (!h || /[\s\/\\\?#@]/.test(h)) return null;
+    return h;
+};
+
+const isAllowedDiscordWebhook = (webhookUrl) => {
+    if (!webhookUrl || typeof webhookUrl !== 'string') return false;
+    let u;
+    try {
+        u = new URL(webhookUrl);
+    } catch {
+        return false;
+    }
+    if (u.protocol !== 'https:') return false;
+
+    const host = u.hostname.toLowerCase();
+    // Discord webhook hosts (new + legacy). Keep narrow to avoid SSRF.
+    const allowedHosts = new Set(['discord.com', 'discordapp.com', 'canary.discord.com', 'ptb.discord.com']);
+    if (!allowedHosts.has(host)) return false;
+
+    // Require webhook path structure
+    if (!u.pathname.startsWith('/api/webhooks/')) return false;
+    return true;
+};
+
+const stripDangerousKeys = (value) => {
+    if (!value || typeof value !== 'object') return value;
+    if (Array.isArray(value)) return value.map(stripDangerousKeys);
+
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+        if (k === '__proto__' || k === 'prototype' || k === 'constructor') continue;
+        out[k] = stripDangerousKeys(v);
+    }
+    return out;
+};
+
+const redactConfigForClient = (config) => {
+    const tokenSet = !!process.env.SUNFLOW_ADMIN_TOKEN;
+    const protectSecrets = process.env.SUNFLOW_PROTECT_SECRETS !== 'false';
+    if (!tokenSet || !protectSecrets) return config;
+
+    const safe = stripDangerousKeys(config);
+    if (safe?.notifications?.discordWebhook) safe.notifications.discordWebhook = '';
+    if (safe?.solcastApiKey) safe.solcastApiKey = '';
+    return safe;
+};
 
 // 5. Serve static files with Aggressive Caching (Immutable assets)
 // Vite generates filenames with hashes (e.g. index.12ea.js), so we can cache them "forever"
@@ -378,6 +498,9 @@ let inverterCache = {
 };
 
 const fetchFroniusData = async (ip) => {
+    const safeHost = sanitizeInverterHost(ip);
+    if (!safeHost) return null;
+
     const now = Date.now();
     // Return cached data if request is within 1000ms (1 second) of the last one
     if (inverterCache.data && (now - inverterCache.timestamp < 1000)) {
@@ -385,7 +508,7 @@ const fetchFroniusData = async (ip) => {
     }
 
     try {
-        const url = `http://${ip}/solar_api/v1/GetPowerFlowRealtimeData.fcgi`;
+        const url = `http://${safeHost}/solar_api/v1/GetPowerFlowRealtimeData.fcgi`;
         const response = await axios.get(url, { timeout: 3000 });
         
         // Update Cache
@@ -412,7 +535,7 @@ const notifyState = {
 };
 
 const sendDiscordNotification = async (webhookUrl, title, description, color, fields = []) => {
-    if (!webhookUrl || typeof webhookUrl !== 'string' || !webhookUrl.startsWith('http')) return;
+    if (!isAllowedDiscordWebhook(webhookUrl)) return;
 
     try {
         await axios.post(webhookUrl, {
@@ -863,16 +986,37 @@ const getVersionInfo = async () => {
 
 // --- API ---
 
-app.get('/api/config', (req, res) => res.json(getConfig()));
+app.get('/api/config', (req, res) => {
+    const config = getConfig();
+    if (isAdminRequest(req)) return res.json(config);
+    return res.json(redactConfigForClient(config));
+});
 
-app.post('/api/config', (req, res) => {
-    saveConfig(req.body);
+app.post('/api/config', requireAdmin, (req, res) => {
+    // Basic input hardening to avoid prototype pollution and accidental huge payloads.
+    const patch = stripDangerousKeys(req.body);
+    if (!patch || typeof patch !== 'object') return res.status(400).json({ error: 'Invalid config payload' });
+
+    if (patch.inverterIp !== undefined) {
+        const safeHost = sanitizeInverterHost(patch.inverterIp);
+        if (!safeHost) return res.status(400).json({ error: 'Invalid inverterIp (expected host[:port])' });
+        patch.inverterIp = safeHost;
+    }
+    if (patch?.notifications?.discordWebhook !== undefined) {
+        const w = patch.notifications.discordWebhook;
+        if (w && !isAllowedDiscordWebhook(w)) {
+            return res.status(400).json({ error: 'Invalid Discord webhook URL' });
+        }
+    }
+
+    saveConfig(patch);
     res.json({ success: true });
 });
 
-app.post('/api/test-notification', async (req, res) => {
+app.post('/api/test-notification', requireAdmin, async (req, res) => {
     const { webhookUrl } = req.body;
     if (!webhookUrl || typeof webhookUrl !== 'string') return res.status(400).json({ error: "Missing or invalid webhook URL" });
+    if (!isAllowedDiscordWebhook(webhookUrl)) return res.status(400).json({ error: "Invalid Discord webhook URL" });
     
     try {
         await sendDiscordNotification(webhookUrl, "🔔 Test Notification", "SunFlow notifications are working correctly!", 16776960);
@@ -1091,16 +1235,10 @@ app.get('/api/forecast', async (req, res) => {
         return res.json(solcastCache.data);
     }
 
-                    // Only do this before sunset (hard boundary via Open-Meteo when possible).
+    // Outside daylight window: avoid calling Solcast at night. Serve cached data if present.
     if (!isDaytime) {
-                    const sunTimes = await getTodaySunTimes(config);
-                    const isDaylightNow = sunTimes ? isNowBetweenSunriseAndSunset(sunTimes) : null;
-                    const isBeforeSunsetWindow = (typeof isDaylightNow === 'boolean')
-                        ? isDaylightNow
-                        : (new Date().getHours() >= 6 && new Date().getHours() < 18);
-
-                    const canUseReserveNow = isBeforeSunsetWindow && soc > (reserveSocPct + 0.5) && aboveReserveKwh > 0;
-         return res.json({ forecasts: [] });
+        if (solcastCache.data) return res.json(solcastCache.data);
+        return res.json({ forecasts: [] });
     }
 
     // 3. Fetch new data
@@ -1132,7 +1270,7 @@ app.get('/api/tariffs', (req, res) => {
     });
 });
 
-app.post('/api/tariffs', (req, res) => {
+app.post('/api/tariffs', requireAdmin, (req, res) => {
     const { validFrom, costPerKwh, feedInTariff } = req.body;
     
     // Strict Input Validation
@@ -1148,7 +1286,7 @@ app.post('/api/tariffs', (req, res) => {
     stmt.finalize();
 });
 
-app.delete('/api/tariffs/:id', (req, res) => {
+app.delete('/api/tariffs/:id', requireAdmin, (req, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
 
@@ -1174,7 +1312,7 @@ app.get('/api/expenses', (req, res) => {
     });
 });
 
-app.post('/api/expenses', (req, res) => {
+app.post('/api/expenses', requireAdmin, (req, res) => {
     const { name, amount, type, date } = req.body;
     
     // Strict Input Validation
@@ -1190,7 +1328,7 @@ app.post('/api/expenses', (req, res) => {
     stmt.finalize();
 });
 
-app.delete('/api/expenses/:id', (req, res) => {
+app.delete('/api/expenses/:id', requireAdmin, (req, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
 
@@ -2307,12 +2445,23 @@ app.get('/api/energy', (req, res) => {
  * IMPORT CSV API
  * Handles file upload and parses CSV data into the database
  */
-app.post('/api/import-csv', upload.single('file'), (req, res) => {
+app.post('/api/import-csv', requireAdmin, upload.single('file'), (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const mapping = JSON.parse(req.body.mapping || '{}');
+    let mapping = {};
+    try {
+        mapping = JSON.parse(req.body.mapping || '{}');
+    } catch {
+        try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+        return res.status(400).json({ error: 'Invalid mapping JSON' });
+    }
+
+    if (!mapping || typeof mapping !== 'object') {
+        try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+        return res.status(400).json({ error: 'Invalid mapping' });
+    }
     const filePath = req.file.path;
     const fileContent = fs.readFileSync(filePath, 'utf8');
 
@@ -2322,7 +2471,9 @@ app.post('/api/import-csv', upload.single('file'), (req, res) => {
         complete: (results) => {
              const rows = results.data;
              if (rows.length === 0) {
-                 if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                 if (fs.existsSync(filePath)) {
+                    try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+                 }
                  return res.json({ success: true, imported: 0 });
              }
 
@@ -2331,7 +2482,9 @@ app.post('/api/import-csv', upload.single('file'), (req, res) => {
                                  .filter(r => !isNaN(r._d.getTime()));
                                  
              if (dateRows.length === 0) {
-                 if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                 if (fs.existsSync(filePath)) {
+                    try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+                 }
                  return res.json({ success: true, imported: 0 });
              }
 
@@ -2408,7 +2561,9 @@ app.post('/api/import-csv', upload.single('file'), (req, res) => {
                  stmtData.finalize();
                  
                  db.run("COMMIT", (err) => {
-                     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                     if (fs.existsSync(filePath)) {
+                        try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+                     }
                      if (err) return res.status(500).json({ error: "Commit failed: " + err.message });
                      
                      // Recalculate calibration values after every successful import
@@ -2420,7 +2575,9 @@ app.post('/api/import-csv', upload.single('file'), (req, res) => {
              });
         },
         error: (err) => {
-             if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+               if (fs.existsSync(filePath)) {
+                 try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+               }
              res.status(500).json({ error: "CSV Parsing failed: " + err.message });
         }
     });
@@ -2430,7 +2587,7 @@ app.post('/api/import-csv', upload.single('file'), (req, res) => {
  * PREVIEW CSV API
  * Returns the headers and first 5 rows to help user map columns
  */
-app.post('/api/preview-csv', upload.single('file'), (req, res) => {
+app.post('/api/preview-csv', requireAdmin, upload.single('file'), (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
     }
@@ -2444,11 +2601,11 @@ app.post('/api/preview-csv', upload.single('file'), (req, res) => {
         preview: 5,
         skipEmptyLines: true,
         complete: (results) => {
-            fs.unlinkSync(filePath); // Cleanup temp file immediately
+            try { fs.unlinkSync(filePath); } catch { /* ignore */ }
             res.json({ headers: results.meta.fields, preview: results.data });
         },
         error: (err) => {
-             fs.unlinkSync(filePath);
+             try { fs.unlinkSync(filePath); } catch { /* ignore */ }
              res.status(500).json({ error: err.message });
         }
     });
