@@ -80,7 +80,10 @@ const upload = multer({
         const mime = String(file?.mimetype || '').toLowerCase();
         const isCsvByMime = mime.includes('csv') || mime === 'text/plain' || mime === 'application/octet-stream';
         if (!isCsvByName && !isCsvByMime) {
-            return cb(new Error('Only CSV uploads are allowed'));
+            // Don't throw (can cause connection resets while client is still streaming).
+            // Instead, skip the file and let the route return a clean 400.
+            req.fileValidationError = 'Only CSV uploads are allowed';
+            return cb(null, false);
         }
         cb(null, true);
     }
@@ -2450,6 +2453,9 @@ app.get('/api/energy', (req, res) => {
  * Handles file upload and parses CSV data into the database
  */
 app.post('/api/import-csv', requireAdmin, upload.single('file'), (req, res) => {
+    if (req.fileValidationError) {
+        return res.status(400).json({ error: req.fileValidationError });
+    }
     if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
     }
@@ -2592,6 +2598,9 @@ app.post('/api/import-csv', requireAdmin, upload.single('file'), (req, res) => {
  * Returns the headers and first 5 rows to help user map columns
  */
 app.post('/api/preview-csv', requireAdmin, upload.single('file'), (req, res) => {
+    if (req.fileValidationError) {
+        return res.status(400).json({ error: req.fileValidationError });
+    }
     if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
     }
@@ -2613,6 +2622,38 @@ app.post('/api/preview-csv', requireAdmin, upload.single('file'), (req, res) => 
              res.status(500).json({ error: err.message });
         }
     });
+});
+
+// Central error handler (important for multer upload limits and fileFilter errors)
+app.use((err, req, res, next) => {
+    if (!err) return next();
+    if (res.headersSent) return next(err);
+
+    const msg = String(err?.message || '');
+
+    // Multer errors for uploads
+    const isMulterError = err?.name === 'MulterError' || (multer && err instanceof multer.MulterError);
+    if (isMulterError) {
+        const code = err.code;
+        if (code === 'LIMIT_FILE_SIZE') {
+            return res.status(413).json({ error: 'File too large' });
+        }
+        if (code === 'LIMIT_FILE_COUNT') {
+            return res.status(400).json({ error: 'Too many files' });
+        }
+        if (code === 'LIMIT_FIELD_SIZE') {
+            return res.status(413).json({ error: 'Request field too large' });
+        }
+        return res.status(400).json({ error: 'Upload failed' });
+    }
+
+    // fileFilter rejects
+    if (msg.includes('Only CSV uploads are allowed')) {
+        return res.status(400).json({ error: 'Only CSV uploads are allowed' });
+    }
+
+    // Default
+    return res.status(500).json({ error: msg || 'Internal Server Error' });
 });
 
 app.get(/.*/, (req, res) => {

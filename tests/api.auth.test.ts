@@ -47,6 +47,9 @@ describe('Backend API (auth/admin)', () => {
     process.env.DISABLE_UPDATE_CHECK = '1';
     process.env.TZ = 'Europe/Berlin';
 
+    // Keep upload tests deterministic and fast
+    process.env.UPLOAD_MAX_BYTES = '1024';
+
     process.env.SUNFLOW_ADMIN_TOKEN = token;
     process.env.SUNFLOW_PROTECT_SECRETS = 'true';
 
@@ -74,6 +77,7 @@ describe('Backend API (auth/admin)', () => {
 
       delete process.env.SUNFLOW_ADMIN_TOKEN;
       delete process.env.SUNFLOW_PROTECT_SECRETS;
+      delete process.env.UPLOAD_MAX_BYTES;
       delete process.env.DATA_DIR;
     }
   });
@@ -258,5 +262,34 @@ describe('Backend API (auth/admin)', () => {
     });
     db.close();
     expect(count).toBeGreaterThanOrEqual(2);
+  });
+
+  it('rejects non-CSV uploads (fileFilter) with a clean 400', async () => {
+    const badPath = path.join(dataDir, 'upload.json');
+    fs.writeFileSync(badPath, JSON.stringify({ hello: 'world' }), 'utf8');
+
+    const res = await request(app)
+      .post('/api/preview-csv')
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', badPath, { filename: 'evil.json', contentType: 'application/json' });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Only CSV uploads are allowed' });
+  });
+
+  it('returns 413 when uploaded CSV exceeds size limit', async () => {
+    const bigRows = Array.from({ length: 400 }, (_, i) => `2026-01-15T10:${String(i % 60).padStart(2, '0')}:00Z,1`);
+    const bigCsv = ['timestamp,power_pv', ...bigRows].join('\n');
+
+    const bigPath = path.join(dataDir, 'big.csv');
+    fs.writeFileSync(bigPath, bigCsv, 'utf8');
+
+    const res = await request(app)
+      .post('/api/preview-csv')
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', bigPath);
+
+    expect(res.status).toBe(413);
+    expect(String(res.body?.error || '')).toMatch(/too large|file/i);
   });
 });
