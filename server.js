@@ -2190,6 +2190,21 @@ app.get('/api/history', (req, res) => {
 
         db.all(query, [s, e, s, e], (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
+
+            // De-duplicate overlapping timestamps between energy_log (high-res) and energy_data (hourly).
+            // Prefer high-res rows when timestamps collide to avoid double-counting.
+            rows.sort((a, b) => {
+                const t = String(a.timestamp).localeCompare(String(b.timestamp));
+                if (t !== 0) return t;
+                return (Number(b.is_high_res) || 0) - (Number(a.is_high_res) || 0);
+            });
+            const seenTimestamps = new Set();
+            rows = rows.filter(r => {
+                const ts = String(r.timestamp);
+                if (seenTimestamps.has(ts)) return false;
+                seenTimestamps.add(ts);
+                return true;
+            });
             
             let stats = { production: 0, consumption: 0, imported: 0, exported: 0, batteryCharged: 0, batteryDischarged: 0, autonomy: 0, selfConsumption: 0, costSaved: 0, earnings: 0 };
 

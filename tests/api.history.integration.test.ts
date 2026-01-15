@@ -231,6 +231,34 @@ describe('Backend API (history integration)', () => {
     expect(Number(raw[0]?.c)).toBe(1);
   });
 
+  it('de-duplicates overlapping timestamps, preferring energy_log over energy_data', async () => {
+    // Same timestamp exists in both tables (possible around archive/import boundaries).
+    // We want one point in the chart and no double-counting in stats.
+    await dbRun(
+      dbPath,
+      'INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, status_code) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ['2026-01-01 00:00:00', 60000, 0, 0, 0, 50, 1],
+    );
+    await dbRun(
+      dbPath,
+      'INSERT INTO energy_data (timestamp, production_wh, grid_consumption_wh, grid_feed_in_wh, battery_charge_wh, battery_discharge_wh, load_wh) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ['2026-01-01 00:00:00', 1000, 0, 0, 0, 0, 0],
+    );
+
+    const res = await request(app).get('/api/history?range=custom&start=2026-01-01&end=2026-01-01');
+    expect(res.status).toBe(200);
+
+    expect(res.body.chart.length).toBe(1);
+    expect(res.body.chart[0].timestamp).toBe('2026-01-01 00:00:00');
+
+    // From energy_log high-res point (W), not energy_data Wh value.
+    expect(res.body.chart[0].production).toBe(60000);
+
+    // Stats should use only the energy_log contribution:
+    // 60kW for 1 minute => 1kWh (default 1/60h integration for single point).
+    expect(res.body.stats.production).toBeCloseTo(1.0, 5);
+  });
+
   it('aggregates week range into daily bars (energy_data)', async () => {
     vi.useFakeTimers();
     try {
