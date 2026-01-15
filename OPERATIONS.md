@@ -125,3 +125,47 @@ If you run SunFlow behind a reverse proxy (nginx, Traefik, Caddy):
 
 - Restart/resume: run `npm run soaktest` and execute `docker compose restart` during the run.
 - Network outage: temporarily block inverter access and confirm the process stays alive and the UI remains usable.
+
+## 24h stability checklist (manual)
+
+This is a practical long-run validation to catch leaks, unhandled errors, and “slow degradation” issues.
+
+### Before you start
+
+- Use a persistent volume mount (`./sunflow-data:/app/data`).
+- Ensure the container is healthy:
+   - `docker ps` (should show `healthy`)
+   - `docker logs --tail 200 sunflow` (no crash loop)
+
+### Run
+
+1. Start the container:
+
+    - `docker compose up -d`
+
+2. Start a lightweight soak against the running service:
+
+    - `npm run soaktest -- --url http://localhost:3000 --duration 86400 --interval 5`
+
+3. During the 24h period, perform these exercises:
+
+    - Restart/resume: `docker compose restart`
+    - Stop/start: `docker compose stop` then `docker compose start`
+    - Network outage simulation: make the inverter IP unreachable for ~5-10 minutes (router rule / firewall), then restore connectivity
+
+### What to monitor
+
+- Health status stays `healthy` (no flapping).
+- Logs:
+   - no repeated unhandled exceptions
+   - no repeated DB “busy/locked” errors
+- Resource usage:
+   - `docker stats sunflow` (CPU/memory does not grow without bound)
+- Disk:
+   - data directory growth is plausible for your retention settings
+
+### Expected outcome
+
+- No sustained 5xx responses during normal operation.
+- After restart or network outage, the service recovers without manual intervention.
+- UI stays usable (even if live data temporarily fails).

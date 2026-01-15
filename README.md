@@ -163,6 +163,8 @@ SunFlow is intended for self-hosting on a trusted network. If you expose it beyo
 
 For details and additional recommendations see [AUDIT.md](AUDIT.md).
 
+Practical checklist for self-hosting: [SECURITY_CHECKLIST.md](SECURITY_CHECKLIST.md).
+
 ---
 
 ## 🛠 Tech Stack
@@ -183,6 +185,8 @@ For details and additional recommendations see [AUDIT.md](AUDIT.md).
 See [TESTPLAN.md](TESTPLAN.md) for the current regression strategy and operating scenarios.
 
 For day-2 operations (backup/restore, upgrades/rollbacks, monitoring), see [OPERATIONS.md](OPERATIONS.md).
+
+For UI/usability validation notes, see [UX_CHECKLIST.md](UX_CHECKLIST.md).
 
 ## 🌍 Compatibility
 

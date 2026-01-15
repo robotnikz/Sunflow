@@ -61,15 +61,21 @@ Goal: Validate UI ↔ backend as a whole.
 	- For Docker: `docker compose up -d` then run soaktest against the published port.
 	- Optional: run `docker compose restart` during the soak and verify the service recovers cleanly.
 
+For a concrete 24h checklist (restart/resume, outage simulation, what to monitor), see `OPERATIONS.md`.
+
 ### c) Security
 - AuthN/Z: admin token enforced
 - Input validation: invalid bodies/IDs
 - Secrets: redaction when admin token is enabled
 - Automated regressions: see `tests/api.security.regression.test.ts` (CORS allowlist + webhook SSRF guard).
 
+Manual self-hosting checklist: `SECURITY_CHECKLIST.md`.
+
 ## 6) Usability & UX
 
 - Clear copy, consistent validation, actionable error messages.
+
+Checklist: `UX_CHECKLIST.md`.
 
 ## 7) Compatibility & environment
 

@@ -101,6 +101,10 @@ Notes:
 - Prefer pinning images by version tag or digest in Compose (avoid `:latest` for predictable rollbacks).
 - Keep secrets out of config responses when possible; if you set `SUNFLOW_ADMIN_TOKEN`, secrets are redacted for non-admin requests.
 
+See also:
+- Practical self-hosting checklist: `SECURITY_CHECKLIST.md`
+- Day-2 operations runbook: `OPERATIONS.md`
+
 ## Env var reference (added/used)
 
 - `SUNFLOW_ADMIN_TOKEN`: if set, write/admin routes require `Authorization: Bearer <token>`.
