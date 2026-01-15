@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 
+import axios from 'axios';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -211,6 +212,72 @@ describe('Backend API (auth/admin)', () => {
       .send({ webhookUrl: 'https://example.com/api/webhooks/123/abc' })
       .set('Content-Type', 'application/json');
     expect(badUrl.status).toBe(400);
+
+    const badShape = await request(app)
+      .post('/api/test-notification')
+      .set('Authorization', `Bearer ${token}`)
+      .send([])
+      .set('Content-Type', 'application/json');
+    expect(badShape.status).toBe(400);
+
+    const badContentType = await request(app)
+      .post('/api/test-notification')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Content-Type', 'text/plain')
+      .send('hello');
+    expect(badContentType.status).toBe(400);
+  });
+
+  it('sends /api/test-notification with an allowed webhook (mocked axios)', async () => {
+    const webhookUrl = 'https://discord.com/api/webhooks/123/abc';
+
+    // Enable exactly this outbound call path; everything else still fails loudly.
+    vi.mocked((axios as any).post).mockResolvedValueOnce({ status: 204, data: {} });
+
+    const res = await request(app)
+      .post('/api/test-notification')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ webhookUrl })
+      .set('Content-Type', 'application/json');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ success: true });
+
+    expect((axios as any).post).toHaveBeenCalledTimes(1);
+    expect((axios as any).post).toHaveBeenCalledWith(
+      webhookUrl,
+      expect.objectContaining({
+        embeds: [
+          expect.objectContaining({
+            title: '🔔 Test Notification',
+            description: expect.stringContaining('SunFlow notifications'),
+            footer: { text: 'SunFlow Gen24' },
+            timestamp: expect.any(String),
+          }),
+        ],
+      })
+    );
+  });
+
+  it('validates /api/config inverterIp hardening', async () => {
+    const bad = await request(app)
+      .post('/api/config')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ inverterIp: 'http://example.com:80' })
+      .set('Content-Type', 'application/json');
+
+    expect(bad.status).toBe(400);
+
+    const ok = await request(app)
+      .post('/api/config')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ inverterIp: '192.168.1.10:80' })
+      .set('Content-Type', 'application/json');
+    expect(ok.status).toBe(200);
+
+    const getRes = await request(app).get('/api/config');
+    expect(getRes.status).toBe(200);
+    expect(getRes.body.inverterIp).toBe('192.168.1.10:80');
   });
 
   it('rejects invalid JSON and non-JSON content-types on JSON write endpoints', async () => {
