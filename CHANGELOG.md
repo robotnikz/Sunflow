@@ -1,3 +1,15 @@
+# [1.10.0](https://github.com/robotnikz/Sunflow/compare/v1.9.3...v1.10.0) (2026-01-15)
+
+
+### Bug Fixes
+
+* **smart-recommendations:** show per-run cost and battery equivalent ([df77e51](https://github.com/robotnikz/Sunflow/commit/df77e513c4841bfb06d58dc567abab79b2223e70))
+
+
+### Features
+
+* **appliances:** allow kWh-per-run or watts+duration ([f361103](https://github.com/robotnikz/Sunflow/commit/f361103ca3441a42d4732eb748bfdc4dd5c94a9d))
+
 ## [1.9.3](https://github.com/robotnikz/Sunflow/compare/v1.9.2...v1.9.3) (2026-01-15)
 
 
