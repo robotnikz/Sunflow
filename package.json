@@ -20,7 +20,8 @@
     "test:e2e:ui": "playwright test --ui",
     "playwright:install": "playwright install",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "loadtest": "node scripts/loadtest.mjs"
   },
   "dependencies": {
     "@types/multer": "^2.0.0",
@@ -53,6 +54,7 @@
     "@types/supertest": "^6.0.3",
     "@vitejs/plugin-react": "^5.1.2",
     "autoprefixer": "^10.4.20",
+    "autocannon": "^7.15.0",
     "concurrently": "^9.1.0",
     "eslint": "^9.9.0",
     "jsdom": "^27.4.0",

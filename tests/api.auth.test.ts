@@ -191,6 +191,28 @@ describe('Backend API (auth/admin)', () => {
     expect(String(res.body?.error || '')).toContain('too large');
   });
 
+  it('validates /api/test-notification payloads (no outbound calls)', async () => {
+    const unauth = await request(app)
+      .post('/api/test-notification')
+      .send({ webhookUrl: 'https://discord.com/api/webhooks/123/abc' })
+      .set('Content-Type', 'application/json');
+    expect(unauth.status).toBe(401);
+
+    const badType = await request(app)
+      .post('/api/test-notification')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ webhookUrl: 123 })
+      .set('Content-Type', 'application/json');
+    expect(badType.status).toBe(400);
+
+    const badUrl = await request(app)
+      .post('/api/test-notification')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ webhookUrl: 'https://example.com/api/webhooks/123/abc' })
+      .set('Content-Type', 'application/json');
+    expect(badUrl.status).toBe(400);
+  });
+
   it('rejects invalid JSON and non-JSON content-types on JSON write endpoints', async () => {
     const badJson = await request(app)
       .post('/api/tariffs')

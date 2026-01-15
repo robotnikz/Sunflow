@@ -88,3 +88,4 @@ Ziel: UI ↔ Backend als Ganzes.
 
 - Unit/Integration: `npm run test:run`
 - Typecheck: `npm run typecheck`
+- Loadtest (manuell): `npm run loadtest -- --url http://localhost:3000 --duration 10 --connections 25`
