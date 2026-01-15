@@ -1,0 +1,127 @@
+# SunFlow Operations Runbook
+
+This document focuses on day-2 operations: backups, upgrades, rollbacks, and basic troubleshooting.
+
+## Recommended deployment defaults
+
+- Pin production deployments to a version tag (or digest), not only `:latest`.
+- Persist data via a volume mount to `/app/data`.
+- If exposed beyond your LAN, use a reverse proxy with TLS and authentication.
+
+## Data persistence layout
+
+SunFlow stores state in the directory configured as `DATA_DIR` (Docker image default: `/app/data`).
+
+Typical files:
+
+- `config.json` (runtime configuration)
+- `solar_data.db` (SQLite database)
+- `uploads/` (temporary upload files)
+
+## Backup & restore
+
+### Backup (Docker Compose)
+
+1. Stop the container (recommended to avoid copying a changing DB):
+
+   - `docker compose stop`
+
+2. Copy the entire data directory:
+
+   - `cp -r ./sunflow-data ./sunflow-data.backup-YYYYMMDD`
+
+3. Start the container again:
+
+   - `docker compose start`
+
+### Restore (Docker Compose)
+
+1. Stop the container:
+
+   - `docker compose stop`
+
+2. Replace the data directory with a backup:
+
+   - `rm -rf ./sunflow-data`
+   - `cp -r ./sunflow-data.backup-YYYYMMDD ./sunflow-data`
+
+3. Start the container:
+
+   - `docker compose start`
+
+Notes:
+
+- If you use filesystem snapshots (NAS), prefer snapshots over file copies.
+- If you must back up while running, copy the whole directory and validate the DB on restore.
+
+## Upgrade & rollback
+
+### Upgrade
+
+1. Update the image tag in `docker-compose.yml`.
+
+   Example:
+
+   - `ghcr.io/robotnikz/sunflow:1.11.0`
+
+2. Pull and restart:
+
+   - `docker compose pull`
+   - `docker compose up -d`
+
+### Rollback
+
+1. Switch the image tag back to the last known-good version.
+2. Pull and restart:
+
+   - `docker compose pull`
+   - `docker compose up -d`
+
+## Health checks & monitoring
+
+### Container health
+
+The official image includes a Docker `HEALTHCHECK` against `GET /api/info`.
+
+Check status:
+
+- `docker ps` (look for `healthy`)
+- `docker inspect sunflow --format '{{json .State.Health}}'`
+
+### Logs
+
+- `docker logs -f sunflow`
+
+### Basic resource monitoring
+
+- CPU/memory: `docker stats sunflow`
+- Disk usage: monitor the `sunflow-data/` directory growth over time
+
+## Reverse proxy notes
+
+If you run SunFlow behind a reverse proxy (nginx, Traefik, Caddy):
+
+- Set `TRUST_PROXY=1` so rate limiting and IP logic behave correctly.
+- Avoid exposing the raw container port publicly without auth.
+
+## Common failure modes
+
+### 1) UI loads but charts are empty
+
+- Verify the DB volume is mounted correctly (`./sunflow-data:/app/data`).
+- Check logs for SQLite errors.
+
+### 2) Forecast fails
+
+- Ensure Solcast is configured.
+- Nighttime behavior is expected to skip Solcast calls.
+
+### 3) CSV import fails
+
+- Verify upload size limits (`UPLOAD_MAX_BYTES`).
+- Check logs for validation errors.
+
+## Stability exercises (manual)
+
+- Restart/resume: run `npm run soaktest` and execute `docker compose restart` during the run.
+- Network outage: temporarily block inverter access and confirm the process stays alive and the UI remains usable.

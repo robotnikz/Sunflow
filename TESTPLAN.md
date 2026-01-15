@@ -106,6 +106,8 @@ Manual ops scenarios (short):
 - Restart/resume: `docker compose restart` while `npm run soaktest` is running
 - Network outage: inverter IP temporarily unreachable → API must not crash; UI should remain usable
 
+For a practical runbook (backup/restore, upgrades/rollbacks, monitoring), see `OPERATIONS.md`.
+
 ## 10) Docs & tests
 
 - README/setup/examples must stay consistent with current behavior.

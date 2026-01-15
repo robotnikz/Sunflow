@@ -182,6 +182,8 @@ For details and additional recommendations see [AUDIT.md](AUDIT.md).
 
 See [TESTPLAN.md](TESTPLAN.md) for the current regression strategy and operating scenarios.
 
+For day-2 operations (backup/restore, upgrades/rollbacks, monitoring), see [OPERATIONS.md](OPERATIONS.md).
+
 ## 🌍 Compatibility
 
 - OS: Windows/Linux (primarily tested via CI + local dev)
