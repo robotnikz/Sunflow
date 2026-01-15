@@ -48,9 +48,18 @@ Stay informed wherever you are.
 
 ### 📈 Upgrade Simulator (NEW!)
 Experiment with your system before spending a dime.
-*   **Scenario Planning:** Simulate adding more PV power (+200%) or larger battery storage (up to 30kWh).
-*   **Accuracy Check:** The simulator identifies and utilizes only high-quality hourly data records for 100% reliable ROI forecasting.
-*   **Financial Impact:** Calculate the exact payback period of potential upgrades based on your *real* historical load profile.
+*   **Scenario Planning:** Simulate adding more PV power (+200%) and/or a larger battery (up to 30kWh).
+*   **Coupled ROI:** Shows the battery’s *incremental* benefit (PV-only → PV+Battery) so PV ↔ battery dependencies are visible.
+*   **Historical Baseline (Correctness):** Uses your real hourly import/export where available so the “no-upgrade” baseline matches reality.
+*   **Uses Available Signals:** If present, the simulator uses measured battery SoC and charge/discharge flows to improve realism (start state + limits/efficiency).
+*   **Battery Sizing Hint:** Optionally suggests a “best value” battery add-on size based on your own history.
+
+### ⚡ Dynamic Tariff Comparison (aWATTar)
+See if a dynamic market-based tariff would have been cheaper for your household.
+*   **Fixed vs Dynamic:** Compares your historic net cost using your configured fixed tariff vs aWATTar hourly market prices.
+*   **Real Import/Export:** Uses your actual hourly grid import/export from the database (export is still credited at your configured feed-in tariff).
+*   **All-in Assumptions:** Add a surcharge and VAT to approximate your full retail price (aWATTar provides exchange prices).
+*   **Flexible Range:** Pick 7/30/180/365 days or a custom date range, with coverage stats shown.
 
 ### 🔋 Battery Health Guard
 *   **SOH Tracking:** Automatically estimates your Battery's **State of Health** and **Efficiency** based on real charge/discharge cycles over time.
