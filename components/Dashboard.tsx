@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { InverterData, SystemConfig, TimeRange, HistoryData, RoiData, ForecastData, BatteryHealthData } from '../types';
+import { InverterData, SystemConfig, TimeRange, HistoryData, RoiData, ForecastData, BatteryHealthData, Tariff } from '../types';
 import PowerFlow from './PowerFlow';
 import EnergyChart from './EnergyChart';
 import BatteryChart from './BatteryChart';
@@ -15,7 +15,7 @@ import SmartRecommendations from './SmartRecommendations';
 import BatteryHealthWidget from './BatteryHealthWidget';
 import ScenarioPlanner from './ScenarioPlanner';
 import DynamicTariffComparison from './DynamicTariffComparison';
-import { getHistory, getRoiData, getForecast, getBatteryHealth } from '../services/api';
+import { getHistory, getRoiData, getForecast, getBatteryHealth, getTariffs } from '../services/api';
 import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp, ShieldCheck, Download, ChevronLeft, ChevronRight, History } from 'lucide-react';
 
 interface DashboardProps {
@@ -52,6 +52,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
   const [statusHistory, setStatusHistory] = useState<HistoryData | null>(null);
 
   const [roiData, setRoiData] = useState<RoiData | null>(null);
+    const [tariffs, setTariffs] = useState<Tariff[] | null>(null);
   const [forecast, setForecast] = useState<ForecastData | null>(null);
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [batteryHealth, setBatteryHealth] = useState<BatteryHealthData | null>(null);
@@ -96,6 +97,13 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
             const rData = await getRoiData();
             setRoiData(rData);
         } catch(e) { console.error("ROI Fetch Error", e); }
+
+        try {
+            const tData = await getTariffs();
+            setTariffs(tData);
+        } catch (e) {
+            console.error('Tariffs Fetch Error', e);
+        }
         
         try {
              const bData = await getBatteryHealth();
@@ -284,6 +292,14 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
 
   if (!data) return null;
 
+    const activeGridCostPerKwh = (() => {
+        const list = tariffs || [];
+        if (list.length === 0) return 0;
+        const sorted = [...list].sort((a, b) => new Date(b.validFrom).getTime() - new Date(a.validFrom).getTime());
+        const active = sorted.find(t => new Date(t.validFrom) <= new Date()) || sorted[0];
+        return Number(active?.costPerKwh || 0);
+    })();
+
   const currencySymbol = config.currency === 'EUR' ? '€' : config.currency === 'GBP' ? '£' : '$';
   const peaks = history ? getPeaks(history.chart) : { maxPv: 0, maxLoad: 0 };
 
@@ -327,6 +343,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                 batteryCapacity={config.batteryCapacity || 10}
                 appliances={config.appliances || []}
                 hasSolcastKey={!!config.solcastApiKey}
+                currency={config.currency}
+                gridCostPerKwh={activeGridCostPerKwh}
             />
           </div>
 

@@ -18,6 +18,10 @@ interface SmartRecommendationsProps {
   batteryCapacity: number; // kWh
   appliances: Appliance[]; // User configured appliances
   hasSolcastKey: boolean;
+
+    // Optional: used only for UI helper text.
+    currency?: string;
+    gridCostPerKwh?: number;
 }
 
 // Icon Mapping for dynamic loading
@@ -39,8 +43,15 @@ export const ICON_MAP: Record<string, any> = {
     'zap': Zap
 };
 
-const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc, forecast, solcastRateLimited, todayProduction, isDay, batteryCapacity, appliances, hasSolcastKey }) => {
-  const deviceList = appliances || [];
+const currencySymbolFor = (currency: string | undefined) => {
+    if (currency === 'EUR') return '€';
+    if (currency === 'GBP') return '£';
+    return '$';
+};
+
+const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc, forecast, solcastRateLimited, todayProduction, isDay, batteryCapacity, appliances, hasSolcastKey, currency, gridCostPerKwh }) => {
+    const deviceList = (appliances || []).filter(app => Number(app?.watts || 0) > 0);
+    const currencySymbol = currencySymbolFor(currency);
 
   // --- REALTIME DATA ---
   const gridExport = power.grid < -10 ? Math.abs(power.grid) : 0;
@@ -231,6 +242,12 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
                 {topRecommendations.map(app => {
                     const isUsingDiverted = app.watts > gridExport;
                     const usagePercent = Math.min(100, (app.watts / totalAvailablePower) * 100);
+                    const runKwh = Number(app.kwhEstimate || 0);
+                    const hasRunKwh = Number.isFinite(runKwh) && runKwh > 0;
+                    const hasCost = hasRunKwh && Number.isFinite(Number(gridCostPerKwh)) && Number(gridCostPerKwh) > 0;
+                    const runCost = hasCost ? (runKwh * Number(gridCostPerKwh)) : null;
+                    const hasBatteryEq = hasRunKwh && Number.isFinite(Number(batteryCapacity)) && Number(batteryCapacity) > 0;
+                    const batteryPct = hasBatteryEq ? Math.min(999, (runKwh / Number(batteryCapacity)) * 100) : null;
                     // Resolve Icon Component
                     const IconComponent = ICON_MAP[app.iconName] || Zap;
 
@@ -243,7 +260,19 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
                                     </div>
                                     <div>
                                         <span className="text-sm font-medium text-slate-200 block leading-tight">{app.name}</span>
-                                        <span className="text-[9px] text-slate-500">~{app.kwhEstimate} kWh/cycle</span>
+                                                                                <span className="text-[9px] text-slate-500">
+                                                                                    ~{runKwh} kWh/run
+                                                                                    {hasCost && runCost !== null && (
+                                                                                        <>
+                                                                                            {' '}• ≈ {currencySymbol}{runCost.toFixed(2)}
+                                                                                        </>
+                                                                                    )}
+                                                                                    {hasBatteryEq && batteryPct !== null && (
+                                                                                        <>
+                                                                                            {' '}• ~{Math.round(batteryPct)}% battery
+                                                                                        </>
+                                                                                    )}
+                                                                                </span>
                                     </div>
                                 </div>
                                 <div className="text-right">

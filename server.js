@@ -623,9 +623,17 @@ if (!IS_TEST) setInterval(async () => {
 
                 (config.appliances || []).forEach(app => {
                     if (!notifyState.smartAdviceCounters[app.id]) notifyState.smartAdviceCounters[app.id] = 0;
+
+                    const appWatts = Number(app?.watts || 0);
+                    if (!Number.isFinite(appWatts) || appWatts <= 0) {
+                        // Device has no usable power threshold configured.
+                        // Keep it out of Smart Suggestions rather than spamming/guessing.
+                        notifyState.smartAdviceCounters[app.id] = 0;
+                        return;
+                    }
                     
                     // Check if appliance fits in the SMART surplus
-                    if (totalSurplus >= app.watts) {
+                    if (totalSurplus >= appWatts) {
                         notifyState.smartAdviceCounters[app.id]++;
                     } else {
                         notifyState.smartAdviceCounters[app.id] = 0;
@@ -633,7 +641,7 @@ if (!IS_TEST) setInterval(async () => {
 
                     // Trigger if condition met for 3 consecutive checks (3 minutes)
                     if (notifyState.smartAdviceCounters[app.id] >= 3) {
-                        if (!bestAppliance || app.watts > bestAppliance.watts) bestAppliance = app;
+                        if (!bestAppliance || appWatts > Number(bestAppliance.watts || 0)) bestAppliance = app;
                     }
                 });
 
