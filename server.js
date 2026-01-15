@@ -1270,6 +1270,16 @@ app.get('/api/forecast', async (req, res) => {
 });
 
 // TARIFFS
+const isFiniteNumber = (value) => typeof value === 'number' && Number.isFinite(value);
+
+const isValidDateOnly = (value) => {
+    if (typeof value !== 'string') return false;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const d = new Date(`${value}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return false;
+    return d.toISOString().startsWith(value);
+};
+
 app.get('/api/tariffs', (req, res) => {
     db.all("SELECT id, valid_from as validFrom, cost_per_kwh as costPerKwh, feed_in_tariff as feedInTariff FROM tariffs ORDER BY valid_from ASC", (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -1282,6 +1292,14 @@ app.post('/api/tariffs', requireAdmin, (req, res) => {
     
     // Strict Input Validation
     if (!validFrom || typeof costPerKwh !== 'number' || typeof feedInTariff !== 'number') {
+        return res.status(400).json({ error: "Invalid Input Types" });
+    }
+
+    if (!isValidDateOnly(validFrom)) {
+        return res.status(400).json({ error: "Invalid Input Types" });
+    }
+
+    if (!isFiniteNumber(costPerKwh) || !isFiniteNumber(feedInTariff) || costPerKwh < 0 || feedInTariff < 0) {
         return res.status(400).json({ error: "Invalid Input Types" });
     }
 
@@ -1323,7 +1341,15 @@ app.post('/api/expenses', requireAdmin, (req, res) => {
     const { name, amount, type, date } = req.body;
     
     // Strict Input Validation
-    if (!name || typeof amount !== 'number' || !date || (type !== 'one_time' && type !== 'yearly')) {
+    if (typeof name !== 'string' || name.trim().length === 0 || typeof amount !== 'number' || !date || (type !== 'one_time' && type !== 'yearly')) {
+        return res.status(400).json({ error: "Invalid Input Types" });
+    }
+
+    if (!isValidDateOnly(date)) {
+        return res.status(400).json({ error: "Invalid Input Types" });
+    }
+
+    if (!isFiniteNumber(amount) || amount < 0) {
         return res.status(400).json({ error: "Invalid Input Types" });
     }
 

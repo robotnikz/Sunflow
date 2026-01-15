@@ -166,6 +166,22 @@ describe('Backend API (auth/admin)', () => {
     expect([200, 400, 404]).toContain(delOk.status);
   });
 
+  it('rejects invalid tariff payloads (date format and negative values)', async () => {
+    const badDate = await request(app)
+      .post('/api/tariffs')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ validFrom: '2026-13-01', costPerKwh: 0.5, feedInTariff: 0.1 })
+      .set('Content-Type', 'application/json');
+    expect(badDate.status).toBe(400);
+
+    const badNegative = await request(app)
+      .post('/api/tariffs')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ validFrom: '2026-01-01', costPerKwh: -0.5, feedInTariff: 0.1 })
+      .set('Content-Type', 'application/json');
+    expect(badNegative.status).toBe(400);
+  });
+
   it('protects expense write endpoints and validates inputs', async () => {
     const get0 = await request(app).get('/api/expenses');
     expect(get0.status).toBe(200);
@@ -200,6 +216,29 @@ describe('Backend API (auth/admin)', () => {
       .delete(`/api/expenses/${ok.body.id}`)
       .set('Authorization', `Bearer ${token}`);
     expect([200, 404]).toContain(delOk.status);
+  });
+
+  it('rejects invalid expense payloads (name/date/amount)', async () => {
+    const badName = await request(app)
+      .post('/api/expenses')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: '   ', amount: 123, type: 'one_time', date: '2026-01-01' })
+      .set('Content-Type', 'application/json');
+    expect(badName.status).toBe(400);
+
+    const badDate = await request(app)
+      .post('/api/expenses')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Test', amount: 123, type: 'one_time', date: '2026-02-30' })
+      .set('Content-Type', 'application/json');
+    expect(badDate.status).toBe(400);
+
+    const badNegative = await request(app)
+      .post('/api/expenses')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Test', amount: -1, type: 'one_time', date: '2026-01-01' })
+      .set('Content-Type', 'application/json');
+    expect(badNegative.status).toBe(400);
   });
 
   it('protects CSV preview/import and supports a happy-path import', async () => {
