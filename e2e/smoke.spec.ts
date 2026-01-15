@@ -9,9 +9,12 @@ test('loads app and shows settings modal', async ({ page }) => {
   const settingsHeading = page.getByRole('heading', { name: 'System Settings' });
 
   // Fresh data dir => app usually opens settings automatically.
-  // If it doesn't, open it explicitly.
-  if (!(await settingsHeading.isVisible().catch(() => false))) {
+  // Wait briefly for auto-open; only click if it didn't appear.
+  try {
+    await settingsHeading.waitFor({ state: 'visible', timeout: 2000 });
+  } catch {
     await page.getByTitle('Settings').click();
+    await settingsHeading.waitFor({ state: 'visible', timeout: 10_000 });
   }
 
   await expect(settingsHeading).toBeVisible();

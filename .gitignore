@@ -5,6 +5,9 @@ node_modules/
 
 # Testing
 coverage/
+ .e2e-data
+ test-results
+ playwright-report
 
 # Production Build Output
 dist/
