@@ -99,6 +99,17 @@ describe('Backend API (integration)', () => {
     expect(getRes.body.inverterIp).toBe('1.2.3.4');
   });
 
+  it('POST /api/config rejects invalid inverterIp', async () => {
+    const res = await request(app)
+      .post('/api/config')
+      .send({ inverterIp: 'http://example.com/solar_api' })
+      .set('Content-Type', 'application/json');
+
+    // In default (no admin token) mode, endpoint is open but still validates.
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBeTruthy();
+  });
+
   it('GET /api/info does not require network in tests', async () => {
     const res = await request(app).get('/api/info');
     expect(res.status).toBe(200);
