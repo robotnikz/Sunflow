@@ -1,3 +1,10 @@
+## [1.10.2](https://github.com/robotnikz/Sunflow/compare/v1.10.1...v1.10.2) (2026-01-15)
+
+
+### Bug Fixes
+
+* **security:** address CodeQL SSRF/path injection findings ([1501134](https://github.com/robotnikz/Sunflow/commit/1501134408220e628c979ee33e9f9301698ea3e6))
+
 ## [1.10.1](https://github.com/robotnikz/Sunflow/compare/v1.10.0...v1.10.1) (2026-01-15)
 
 
