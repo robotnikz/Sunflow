@@ -1,0 +1,233 @@
+// @vitest-environment node
+
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import os from 'node:os';
+import path from 'node:path';
+
+import request from 'supertest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const require = createRequire(import.meta.url);
+const sqlite3 = require('sqlite3').verbose();
+
+vi.mock('axios', () => {
+  return {
+    default: {
+      get: vi.fn(async (url: string) => {
+        throw new Error(`Unexpected axios.get in tests: ${url}`);
+      }),
+      post: vi.fn(async (url: string) => {
+        throw new Error(`Unexpected axios.post in tests: ${url}`);
+      }),
+    },
+  };
+});
+
+type ServerModule = {
+  app: any;
+  shutdown: (exitProcess?: boolean) => void;
+};
+
+const rmDirWithRetries = async (dir: string) => {
+  const attempts = 8;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+      return;
+    } catch (e: any) {
+      if (e?.code !== 'EPERM') throw e;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+  fs.rmSync(dir, { recursive: true, force: true });
+};
+
+const dbRun = async (dbPath: string, sql: string, params: any[] = []) => {
+  const db = new sqlite3.Database(dbPath);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      db.run(sql, params, (err: any) => {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+  } finally {
+    db.close();
+  }
+};
+
+const dbAll = async (dbPath: string, sql: string, params: any[] = []) => {
+  const db = new sqlite3.Database(dbPath);
+  try {
+    return await new Promise<any[]>((resolve, reject) => {
+      db.all(sql, params, (err: any, rows: any[]) => {
+        if (err) return reject(err);
+        resolve(rows);
+      });
+    });
+  } finally {
+    db.close();
+  }
+};
+
+const waitForSchema = async (dbPath: string, timeoutMs = 1500) => {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const rows = await dbAll(
+        dbPath,
+        "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('energy_log','energy_data')",
+      );
+      const names = new Set(rows.map((r: any) => r.name));
+      if (names.has('energy_log') && names.has('energy_data')) return;
+    } catch {
+      // ignore and retry
+    }
+    await new Promise((r) => setTimeout(r, 25));
+  }
+};
+
+describe('Backend API (history integration)', () => {
+  let dataDir: string;
+  let dbPath: string;
+  let app: any;
+  let shutdown: (exitProcess?: boolean) => void;
+
+  beforeAll(async () => {
+    process.env.NODE_ENV = 'test';
+    process.env.VITEST = '1';
+    process.env.DISABLE_UPDATE_CHECK = '1';
+    process.env.TZ = 'Europe/Berlin';
+
+    dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sunflow-test-'));
+    process.env.DATA_DIR = dataDir;
+
+    // Minimal config to avoid other endpoints failing during startup.
+    fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({ currency: 'EUR' }, null, 2));
+
+    dbPath = path.join(dataDir, 'solar_data.db');
+
+    // @ts-ignore importing JS module without types
+    const mod = (await import('../server.js')) as unknown as ServerModule;
+    ({ app, shutdown } = mod);
+
+    // Server creates schema asynchronously in the sqlite open callback.
+    await waitForSchema(dbPath);
+  });
+
+  afterAll(async () => {
+    try {
+      shutdown?.(false);
+    } finally {
+      delete process.env.DATA_DIR;
+      await rmDirWithRetries(dataDir);
+    }
+  });
+
+  beforeEach(async () => {
+    await waitForSchema(dbPath);
+    await dbRun(dbPath, 'DELETE FROM energy_log');
+    await dbRun(dbPath, 'DELETE FROM energy_data');
+  });
+
+  it('returns high-res chart + stats for custom day from energy_log rows', async () => {
+    // Two 1-minute points. The stats path integrates power over time.
+    await dbRun(
+      dbPath,
+      'INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, status_code) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ['2026-01-01 00:00:00', 60000, 30000, 10000, -5000, 50, 1],
+    );
+    await dbRun(
+      dbPath,
+      'INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, status_code) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ['2026-01-01 00:01:00', 60000, 30000, 10000, -5000, 51, 1],
+    );
+
+    const res = await request(app).get('/api/history?range=custom&start=2026-01-01&end=2026-01-01');
+    expect(res.status).toBe(200);
+
+    expect(Array.isArray(res.body.chart)).toBe(true);
+    expect(res.body.chart.length).toBe(2);
+
+    // Chart is power (W) averages, rounded.
+    expect(res.body.chart[0].timestamp).toBe('2026-01-01 00:00:00');
+    expect(res.body.chart[0].production).toBe(60000);
+    expect(res.body.chart[0].consumption).toBe(30000);
+    expect(res.body.chart[0].grid).toBe(10000);
+    expect(res.body.chart[0].battery).toBe(-5000);
+
+    // Stats are kWh integrated; each minute at 60kW => 1kWh.
+    expect(res.body.stats.production).toBeCloseTo(2.0, 5);
+    expect(res.body.stats.consumption).toBeCloseTo(1.0, 5);
+    expect(res.body.stats.imported).toBeCloseTo(0.333333, 5);
+    expect(res.body.stats.exported).toBeCloseTo(0.0, 5);
+  });
+
+  it('excludes rows exactly at the end boundary (timestamp < end)', async () => {
+    await dbRun(
+      dbPath,
+      'INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, status_code) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ['2026-01-02 00:00:00', 123, 456, 0, 0, 0, 1],
+    );
+
+    const res = await request(app).get('/api/history?range=custom&start=2026-01-01&end=2026-01-01');
+    expect(res.status).toBe(200);
+    expect(res.body.chart).toEqual([]);
+
+    // Extra safety: confirm nothing leaked into stats.
+    expect(res.body.stats.production).toBe(0);
+    expect(res.body.stats.consumption).toBe(0);
+  });
+
+  it('uses energy_data rows directly for stats and includes them in high-res chart', async () => {
+    await dbRun(
+      dbPath,
+      'INSERT INTO energy_data (timestamp, production_wh, grid_consumption_wh, grid_feed_in_wh, battery_charge_wh, battery_discharge_wh, load_wh) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ['2026-01-01 02:00:00', 2000, 200, 0, 100, 0, 1000],
+    );
+
+    const res = await request(app).get('/api/history?range=custom&start=2026-01-01&end=2026-01-01');
+    expect(res.status).toBe(200);
+
+    expect(res.body.chart.length).toBe(1);
+    expect(res.body.chart[0].timestamp).toBe('2026-01-01 02:00:00');
+
+    // For energy_data in high-res view, Wh values are treated like average W.
+    expect(res.body.chart[0].production).toBe(2000);
+    expect(res.body.chart[0].consumption).toBe(1000);
+    expect(res.body.chart[0].grid).toBe(200);
+
+    // Stats from energy_data are kWh directly.
+    expect(res.body.stats.production).toBeCloseTo(2.0, 5);
+    expect(res.body.stats.consumption).toBeCloseTo(1.0, 5);
+    expect(res.body.stats.imported).toBeCloseTo(0.2, 5);
+    expect(res.body.stats.exported).toBeCloseTo(0.0, 5);
+    expect(res.body.stats.batteryCharged).toBeCloseTo(0.1, 5);
+    expect(res.body.stats.batteryDischarged).toBeCloseTo(0.0, 5);
+  });
+
+  it('orders unioned energy_log + energy_data rows by timestamp ASC', async () => {
+    // Intentionally insert out of order.
+    await dbRun(
+      dbPath,
+      'INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, status_code) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ['2026-01-01 00:01:00', 1, 1, 0, 0, 0, 1],
+    );
+    await dbRun(
+      dbPath,
+      'INSERT INTO energy_data (timestamp, production_wh, grid_consumption_wh, grid_feed_in_wh, battery_charge_wh, battery_discharge_wh, load_wh) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ['2026-01-01 00:00:00', 10, 0, 0, 0, 0, 10],
+    );
+
+    const res = await request(app).get('/api/history?range=custom&start=2026-01-01&end=2026-01-01');
+    expect(res.status).toBe(200);
+
+    const timestamps = res.body.chart.map((p: any) => p.timestamp);
+    expect(timestamps).toEqual(['2026-01-01 00:00:00', '2026-01-01 00:01:00']);
+
+    // Sanity: union really returned both sources
+    const raw = await dbAll(dbPath, 'SELECT COUNT(*) as c FROM energy_log');
+    expect(Number(raw[0]?.c)).toBe(1);
+  });
+});
