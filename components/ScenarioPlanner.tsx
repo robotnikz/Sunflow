@@ -275,6 +275,11 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         if (!filteredHourlyData) return null;
         if (!financials) return null;
 
+        // Guardrails to avoid recommending upgrades with negligible impact.
+        // These are heuristics (not hard truths) to prevent misleading suggestions.
+        const MIN_YEARLY_BENEFIT = 5; // {currency}/year
+        const MAX_REASONABLE_ROI_YEARS = 25;
+
         const yearsCovered = Math.max(0.1, dataCoverage.days / 365);
         const gridCost = activeTariff.costPerKwh;
         const feedIn = activeTariff.feedInTariff;
@@ -316,16 +321,27 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         const positive = addOns.filter(c => c.yearlyBenefit > 0);
         const bestYearlyAny = [...addOns].sort((a, b) => b.yearlyBenefit - a.yearlyBenefit)[0] || null;
 
+        // Only recommend if it is economically meaningful.
+        const meaningful = positive.filter(c => (c.yearlyBenefit >= MIN_YEARLY_BENEFIT) && (c.roiYears <= MAX_REASONABLE_ROI_YEARS));
+
         if (positive.length === 0) {
             return {
                 recommended: null as Candidate | null,
                 bestYearly: bestYearlyAny,
+                thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: MAX_REASONABLE_ROI_YEARS },
             };
         }
 
-        const recommended = [...positive].sort((a, b) => a.roiYears - b.roiYears)[0];
-        const bestYearly = [...positive].sort((a, b) => b.yearlyBenefit - a.yearlyBenefit)[0];
-        return { recommended, bestYearly: bestYearlyAny || bestYearly };
+        if (meaningful.length === 0) {
+            return {
+                recommended: null as Candidate | null,
+                bestYearly: bestYearlyAny,
+                thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: MAX_REASONABLE_ROI_YEARS },
+            };
+        }
+
+        const recommended = [...meaningful].sort((a, b) => a.roiYears - b.roiYears)[0];
+        return { recommended, bestYearly: bestYearlyAny, thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: MAX_REASONABLE_ROI_YEARS } };
     }, [filteredHourlyData, financials, dataCoverage.days, activeTariff, config.batteryCapacity, addedPvPercent, costPerKwhBat]);
 
 
@@ -662,7 +678,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                             </div>
                                             <div className="flex items-center justify-between mt-1">
                                                 <span className="text-slate-400">Yearly benefit (battery)</span>
-                                                <span className="text-emerald-300 font-semibold">+{batteryRecommendation.recommended.yearlyBenefit.toLocaleString(undefined, { maximumFractionDigits: 0 })} {config.currency}</span>
+                                                <span className="text-emerald-300 font-semibold">+{batteryRecommendation.recommended.yearlyBenefit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {config.currency}</span>
                                             </div>
                                             {batteryRecommendation.bestYearly && batteryRecommendation.bestYearly.addedBatteryKwh !== batteryRecommendation.recommended.addedBatteryKwh && (
                                                 <div className="mt-2 text-[10px] text-slate-500">
@@ -672,10 +688,15 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                         </div>
                                     ) : (
                                         <div className="text-xs text-slate-400">
-                                            <div>No positive battery ROI detected for this PV setting in the selected timeframe.</div>
+                                            <div>
+                                                No worthwhile battery recommendation for this PV setting in the selected timeframe.
+                                                {batteryRecommendation.thresholds && (
+                                                    <span> (Needs ≥ {batteryRecommendation.thresholds.minYearlyBenefit} {config.currency}/yr and ROI ≤ {batteryRecommendation.thresholds.maxRoiYears}y.)</span>
+                                                )}
+                                            </div>
                                             {batteryRecommendation.bestYearly && (
                                                 <div className="mt-2 text-[10px] text-slate-500">
-                                                    Best-case add-on: +{batteryRecommendation.bestYearly.addedBatteryKwh} kWh → {batteryRecommendation.bestYearly.yearlyBenefit.toLocaleString(undefined, { maximumFractionDigits: 0 })} {config.currency}/yr,
+                                                    Best-case add-on: +{batteryRecommendation.bestYearly.addedBatteryKwh} kWh → {batteryRecommendation.bestYearly.yearlyBenefit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {config.currency}/yr,
                                                     saves ~{batteryRecommendation.bestYearly.yearlySavedImportKwh.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh import/yr,
                                                     export Δ ~{batteryRecommendation.bestYearly.yearlyExportDeltaKwh.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh/yr.
                                                 </div>
