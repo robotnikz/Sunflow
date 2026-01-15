@@ -1,11 +1,15 @@
 // @vitest-environment node
 
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+const require = createRequire(import.meta.url);
+const sqlite3 = require('sqlite3').verbose();
 
 vi.mock('axios', () => {
   return {
@@ -107,5 +111,142 @@ describe('Backend API (auth/admin)', () => {
       .set('Content-Type', 'application/json');
 
     expect(bad.status).toBe(400);
+  });
+
+  it('protects tariff write endpoints and validates inputs', async () => {
+    const get0 = await request(app).get('/api/tariffs');
+    expect(get0.status).toBe(200);
+    expect(Array.isArray(get0.body)).toBe(true);
+    expect(get0.body.length).toBeGreaterThanOrEqual(1);
+
+    const unauth = await request(app)
+      .post('/api/tariffs')
+      .send({ validFrom: '2026-01-01', costPerKwh: 0.5, feedInTariff: 0.1 })
+      .set('Content-Type', 'application/json');
+    expect(unauth.status).toBe(401);
+
+    const badTypes = await request(app)
+      .post('/api/tariffs')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ validFrom: '2026-01-01', costPerKwh: '0.5', feedInTariff: 0.1 })
+      .set('Content-Type', 'application/json');
+    expect(badTypes.status).toBe(400);
+
+    const ok = await request(app)
+      .post('/api/tariffs')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ validFrom: '2026-01-01', costPerKwh: 0.5, feedInTariff: 0.1 })
+      .set('Content-Type', 'application/json');
+    expect(ok.status).toBe(200);
+    expect(ok.body.success).toBe(true);
+    expect(Number.isFinite(ok.body.id)).toBe(true);
+
+    // Deleting a tariff requires auth
+    const delUnauth = await request(app).delete(`/api/tariffs/${ok.body.id}`);
+    expect(delUnauth.status).toBe(401);
+
+    // With auth it should succeed (and should not allow deleting the very last tariff)
+    const delOk = await request(app)
+      .delete(`/api/tariffs/${ok.body.id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect([200, 400, 404]).toContain(delOk.status);
+  });
+
+  it('protects expense write endpoints and validates inputs', async () => {
+    const get0 = await request(app).get('/api/expenses');
+    expect(get0.status).toBe(200);
+    expect(Array.isArray(get0.body)).toBe(true);
+
+    const unauth = await request(app)
+      .post('/api/expenses')
+      .send({ name: 'Test', amount: 123, type: 'one_time', date: '2026-01-01' })
+      .set('Content-Type', 'application/json');
+    expect(unauth.status).toBe(401);
+
+    const badTypes = await request(app)
+      .post('/api/expenses')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Test', amount: '123', type: 'one_time', date: '2026-01-01' })
+      .set('Content-Type', 'application/json');
+    expect(badTypes.status).toBe(400);
+
+    const ok = await request(app)
+      .post('/api/expenses')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Test', amount: 123, type: 'one_time', date: '2026-01-01' })
+      .set('Content-Type', 'application/json');
+    expect(ok.status).toBe(200);
+    expect(ok.body.success).toBe(true);
+    expect(Number.isFinite(ok.body.id)).toBe(true);
+
+    const delUnauth = await request(app).delete(`/api/expenses/${ok.body.id}`);
+    expect(delUnauth.status).toBe(401);
+
+    const delOk = await request(app)
+      .delete(`/api/expenses/${ok.body.id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect([200, 404]).toContain(delOk.status);
+  });
+
+  it('protects CSV preview/import and supports a happy-path import', async () => {
+    const csv = [
+      'timestamp,power_pv,power_load,power_grid,power_battery,soc',
+      '2026-01-15T10:00:00Z,100,200,-50,0,80',
+      '2026-01-15T10:01:00Z,110,210,-60,0,81',
+    ].join('\n');
+
+    const csvPath = path.join(dataDir, 'upload.csv');
+    fs.writeFileSync(csvPath, csv, 'utf8');
+
+    // When unauthenticated, the route should short-circuit before multer.
+    // Avoid streaming a file body for this check to prevent connection resets.
+    const previewUnauth = await request(app).post('/api/preview-csv');
+    expect(previewUnauth.status).toBe(401);
+
+    const previewOk = await request(app)
+      .post('/api/preview-csv')
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', csvPath);
+    expect(previewOk.status).toBe(200);
+    expect(Array.isArray(previewOk.body.headers)).toBe(true);
+    expect(previewOk.body.headers).toContain('timestamp');
+    expect(Array.isArray(previewOk.body.preview)).toBe(true);
+
+    const importBadMapping = await request(app)
+      .post('/api/import-csv')
+      .set('Authorization', `Bearer ${token}`)
+      .field('mapping', '{not-json')
+      .attach('file', csvPath);
+    expect(importBadMapping.status).toBe(400);
+
+    const mapping = {
+      timestamp: 'timestamp',
+      power_pv: 'power_pv',
+      power_load: 'power_load',
+      power_grid: 'power_grid',
+      power_battery: 'power_battery',
+      soc: 'soc',
+    };
+
+    const importOk = await request(app)
+      .post('/api/import-csv')
+      .set('Authorization', `Bearer ${token}`)
+      .field('mapping', JSON.stringify(mapping))
+      .attach('file', csvPath);
+    expect(importOk.status).toBe(200);
+    expect(importOk.body.success).toBe(true);
+    expect(importOk.body.imported).toBe(2);
+
+    // Verify DB has data
+    const dbPath = path.join(dataDir, 'solar_data.db');
+    const db = new sqlite3.Database(dbPath);
+    const count = await new Promise<number>((resolve, reject) => {
+      db.get('SELECT COUNT(*) as c FROM energy_log', (err: any, row: any) => {
+        if (err) return reject(err);
+        resolve(Number(row?.c || 0));
+      });
+    });
+    db.close();
+    expect(count).toBeGreaterThanOrEqual(2);
   });
 });
