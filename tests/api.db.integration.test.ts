@@ -154,6 +154,47 @@ describe('Backend API (DB integration)', () => {
     expect(Number(count1?.c)).toBeGreaterThanOrEqual(1);
   });
 
+  it('validates tariff delete IDs (400) and returns 404 for missing when more than one tariff exists', async () => {
+    // Ensure we can hit the 404 branch (delete is only allowed when more than one tariff exists).
+    const add = await request(app)
+      .post('/api/tariffs')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Content-Type', 'application/json')
+      .send({ validFrom: '2026-02-01', costPerKwh: 0.55, feedInTariff: 0.12 });
+    expect(add.status).toBe(200);
+
+    const bad1 = await request(app)
+      .delete('/api/tariffs/abc')
+      .set('Authorization', `Bearer ${token}`);
+    expect(bad1.status).toBe(400);
+
+    const bad2 = await request(app)
+      .delete('/api/tariffs/0')
+      .set('Authorization', `Bearer ${token}`);
+    expect(bad2.status).toBe(400);
+
+    const bad3 = await request(app)
+      .delete('/api/tariffs/-1')
+      .set('Authorization', `Bearer ${token}`);
+    expect(bad3.status).toBe(400);
+
+    const bad4 = await request(app)
+      .delete('/api/tariffs/1.5')
+      .set('Authorization', `Bearer ${token}`);
+    expect(bad4.status).toBe(400);
+
+    const missing = await request(app)
+      .delete('/api/tariffs/999999')
+      .set('Authorization', `Bearer ${token}`);
+    expect(missing.status).toBe(404);
+
+    // Cleanup: delete the extra tariff we created.
+    const del = await request(app)
+      .delete(`/api/tariffs/${add.body.id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(del.status).toBe(200);
+  });
+
   it('supports creating and deleting expenses', async () => {
     const add = await request(app)
       .post('/api/expenses')
@@ -175,6 +216,47 @@ describe('Backend API (DB integration)', () => {
 
     const row0 = await dbGet(dbPath, 'SELECT COUNT(*) as c FROM expenses');
     expect(Number(row0?.c)).toBe(0);
+  });
+
+  it('validates expense delete IDs (400) and returns 404 for missing', async () => {
+    const add = await request(app)
+      .post('/api/expenses')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Content-Type', 'application/json')
+      .send({ name: 'Delete Edge', amount: 1, type: 'one_time', date: '2026-01-02' });
+
+    expect(add.status).toBe(200);
+    expect(add.body.success).toBe(true);
+
+    const bad1 = await request(app)
+      .delete('/api/expenses/abc')
+      .set('Authorization', `Bearer ${token}`);
+    expect(bad1.status).toBe(400);
+
+    const bad2 = await request(app)
+      .delete('/api/expenses/0')
+      .set('Authorization', `Bearer ${token}`);
+    expect(bad2.status).toBe(400);
+
+    const bad3 = await request(app)
+      .delete('/api/expenses/-1')
+      .set('Authorization', `Bearer ${token}`);
+    expect(bad3.status).toBe(400);
+
+    const bad4 = await request(app)
+      .delete('/api/expenses/1.5')
+      .set('Authorization', `Bearer ${token}`);
+    expect(bad4.status).toBe(400);
+
+    const missing = await request(app)
+      .delete('/api/expenses/999999')
+      .set('Authorization', `Bearer ${token}`);
+    expect(missing.status).toBe(404);
+
+    const del = await request(app)
+      .delete(`/api/expenses/${add.body.id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(del.status).toBe(200);
   });
 
   it('returns 400 for preview/import when no file uploaded (authorized)', async () => {
