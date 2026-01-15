@@ -60,13 +60,93 @@ if (!fs.existsSync(UPLOADS_DIR)){
 // Upload config for middleware
 const upload = multer({ dest: UPLOADS_DIR });
 
+const resolveUploadedFilePath = (maybePath) => {
+    if (!maybePath || typeof maybePath !== 'string') return null;
+    const uploadsRoot = path.resolve(UPLOADS_DIR);
+    const resolved = path.resolve(maybePath);
+    // Ensure the file is inside our uploads directory to prevent path traversal / path injection.
+    const prefix = uploadsRoot + path.sep;
+    if (process.platform === 'win32') {
+        if (!resolved.toLowerCase().startsWith(prefix.toLowerCase())) return null;
+    } else {
+        if (!resolved.startsWith(prefix)) return null;
+    }
+    return resolved;
+};
+
+const safeUnlinkUploadedFile = (maybePath) => {
+    const resolved = resolveUploadedFilePath(maybePath);
+    if (!resolved) return;
+    try {
+        fs.unlinkSync(resolved);
+    } catch {
+        // ignore
+    }
+};
+
+const isAllowedDiscordWebhookUrl = (maybeUrl) => {
+    if (!maybeUrl || typeof maybeUrl !== 'string') return false;
+    let u;
+    try {
+        u = new URL(maybeUrl);
+    } catch {
+        return false;
+    }
+    if (u.protocol !== 'https:') return false;
+    if (u.username || u.password) return false;
+    const host = (u.hostname || '').toLowerCase();
+    const isDiscordHost = host === 'discord.com' || host.endsWith('.discord.com') || host === 'discordapp.com' || host.endsWith('.discordapp.com');
+    if (!isDiscordHost) return false;
+    if (!u.pathname.startsWith('/api/webhooks/')) return false;
+    return true;
+};
+
+const parsePrivateIpv4HostPort = (input) => {
+    if (!input || typeof input !== 'string') return null;
+    const trimmed = input.trim();
+    const m = trimmed.match(/^(\d{1,3}(?:\.\d{1,3}){3})(?::(\d{1,5}))?$/);
+    if (!m) return null;
+    const ip = m[1];
+    const port = m[2] ? Number(m[2]) : null;
+    if (port !== null && (!Number.isInteger(port) || port < 1 || port > 65535)) return null;
+
+    const parts = ip.split('.').map(n => Number(n));
+    if (parts.length !== 4 || parts.some(p => !Number.isInteger(p) || p < 0 || p > 255)) return null;
+
+    const [a, b] = parts;
+    const isPrivate =
+        a === 10 ||
+        a === 127 ||
+        (a === 192 && b === 168) ||
+        (a === 172 && b >= 16 && b <= 31) ||
+        (a === 169 && b === 254);
+
+    if (!isPrivate) return null;
+    return { ip, port };
+};
+
 const DB_FILE = path.join(DATA_DIR, 'solar_data.db');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 
 // --- SECURITY MIDDLEWARE ---
 // 1. Helmet: Sets various HTTP headers to secure the app
 app.use(helmet({
-    contentSecurityPolicy: false, // Disabled for simple dev/dashboard setup (inline scripts etc)
+    // Enable CSP by default (fixes CodeQL insecure helmet config). If you ever need to disable,
+    // set DISABLE_CSP=1.
+    contentSecurityPolicy: process.env.DISABLE_CSP === '1' ? false : {
+        directives: {
+            defaultSrc: ["'self'"],
+            baseUri: ["'self'"],
+            objectSrc: ["'none'"],
+            frameAncestors: ["'none'"],
+            imgSrc: ["'self'", 'data:', 'https:'],
+            // Tailwind/inline styles can exist in some setups; keep this permissive.
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            scriptSrc: ["'self'"],
+            connectSrc: ["'self'", 'https://api.open-meteo.com'],
+            upgradeInsecureRequests: []
+        }
+    },
     crossOriginEmbedderPolicy: false,
 }));
 
@@ -385,7 +465,10 @@ const fetchFroniusData = async (ip) => {
     }
 
     try {
-        const url = `http://${ip}/solar_api/v1/GetPowerFlowRealtimeData.fcgi`;
+        const host = parsePrivateIpv4HostPort(ip);
+        if (!host) return null;
+        const hostPart = host.port ? `${host.ip}:${host.port}` : host.ip;
+        const url = `http://${hostPart}/solar_api/v1/GetPowerFlowRealtimeData.fcgi`;
         const response = await axios.get(url, { timeout: 3000 });
         
         // Update Cache
@@ -412,7 +495,7 @@ const notifyState = {
 };
 
 const sendDiscordNotification = async (webhookUrl, title, description, color, fields = []) => {
-    if (!webhookUrl || typeof webhookUrl !== 'string' || !webhookUrl.startsWith('http')) return;
+    if (!isAllowedDiscordWebhookUrl(webhookUrl)) return;
 
     try {
         await axios.post(webhookUrl, {
@@ -873,6 +956,7 @@ app.post('/api/config', (req, res) => {
 app.post('/api/test-notification', async (req, res) => {
     const { webhookUrl } = req.body;
     if (!webhookUrl || typeof webhookUrl !== 'string') return res.status(400).json({ error: "Missing or invalid webhook URL" });
+    if (!isAllowedDiscordWebhookUrl(webhookUrl)) return res.status(400).json({ error: "Invalid webhook URL" });
     
     try {
         await sendDiscordNotification(webhookUrl, "🔔 Test Notification", "SunFlow notifications are working correctly!", 16776960);
@@ -1091,22 +1175,25 @@ app.get('/api/forecast', async (req, res) => {
         return res.json(solcastCache.data);
     }
 
-                    // Only do this before sunset (hard boundary via Open-Meteo when possible).
+    // 2. If OUTSIDE WINDOW, return stale cache or empty
     if (!isDaytime) {
-                    const sunTimes = await getTodaySunTimes(config);
-                    const isDaylightNow = sunTimes ? isNowBetweenSunriseAndSunset(sunTimes) : null;
-                    const isBeforeSunsetWindow = (typeof isDaylightNow === 'boolean')
-                        ? isDaylightNow
-                        : (new Date().getHours() >= 6 && new Date().getHours() < 18);
-
-                    const canUseReserveNow = isBeforeSunsetWindow && soc > (reserveSocPct + 0.5) && aboveReserveKwh > 0;
-         return res.json({ forecasts: [] });
+        if (solcastCache.data) return res.json(solcastCache.data);
+        return res.json({ forecasts: [] });
     }
 
     // 3. Fetch new data
     try {
-        const url = `https://api.solcast.com.au/rooftop_sites/${config.solcastSiteId}/forecasts?format=json&api_key=${config.solcastApiKey}`;
-        const response = await axios.get(url, { timeout: 8000 });
+        const siteId = String(config.solcastSiteId || '').trim();
+        const apiKey = String(config.solcastApiKey || '').trim();
+        if (!/^[A-Za-z0-9-]{3,128}$/.test(siteId) || !/^[A-Za-z0-9_-]{10,256}$/.test(apiKey)) {
+            return res.status(400).json({ error: 'Solcast not configured' });
+        }
+
+        const u = new URL(`https://api.solcast.com.au/rooftop_sites/${encodeURIComponent(siteId)}/forecasts`);
+        u.searchParams.set('format', 'json');
+        u.searchParams.set('api_key', apiKey);
+
+        const response = await axios.get(u.toString(), { timeout: 8000 });
         
         solcastCache = {
             timestamp: now,
@@ -2313,7 +2400,10 @@ app.post('/api/import-csv', upload.single('file'), (req, res) => {
     }
 
     const mapping = JSON.parse(req.body.mapping || '{}');
-    const filePath = req.file.path;
+    const filePath = resolveUploadedFilePath(req.file.path);
+    if (!filePath) {
+        return res.status(400).json({ error: 'Invalid upload path' });
+    }
     const fileContent = fs.readFileSync(filePath, 'utf8');
 
     Papa.parse(fileContent, {
@@ -2322,7 +2412,7 @@ app.post('/api/import-csv', upload.single('file'), (req, res) => {
         complete: (results) => {
              const rows = results.data;
              if (rows.length === 0) {
-                 if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                 safeUnlinkUploadedFile(filePath);
                  return res.json({ success: true, imported: 0 });
              }
 
@@ -2331,7 +2421,7 @@ app.post('/api/import-csv', upload.single('file'), (req, res) => {
                                  .filter(r => !isNaN(r._d.getTime()));
                                  
              if (dateRows.length === 0) {
-                 if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                 safeUnlinkUploadedFile(filePath);
                  return res.json({ success: true, imported: 0 });
              }
 
@@ -2408,7 +2498,7 @@ app.post('/api/import-csv', upload.single('file'), (req, res) => {
                  stmtData.finalize();
                  
                  db.run("COMMIT", (err) => {
-                     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                     safeUnlinkUploadedFile(filePath);
                      if (err) return res.status(500).json({ error: "Commit failed: " + err.message });
                      
                      // Recalculate calibration values after every successful import
@@ -2420,7 +2510,7 @@ app.post('/api/import-csv', upload.single('file'), (req, res) => {
              });
         },
         error: (err) => {
-             if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+               safeUnlinkUploadedFile(filePath);
              res.status(500).json({ error: "CSV Parsing failed: " + err.message });
         }
     });
@@ -2435,7 +2525,10 @@ app.post('/api/preview-csv', upload.single('file'), (req, res) => {
         return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const filePath = req.file.path;
+    const filePath = resolveUploadedFilePath(req.file.path);
+    if (!filePath) {
+        return res.status(400).json({ error: 'Invalid upload path' });
+    }
     const fileContent = fs.readFileSync(filePath, 'utf8');
     
     // Parse partial
@@ -2444,11 +2537,11 @@ app.post('/api/preview-csv', upload.single('file'), (req, res) => {
         preview: 5,
         skipEmptyLines: true,
         complete: (results) => {
-            fs.unlinkSync(filePath); // Cleanup temp file immediately
+            safeUnlinkUploadedFile(filePath); // Cleanup temp file immediately
             res.json({ headers: results.meta.fields, preview: results.data });
         },
         error: (err) => {
-             fs.unlinkSync(filePath);
+             safeUnlinkUploadedFile(filePath);
              res.status(500).json({ error: err.message });
         }
     });
