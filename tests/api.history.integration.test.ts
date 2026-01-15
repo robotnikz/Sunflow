@@ -230,4 +230,102 @@ describe('Backend API (history integration)', () => {
     const raw = await dbAll(dbPath, 'SELECT COUNT(*) as c FROM energy_log');
     expect(Number(raw[0]?.c)).toBe(1);
   });
+
+  it('aggregates week range into daily bars (energy_data)', async () => {
+    vi.useFakeTimers();
+    try {
+      // Thu, 2026-01-08 (Berlin). Week starts Mon, 2026-01-05.
+      vi.setSystemTime(new Date('2026-01-08T12:00:00+01:00'));
+
+      await dbRun(
+        dbPath,
+        'INSERT INTO energy_data (timestamp, production_wh, grid_consumption_wh, grid_feed_in_wh, battery_charge_wh, battery_discharge_wh, load_wh) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        ['2026-01-06 12:00:00', 1000, 200, 0, 0, 0, 500],
+      );
+      await dbRun(
+        dbPath,
+        'INSERT INTO energy_data (timestamp, production_wh, grid_consumption_wh, grid_feed_in_wh, battery_charge_wh, battery_discharge_wh, load_wh) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        ['2026-01-06 13:00:00', 500, 50, 0, 0, 0, 250],
+      );
+
+      const res = await request(app).get('/api/history?range=week&offset=0');
+      expect(res.status).toBe(200);
+
+      expect(res.body.chart.length).toBe(1);
+      expect(res.body.chart[0].timestamp).toBe('2026-01-06 00:00:00');
+      expect(res.body.chart[0].is_aggregated).toBe(true);
+
+      // Chart bars are kWh (rounded to 2 decimals).
+      expect(res.body.chart[0].production).toBe(1.5);
+      expect(res.body.chart[0].consumption).toBe(0.75);
+      expect(res.body.chart[0].grid).toBe(0.25);
+
+      // Stats are kWh sums.
+      expect(res.body.stats.production).toBeCloseTo(1.5, 5);
+      expect(res.body.stats.consumption).toBeCloseTo(0.75, 5);
+      expect(res.body.stats.imported).toBeCloseTo(0.25, 5);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('aggregates month range into daily bars (energy_data)', async () => {
+    vi.useFakeTimers();
+    try {
+      // Feb 2026 (Berlin). Month starts 2026-02-01.
+      vi.setSystemTime(new Date('2026-02-10T12:00:00+01:00'));
+
+      await dbRun(
+        dbPath,
+        'INSERT INTO energy_data (timestamp, production_wh, grid_consumption_wh, grid_feed_in_wh, battery_charge_wh, battery_discharge_wh, load_wh) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        ['2026-02-05 08:00:00', 2500, 500, 0, 0, 0, 1500],
+      );
+
+      const res = await request(app).get('/api/history?range=month&offset=0');
+      expect(res.status).toBe(200);
+
+      expect(res.body.chart.length).toBe(1);
+      expect(res.body.chart[0].timestamp).toBe('2026-02-05 00:00:00');
+      expect(res.body.chart[0].is_aggregated).toBe(true);
+
+      expect(res.body.chart[0].production).toBe(2.5);
+      expect(res.body.chart[0].consumption).toBe(1.5);
+      expect(res.body.chart[0].grid).toBe(0.5);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('aggregates year range into monthly bars (energy_data)', async () => {
+    vi.useFakeTimers();
+    try {
+      // 2026 calendar year.
+      vi.setSystemTime(new Date('2026-06-15T12:00:00+02:00'));
+
+      await dbRun(
+        dbPath,
+        'INSERT INTO energy_data (timestamp, production_wh, grid_consumption_wh, grid_feed_in_wh, battery_charge_wh, battery_discharge_wh, load_wh) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        ['2026-03-15 12:00:00', 3000, 0, 0, 0, 0, 2000],
+      );
+      await dbRun(
+        dbPath,
+        'INSERT INTO energy_data (timestamp, production_wh, grid_consumption_wh, grid_feed_in_wh, battery_charge_wh, battery_discharge_wh, load_wh) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        ['2026-03-20 12:00:00', 1000, 0, 0, 0, 0, 500],
+      );
+
+      const res = await request(app).get('/api/history?range=year&offset=0');
+      expect(res.status).toBe(200);
+
+      expect(res.body.chart.length).toBe(1);
+      expect(res.body.chart[0].timestamp).toBe('2026-03-01 00:00:00');
+      expect(res.body.chart[0].is_aggregated).toBe(true);
+
+      expect(res.body.chart[0].production).toBe(4.0);
+      expect(res.body.chart[0].consumption).toBe(2.5);
+      expect(res.body.stats.production).toBeCloseTo(4.0, 5);
+      expect(res.body.stats.consumption).toBeCloseTo(2.5, 5);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
