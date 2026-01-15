@@ -266,7 +266,11 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
                 feed_in_tariff REAL NOT NULL
             )`, () => {
                 db.get("SELECT count(*) as count FROM tariffs", (err, row) => {
-                    if (row.count === 0) {
+                    if (err) {
+                        console.error('Failed to seed initial tariff:', err.message);
+                        return;
+                    }
+                    if (!row || row.count === 0) {
                         const oldConfig = getConfig();
                         console.log("Seeding initial tariff from config...");
                         const stmt = db.prepare("INSERT INTO tariffs (valid_from, cost_per_kwh, feed_in_tariff) VALUES (?, ?, ?)");

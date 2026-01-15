@@ -11,6 +11,16 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 const require = createRequire(import.meta.url);
 const sqlite3 = require('sqlite3').verbose();
 
+const waitForTariffs = async (app: any, timeoutMs = 1500) => {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const res = await request(app).get('/api/tariffs');
+    if (res.status === 200 && Array.isArray(res.body) && res.body.length >= 1) return res;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  return request(app).get('/api/tariffs');
+};
+
 vi.mock('axios', () => {
   return {
     default: {
@@ -114,7 +124,7 @@ describe('Backend API (auth/admin)', () => {
   });
 
   it('protects tariff write endpoints and validates inputs', async () => {
-    const get0 = await request(app).get('/api/tariffs');
+    const get0 = await waitForTariffs(app);
     expect(get0.status).toBe(200);
     expect(Array.isArray(get0.body)).toBe(true);
     expect(get0.body.length).toBeGreaterThanOrEqual(1);
