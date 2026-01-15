@@ -172,6 +172,12 @@ export type SimulationDataPoint = {
     t: number; // timestamp
     p: number; // pv power
     l: number; // load power
+  s?: number | null; // battery SoC (%) if available
+  // Optional measured flows (W averaged over the hour or Wh per hour)
+  gi?: number | null; // grid import
+  ge?: number | null; // grid export
+  bc?: number | null; // battery charge (positive)
+  bd?: number | null; // battery discharge (positive)
 };
 
 export interface HistoryData {

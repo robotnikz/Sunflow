@@ -143,10 +143,19 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         importedWh: number;
         exportedWh: number;
         autonomyPct: number;
+        endSocWh: number;
     };
 
-    const simulate = (dataPoints: SimulationDataPoint[], pvPercent: number, batteryCapacityWh: number): ScenarioSimResult => {
-        let currentSocWh = 0;
+    type BatteryModelParams = {
+        initialSocWh: number;
+        chargeEff: number;
+        dischargeEff: number;
+        maxChargeWhPerHour: number; // Wh/h (numerically equivalent to W avg over the hour)
+        maxDischargeWhPerHour: number;
+    };
+
+    const simulate = (dataPoints: SimulationDataPoint[], pvPercent: number, batteryCapacityWh: number, model: BatteryModelParams): ScenarioSimResult => {
+        let currentSocWh = Math.max(0, Math.min(batteryCapacityWh, model.initialSocWh));
         let totalLoadWh = 0;
         let totalPvWh = 0;
         let importedWh = 0;
@@ -162,18 +171,116 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
             const net = pvWh - loadWh;
             if (net > 0) {
                 const space = batteryCapacityWh - currentSocWh;
-                const charge = Math.min(net, space);
-                currentSocWh += charge;
-                exportedWh += (net - charge);
+                const maxChargeInput = Math.max(0, model.maxChargeWhPerHour);
+                const chargeInput = Math.min(
+                    net,
+                    maxChargeInput === Infinity ? net : maxChargeInput,
+                    model.chargeEff > 0 ? (space / model.chargeEff) : 0
+                );
+                const stored = chargeInput * model.chargeEff;
+                currentSocWh += stored;
+                exportedWh += (net - chargeInput);
             } else {
-                const discharge = Math.min(Math.abs(net), currentSocWh);
-                currentSocWh -= discharge;
-                importedWh += (Math.abs(net) - discharge);
+                const deficit = Math.abs(net);
+                const maxDischargeOut = Math.max(0, model.maxDischargeWhPerHour);
+
+                // Battery can only deliver up to (stored * dischargeEff) to the load.
+                const availableOut = currentSocWh * model.dischargeEff;
+                const dischargeOut = Math.min(
+                    deficit,
+                    maxDischargeOut === Infinity ? deficit : maxDischargeOut,
+                    availableOut
+                );
+                const drawnFromBattery = model.dischargeEff > 0 ? (dischargeOut / model.dischargeEff) : 0;
+                currentSocWh -= drawnFromBattery;
+                importedWh += (deficit - dischargeOut);
             }
         });
 
         const autonomyPct = totalLoadWh > 0 ? 100 * (1 - (importedWh / totalLoadWh)) : 0;
-        return { totalLoadWh, totalPvWh, importedWh, exportedWh, autonomyPct };
+        return { totalLoadWh, totalPvWh, importedWh, exportedWh, autonomyPct, endSocWh: currentSocWh };
+    };
+
+    const percentile = (values: number[], p: number): number | null => {
+        if (values.length === 0) return null;
+        const sorted = [...values].sort((a, b) => a - b);
+        const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor((p / 100) * (sorted.length - 1))));
+        return sorted[idx];
+    };
+
+    const inferBatteryModel = (dataPoints: SimulationDataPoint[]) => {
+        const charge = dataPoints
+            .map(d => d.bc)
+            .filter((v): v is number => v !== null && v !== undefined)
+            .filter(v => v > 0);
+        const discharge = dataPoints
+            .map(d => d.bd)
+            .filter((v): v is number => v !== null && v !== undefined)
+            .filter(v => v > 0);
+
+        // Only infer when we have a meaningful amount of measured data.
+        const hasMeasured = (charge.length + discharge.length) >= 24;
+
+        const sumCharge = charge.reduce((a, b) => a + b, 0);
+        const sumDischarge = discharge.reduce((a, b) => a + b, 0);
+        const rteRaw = (sumCharge > 0 && sumDischarge > 0) ? (sumDischarge / sumCharge) : null;
+        const rte = rteRaw === null ? null : Math.max(0.6, Math.min(1.0, rteRaw));
+        const eta = rte === null ? 1 : Math.sqrt(rte);
+
+        const maxCharge = percentile(charge, 95);
+        const maxDischarge = percentile(discharge, 95);
+
+        return {
+            hasMeasured,
+            chargeEff: hasMeasured ? eta : 1,
+            dischargeEff: hasMeasured ? eta : 1,
+            maxChargeWhPerHour: (hasMeasured && maxCharge !== null) ? Math.max(0, maxCharge) : Infinity,
+            maxDischargeWhPerHour: (hasMeasured && maxDischarge !== null) ? Math.max(0, maxDischarge) : Infinity,
+        };
+    };
+
+    const estimateCyclicInitialSocWh = (
+        dataPoints: SimulationDataPoint[],
+        pvPercent: number,
+        batteryCapacityWh: number,
+        baseModel: Omit<BatteryModelParams, 'initialSocWh'>
+    ) => {
+        // If we don't have measured SoC, assume the dataset is representative and find a
+        // stable (cyclic) initial SoC by iterating startSoC := endSoC.
+        let guess = 0;
+        for (let i = 0; i < 10; i += 1) {
+            const res = simulate(dataPoints, pvPercent, batteryCapacityWh, { ...baseModel, initialSocWh: guess });
+            const next = res.endSocWh;
+            if (Math.abs(next - guess) < 1) {
+                guess = next;
+                break;
+            }
+            guess = next;
+        }
+        return Math.max(0, Math.min(batteryCapacityWh, guess));
+    };
+
+    const measuredBaseFromData = (dataPoints: SimulationDataPoint[]): ScenarioSimResult | null => {
+        // If grid import/export is available, we can compute the baseline exactly from history.
+        // This avoids assuming an “optimal” battery dispatch for the real system.
+        const hasGi = dataPoints.some(d => d.gi !== null && d.gi !== undefined);
+        const hasGe = dataPoints.some(d => d.ge !== null && d.ge !== undefined);
+        if (!hasGi && !hasGe) return null;
+
+        let totalLoadWh = 0;
+        let totalPvWh = 0;
+        let importedWh = 0;
+        let exportedWh = 0;
+
+        dataPoints.forEach(point => {
+            totalLoadWh += point.l;
+            totalPvWh += point.p;
+            if (point.gi !== null && point.gi !== undefined) importedWh += Number(point.gi);
+            if (point.ge !== null && point.ge !== undefined) exportedWh += Number(point.ge);
+        });
+
+        const autonomyPct = totalLoadWh > 0 ? 100 * (1 - (importedWh / totalLoadWh)) : 0;
+        return { totalLoadWh, totalPvWh, importedWh, exportedWh, autonomyPct, endSocWh: 0 };
     };
 
     const simulations = useMemo(() => {
@@ -181,9 +288,38 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
 
         const baseBatteryWh = (config.batteryCapacity || 5) * 1000;
 
-        const base = simulate(filteredHourlyData, 0, baseBatteryWh);
-        const pvOnly = simulate(filteredHourlyData, addedPvPercent, baseBatteryWh);
-        const pvPlusBattery = simulate(filteredHourlyData, addedPvPercent, baseBatteryWh + (addedBatteryKwh * 1000));
+        const inferredModel = inferBatteryModel(filteredHourlyData);
+        const baseModelNoInitial: Omit<BatteryModelParams, 'initialSocWh'> = {
+            chargeEff: inferredModel.chargeEff,
+            dischargeEff: inferredModel.dischargeEff,
+            maxChargeWhPerHour: inferredModel.maxChargeWhPerHour,
+            maxDischargeWhPerHour: inferredModel.maxDischargeWhPerHour,
+        };
+
+        // Try to initialize SoC from historical data (when available).
+        // We interpret `s` as a percentage of the *current/base* battery capacity.
+        // For larger simulated batteries, we keep the absolute energy the same.
+        const firstSocPct = filteredHourlyData.find(d => d.s !== null && d.s !== undefined)?.s;
+        const initialSocPct = (firstSocPct === null || firstSocPct === undefined) ? null : Math.max(0, Math.min(100, Number(firstSocPct)));
+        const initialEnergyWhBaseMeasured = initialSocPct === null ? null : (initialSocPct / 100) * baseBatteryWh;
+
+        const baseMeasured = measuredBaseFromData(filteredHourlyData);
+
+        const baseInitial = initialEnergyWhBaseMeasured ?? estimateCyclicInitialSocWh(filteredHourlyData, 0, baseBatteryWh, baseModelNoInitial);
+        const pvOnlyInitial = initialEnergyWhBaseMeasured ?? estimateCyclicInitialSocWh(filteredHourlyData, addedPvPercent, baseBatteryWh, baseModelNoInitial);
+        const pvPlusBatteryCap = baseBatteryWh + (addedBatteryKwh * 1000);
+        const pvPlusBatteryInitial = initialEnergyWhBaseMeasured ?? estimateCyclicInitialSocWh(filteredHourlyData, addedPvPercent, pvPlusBatteryCap, baseModelNoInitial);
+
+        // If we have measured SoC, keep the absolute starting energy identical across scenarios.
+        // If not, use a cyclic estimate per scenario to reduce boundary effects.
+        const initialEnergyWhBase = initialEnergyWhBaseMeasured ?? baseInitial;
+        const initialEnergyWhPvOnly = initialEnergyWhBaseMeasured ?? pvOnlyInitial;
+        const initialEnergyWhPvPlusBattery = initialEnergyWhBaseMeasured ?? pvPlusBatteryInitial;
+
+        const baseSimulated = simulate(filteredHourlyData, 0, baseBatteryWh, { ...baseModelNoInitial, initialSocWh: initialEnergyWhBase });
+        const base = baseMeasured ?? baseSimulated;
+        const pvOnly = simulate(filteredHourlyData, addedPvPercent, baseBatteryWh, { ...baseModelNoInitial, initialSocWh: initialEnergyWhPvOnly });
+        const pvPlusBattery = simulate(filteredHourlyData, addedPvPercent, pvPlusBatteryCap, { ...baseModelNoInitial, initialSocWh: initialEnergyWhPvPlusBattery });
 
         return { base, pvOnly, pvPlusBattery };
     }, [filteredHourlyData, addedPvPercent, addedBatteryKwh, config.batteryCapacity]);
@@ -285,7 +421,22 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         const feedIn = activeTariff.feedInTariff;
 
         const baseBatteryWh = (config.batteryCapacity || 5) * 1000;
-        const pvOnly = simulate(filteredHourlyData, addedPvPercent, baseBatteryWh);
+        const firstSocPct = filteredHourlyData.find(d => d.s !== null && d.s !== undefined)?.s;
+        const initialSocPct = (firstSocPct === null || firstSocPct === undefined) ? null : Math.max(0, Math.min(100, Number(firstSocPct)));
+        const inferredModel = inferBatteryModel(filteredHourlyData);
+        const baseModelNoInitial: Omit<BatteryModelParams, 'initialSocWh'> = {
+            chargeEff: inferredModel.chargeEff,
+            dischargeEff: inferredModel.dischargeEff,
+            maxChargeWhPerHour: inferredModel.maxChargeWhPerHour,
+            maxDischargeWhPerHour: inferredModel.maxDischargeWhPerHour,
+        };
+
+        const initialEnergyWhBaseMeasured = initialSocPct === null ? null : (initialSocPct / 100) * baseBatteryWh;
+        // For the recommendation sweep, keep the same absolute starting energy for all candidates
+        // to make them comparable and avoid extra cyclic estimation work.
+        const initialEnergyWhForSweep = initialEnergyWhBaseMeasured ?? estimateCyclicInitialSocWh(filteredHourlyData, addedPvPercent, baseBatteryWh, baseModelNoInitial);
+
+        const pvOnly = simulate(filteredHourlyData, addedPvPercent, baseBatteryWh, { ...baseModelNoInitial, initialSocWh: initialEnergyWhForSweep });
 
         const benefitOverDataset = (from: ScenarioSimResult, to: ScenarioSimResult) => {
             const savedImportKwh = (from.importedWh - to.importedWh) / 1000;
@@ -304,7 +455,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
 
         const candidates: Candidate[] = [];
         for (let kwh = 0; kwh <= 30; kwh += 1) {
-            const sim = simulate(filteredHourlyData, addedPvPercent, baseBatteryWh + (kwh * 1000));
+            const sim = simulate(filteredHourlyData, addedPvPercent, baseBatteryWh + (kwh * 1000), { ...baseModelNoInitial, initialSocWh: initialEnergyWhForSweep });
             const savedImportKwh = (pvOnly.importedWh - sim.importedWh) / 1000;
             const exportDeltaKwh = (sim.exportedWh - pvOnly.exportedWh) / 1000;
 
@@ -343,6 +494,32 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         const recommended = [...meaningful].sort((a, b) => a.roiYears - b.roiYears)[0];
         return { recommended, bestYearly: bestYearlyAny, thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: MAX_REASONABLE_ROI_YEARS } };
     }, [filteredHourlyData, financials, dataCoverage.days, activeTariff, config.batteryCapacity, addedPvPercent, costPerKwhBat]);
+
+    const dataBasis = useMemo(() => {
+        if (!filteredHourlyData) return null;
+
+        const hasSoc = filteredHourlyData.some(d => d.s !== null && d.s !== undefined);
+        const hasBatteryFlows = filteredHourlyData.some(d => (d.bc !== null && d.bc !== undefined) || (d.bd !== null && d.bd !== undefined));
+        const hasGridFlows = filteredHourlyData.some(d => (d.gi !== null && d.gi !== undefined) || (d.ge !== null && d.ge !== undefined));
+
+        const inferred = inferBatteryModel(filteredHourlyData);
+
+        // We use measured SoC if present. Otherwise: cyclic estimate (steady-state) to avoid boundary artifacts.
+        const startSocMethod = hasSoc ? 'Measured SoC' : 'Estimated (steady-state)';
+
+        const roundTripEffPct = inferred.hasMeasured
+            ? Math.round((inferred.chargeEff * inferred.dischargeEff) * 100)
+            : null;
+
+        return {
+            hasSoc,
+            hasBatteryFlows,
+            hasGridFlows,
+            startSocMethod,
+            inferred,
+            roundTripEffPct,
+        };
+    }, [filteredHourlyData]);
 
 
     if (!isOpen) {
@@ -499,7 +676,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                 <div className="flex gap-3 items-start">
                                     <Info size={18} className="text-blue-400 shrink-0 mt-0.5" />
                                     <div className="text-xs text-blue-200 leading-relaxed">
-                                        <strong>Accuracy Check:</strong> More complete days means more reliable results.
+                                        <strong>Accuracy:</strong> Uses only complete (hourly) days.
                                         {dataCoverage.days < windowBounds.expectedDays ? (
                                             <div className="mt-2 space-y-1">
                                                 <p className="text-yellow-400 font-medium">
@@ -514,6 +691,38 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                 <CheckCircle2 size={12} /> Baseline reached ({dataCoverage.days} days available)!
                                             </p>
                                         )}
+
+                                        {dataBasis && (
+                                            <div className="mt-3 pt-3 border-t border-blue-500/20">
+                                                <div className="text-[10px] uppercase tracking-wide text-blue-300/80 mb-2">
+                                                    Data used
+                                                </div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    <span className={`px-2 py-0.5 rounded-full border text-[10px] ${dataBasis.hasSoc ? 'border-emerald-400/40 text-emerald-300' : 'border-slate-500/30 text-slate-400'}`}>
+                                                        SoC: {dataBasis.hasSoc ? 'yes' : 'no'}
+                                                    </span>
+                                                    <span className={`px-2 py-0.5 rounded-full border text-[10px] ${dataBasis.hasBatteryFlows ? 'border-emerald-400/40 text-emerald-300' : 'border-slate-500/30 text-slate-400'}`}>
+                                                        Battery flows: {dataBasis.hasBatteryFlows ? 'yes' : 'no'}
+                                                    </span>
+                                                    <span className={`px-2 py-0.5 rounded-full border text-[10px] ${dataBasis.hasGridFlows ? 'border-emerald-400/40 text-emerald-300' : 'border-slate-500/30 text-slate-400'}`}>
+                                                        Grid flows: {dataBasis.hasGridFlows ? 'yes' : 'no'}
+                                                    </span>
+                                                    <span className="px-2 py-0.5 rounded-full border text-[10px] border-slate-500/30 text-slate-300">
+                                                        Start SoC: {dataBasis.startSocMethod}
+                                                    </span>
+                                                    {dataBasis.roundTripEffPct !== null && (
+                                                        <span className="px-2 py-0.5 rounded-full border text-[10px] border-slate-500/30 text-slate-300">
+                                                            RTE (est.): {dataBasis.roundTripEffPct}%
+                                                        </span>
+                                                    )}
+                                                    {dataBasis.inferred.hasMeasured && (
+                                                        <span className="px-2 py-0.5 rounded-full border text-[10px] border-slate-500/30 text-slate-300">
+                                                            Power limits: inferred
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
@@ -522,188 +731,166 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                         style={{ width: `${dataCoverage.percent}%` }}
                                     />
                                 </div>
-                                <div className="text-[10px] text-slate-500 italic">
-                                    💡 Pro-Tip: For accurate battery simulation, hourly data resolution is required.
+                                <div className="text-[10px] text-slate-500">
+                                    Tip: short windows benefit strongly from measured SoC.
                                 </div>
                             </div>
                         </div>
 
                         {/* RIGHT COL: VISUALS */}
                         <div className="flex flex-col justify-center gap-6">
-                            
-                            {/* Autonomy Bar */}
-                            <div className="bg-slate-900 p-4 rounded-xl border border-slate-700">
-                                <div className="flex justify-between mb-2">
-                                    <span className="text-slate-400 font-medium">Autonomy Boost</span>
-                                    <div className="flex gap-2">
+                            {/* Summary (less stacked cards) */}
+                            <div className="bg-slate-900/60 p-5 rounded-xl border border-slate-700">
+                                <div className="flex items-center justify-between">
+                                    <div className="text-xs font-bold uppercase text-slate-400">Summary</div>
+                                    {(addedPvPercent > 0 || addedBatteryKwh > 0) && (
+                                        <div className={`text-[11px] px-2 py-0.5 rounded-full border ${
+                                            financials.roiYears < 10
+                                                ? 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10'
+                                                : financials.roiYears < 15
+                                                    ? 'border-yellow-500/30 text-yellow-300 bg-yellow-500/10'
+                                                    : 'border-red-500/30 text-red-300 bg-red-500/10'
+                                        }`}>
+                                            ROI: {Number.isFinite(financials.roiYears) ? `${financials.roiYears.toFixed(1)}y` : '∞'}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="mt-3">
+                                    <div className="flex justify-between mb-2">
+                                        <span className="text-slate-400 text-sm font-medium">Autonomy</span>
+                                        <div className="flex gap-2 items-baseline">
                                             {(addedPvPercent === 0 && addedBatteryKwh === 0) ? (
                                                 <span className="text-white font-bold text-lg">{results.autonomyOriginal.toFixed(1)}%</span>
                                             ) : (
                                                 <>
-                                                    <span className="text-slate-500 line-through">{results.autonomyOriginal.toFixed(1)}%</span>
+                                                    <span className="text-slate-500 line-through text-sm">{results.autonomyOriginal.toFixed(1)}%</span>
                                                     <span className="text-white font-bold text-lg">{results.autonomySimulated.toFixed(1)}%</span>
                                                 </>
                                             )}
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="h-4 w-full bg-slate-800 rounded-full overflow-hidden relative">
-                                    {/* Original Marker */}
-                                    {(addedPvPercent === 0 && addedBatteryKwh === 0) ? (
-                                        <div 
-                                            className="h-full bg-gradient-to-r from-blue-600 to-purple-500 absolute top-0 left-0 transition-all duration-500 opacity-80"
-                                            style={{ width: `${results.autonomyOriginal}%` }}
-                                        />
-                                    ) : (
-                                        <>
-                                            <div 
-                                                className="h-full bg-slate-600 absolute top-0 left-0"
+                                    <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden relative">
+                                        {(addedPvPercent === 0 && addedBatteryKwh === 0) ? (
+                                            <div
+                                                className="h-full bg-gradient-to-r from-blue-600 to-purple-500 absolute top-0 left-0 transition-all duration-500 opacity-80"
                                                 style={{ width: `${results.autonomyOriginal}%` }}
                                             />
-                                            {/* New Marker (only the diff) */}
-                                            <div 
-                                                className="h-full bg-gradient-to-r from-blue-600 to-purple-500 absolute top-0 left-0 transition-all duration-500 opacity-80"
-                                                style={{ width: `${results.autonomySimulated}%` }}
-                                            />
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* ROI CARD ESSENTIAL */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 flex flex-col justify-between">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <Coins size={18} className="text-yellow-500" />
-                                        <span className="text-slate-400 text-xs font-bold uppercase">Invest</span>
-                                    </div>
-                                    <div className="text-2xl font-bold text-white">
-                                        {financials.totalInvest.toLocaleString()} {config.currency}
-                                    </div>
-                                    <div className="text-xs text-slate-500 mt-1">Total Upfront Cost</div>
-                                </div>
-
-                                <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 flex flex-col justify-between">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <PiggyBank size={18} className="text-green-500" />
-                                        <span className="text-slate-400 text-xs font-bold uppercase">Yearly Return</span>
-                                    </div>
-                                    <div className="text-2xl font-bold text-green-400">
-                                        +{financials.totalYearlyBenefit.toLocaleString(undefined, { maximumFractionDigits: 0 })} {config.currency}
-                                    </div>
-                                    <div className="text-xs text-slate-500 mt-1">Savings + Earnings</div>
-                                </div>
-                            </div>
-                            
-                            {/* ROI BIG VERDICT */}
-                            {(addedPvPercent > 0 || addedBatteryKwh > 0) && (
-                                <div className={`p-4 rounded-xl border flex items-center justify-between ${
-                                    financials.roiYears < 10 
-                                    ? 'bg-emerald-500/10 border-emerald-500/30' 
-                                    : financials.roiYears < 15 
-                                    ? 'bg-yellow-500/10 border-yellow-500/30'
-                                    : 'bg-red-500/10 border-red-500/30'
-                                }`}>
-                                    <div>
-                                        <div className="text-xs font-bold uppercase opacity-70 mb-1">
-                                            Return on Investment (ROI)
-                                        </div>
-                                        <div className="text-2xl font-black">
-                                            {financials.roiYears.toFixed(1)} Years
-                                        </div>
-                                    </div>
-                                    <div>
-                                        {financials.roiYears < 10 ? (
-                                            <div className="flex items-center gap-2 text-emerald-400 font-bold">
-                                                <CheckCircle2 size={32} />
-                                                <span>Great!</span>
-                                            </div>
-                                        ) : financials.roiYears < 15 ? (
-                                            <div className="flex items-center gap-2 text-yellow-400 font-bold">
-                                                 <Info size={32} />
-                                                 <span>Okay</span>
-                                            </div>
                                         ) : (
-                                            <div className="flex items-center gap-2 text-red-400 font-bold">
-                                                 <AlertTriangle size={32} />
-                                                 <span>Long term</span>
-                                            </div>
+                                            <>
+                                                <div
+                                                    className="h-full bg-slate-600 absolute top-0 left-0"
+                                                    style={{ width: `${results.autonomyOriginal}%` }}
+                                                />
+                                                <div
+                                                    className="h-full bg-gradient-to-r from-blue-600 to-purple-500 absolute top-0 left-0 transition-all duration-500 opacity-80"
+                                                    style={{ width: `${results.autonomySimulated}%` }}
+                                                />
+                                            </>
                                         )}
                                     </div>
                                 </div>
-                            )}
 
-                            {/* ROI Breakdown: makes PV/battery dependency explicit */}
-                            {(addedPvPercent > 0 || addedBatteryKwh > 0) && (
-                                <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 text-xs text-slate-300">
-                                    <div className="font-bold uppercase text-slate-400 mb-2">ROI Breakdown</div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-slate-400">PV-only (base → PV)</span>
-                                        <span className="text-yellow-300 font-semibold">
-                                            {financials.pvOnly.invest > 0
-                                                ? (Number.isFinite(financials.pvOnly.roiYears) ? `${financials.pvOnly.roiYears.toFixed(1)}y` : '∞')
-                                                : '—'}
-                                        </span>
+                                <div className="mt-4 grid grid-cols-2 gap-4">
+                                    <div>
+                                        <div className="text-xs text-slate-400 flex items-center gap-2">
+                                            <Coins size={16} className="text-yellow-500" /> Invest
+                                        </div>
+                                        <div className="text-xl font-bold text-white mt-1">
+                                            {financials.totalInvest.toLocaleString()} {config.currency}
+                                        </div>
                                     </div>
-                                    <div className="flex items-center justify-between mt-1">
-                                        <span className="text-slate-400">Battery incremental (PV → PV+Battery)</span>
-                                        <span className="text-green-300 font-semibold">
-                                            {financials.batteryIncremental.invest > 0
-                                                ? (Number.isFinite(financials.batteryIncremental.roiYears) ? `${financials.batteryIncremental.roiYears.toFixed(1)}y` : '∞')
-                                                : '—'}
-                                        </span>
-                                    </div>
-                                    <div className="mt-2 text-[10px] text-slate-500">
-                                        Battery ROI is calculated using the current PV slider (captures PV→Battery coupling).
+                                    <div>
+                                        <div className="text-xs text-slate-400 flex items-center gap-2">
+                                            <PiggyBank size={16} className="text-green-500" /> Yearly return
+                                        </div>
+                                        <div className="text-xl font-bold text-green-400 mt-1">
+                                            +{financials.totalYearlyBenefit.toLocaleString(undefined, { maximumFractionDigits: 0 })} {config.currency}
+                                        </div>
                                     </div>
                                 </div>
-                            )}
+                            </div>
 
-                            {/* Recommendation */}
-                            {batteryRecommendation && (
-                                <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-700">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <div className="text-xs font-bold uppercase text-slate-400">Battery Suggestion</div>
-                                        <div className="text-[10px] text-slate-500">Based on current PV slider + timeframe</div>
-                                    </div>
-
-                                    {batteryRecommendation.recommended ? (
-                                        <div className="text-sm text-slate-200">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-slate-400">Recommended add-on</span>
-                                                <span className="text-white font-bold">+{batteryRecommendation.recommended.addedBatteryKwh} kWh</span>
-                                            </div>
-                                            <div className="flex items-center justify-between mt-1">
-                                                <span className="text-slate-400">Battery ROI (incremental)</span>
-                                                <span className="text-emerald-400 font-semibold">{batteryRecommendation.recommended.roiYears.toFixed(1)}y</span>
-                                            </div>
-                                            <div className="flex items-center justify-between mt-1">
-                                                <span className="text-slate-400">Yearly benefit (battery)</span>
-                                                <span className="text-emerald-300 font-semibold">+{batteryRecommendation.recommended.yearlyBenefit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {config.currency}</span>
-                                            </div>
-                                            {batteryRecommendation.bestYearly && batteryRecommendation.bestYearly.addedBatteryKwh !== batteryRecommendation.recommended.addedBatteryKwh && (
-                                                <div className="mt-2 text-[10px] text-slate-500">
-                                                    Max yearly benefit at +{batteryRecommendation.bestYearly.addedBatteryKwh} kWh.
-                                                </div>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <div className="text-xs text-slate-400">
+                            {/* Details: ROI breakdown + battery suggestion (collapsed to reduce UI noise) */}
+                            {(batteryRecommendation || addedPvPercent > 0 || addedBatteryKwh > 0) && (
+                                <details className="bg-slate-900/40 p-4 rounded-xl border border-slate-700">
+                                    <summary className="cursor-pointer select-none text-xs font-bold uppercase text-slate-400">
+                                        Details
+                                    </summary>
+                                    <div className="mt-3 text-xs text-slate-300 space-y-3">
+                                        {(addedPvPercent > 0 || addedBatteryKwh > 0) && (
                                             <div>
-                                                No worthwhile battery recommendation for this PV setting in the selected timeframe.
-                                                {batteryRecommendation.thresholds && (
-                                                    <span> (Needs ≥ {batteryRecommendation.thresholds.minYearlyBenefit} {config.currency}/yr and ROI ≤ {batteryRecommendation.thresholds.maxRoiYears}y.)</span>
+                                                <div className="font-bold uppercase text-slate-400 mb-2">ROI Breakdown</div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-slate-400">PV-only (base → PV)</span>
+                                                    <span className="text-yellow-300 font-semibold">
+                                                        {financials.pvOnly.invest > 0
+                                                            ? (Number.isFinite(financials.pvOnly.roiYears) ? `${financials.pvOnly.roiYears.toFixed(1)}y` : '∞')
+                                                            : '—'}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between mt-1">
+                                                    <span className="text-slate-400">Battery incremental (PV → PV+Battery)</span>
+                                                    <span className="text-green-300 font-semibold">
+                                                        {financials.batteryIncremental.invest > 0
+                                                            ? (Number.isFinite(financials.batteryIncremental.roiYears) ? `${financials.batteryIncremental.roiYears.toFixed(1)}y` : '∞')
+                                                            : '—'}
+                                                    </span>
+                                                </div>
+                                                <div className="mt-2 text-[10px] text-slate-500">
+                                                    Battery ROI uses PV-only → PV+Battery (captures PV→Battery coupling).
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {batteryRecommendation && (
+                                            <div>
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <div className="text-xs font-bold uppercase text-slate-400">Battery Suggestion</div>
+                                                    <div className="text-[10px] text-slate-500">Current PV slider + timeframe</div>
+                                                </div>
+
+                                                {batteryRecommendation.recommended ? (
+                                                    <div className="text-sm text-slate-200">
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-slate-400">Recommended add-on</span>
+                                                            <span className="text-white font-bold">+{batteryRecommendation.recommended.addedBatteryKwh} kWh</span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between mt-1">
+                                                            <span className="text-slate-400">Battery ROI (incremental)</span>
+                                                            <span className="text-emerald-400 font-semibold">{batteryRecommendation.recommended.roiYears.toFixed(1)}y</span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between mt-1">
+                                                            <span className="text-slate-400">Yearly benefit (battery)</span>
+                                                            <span className="text-emerald-300 font-semibold">+{batteryRecommendation.recommended.yearlyBenefit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {config.currency}</span>
+                                                        </div>
+                                                        {batteryRecommendation.bestYearly && batteryRecommendation.bestYearly.addedBatteryKwh !== batteryRecommendation.recommended.addedBatteryKwh && (
+                                                            <div className="mt-2 text-[10px] text-slate-500">
+                                                                Max yearly benefit at +{batteryRecommendation.bestYearly.addedBatteryKwh} kWh.
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-xs text-slate-400">
+                                                        <div>
+                                                            No worthwhile battery recommendation for this PV setting in the selected timeframe.
+                                                            {batteryRecommendation.thresholds && (
+                                                                <span> (Needs ≥ {batteryRecommendation.thresholds.minYearlyBenefit} {config.currency}/yr and ROI ≤ {batteryRecommendation.thresholds.maxRoiYears}y.)</span>
+                                                            )}
+                                                        </div>
+                                                        {batteryRecommendation.bestYearly && (
+                                                            <div className="mt-2 text-[10px] text-slate-500">
+                                                                Best-case add-on: +{batteryRecommendation.bestYearly.addedBatteryKwh} kWh → {batteryRecommendation.bestYearly.yearlyBenefit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {config.currency}/yr,
+                                                                saves ~{batteryRecommendation.bestYearly.yearlySavedImportKwh.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh import/yr,
+                                                                export Δ ~{batteryRecommendation.bestYearly.yearlyExportDeltaKwh.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh/yr.
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 )}
                                             </div>
-                                            {batteryRecommendation.bestYearly && (
-                                                <div className="mt-2 text-[10px] text-slate-500">
-                                                    Best-case add-on: +{batteryRecommendation.bestYearly.addedBatteryKwh} kWh → {batteryRecommendation.bestYearly.yearlyBenefit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {config.currency}/yr,
-                                                    saves ~{batteryRecommendation.bestYearly.yearlySavedImportKwh.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh import/yr,
-                                                    export Δ ~{batteryRecommendation.bestYearly.yearlyExportDeltaKwh.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh/yr.
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
+                                        )}
+                                    </div>
+                                </details>
                             )}
 
                         </div>

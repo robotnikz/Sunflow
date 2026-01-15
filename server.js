@@ -1643,11 +1643,34 @@ app.get('/api/simulation-data', (req, res) => {
         SELECT 
             ts,
             AVG(pv) as p_pv,
-            AVG(load) as p_load
+            AVG(load) as p_load,
+            AVG(soc) as soc,
+            AVG(grid_in) as grid_in,
+            AVG(grid_out) as grid_out,
+            AVG(batt_charge) as batt_charge,
+            AVG(batt_discharge) as batt_discharge
         FROM (
-            SELECT strftime('%Y-%m-%d %H:00:00', timestamp) as ts, power_pv as pv, power_load as load FROM energy_log
+            SELECT 
+                strftime('%Y-%m-%d %H:00:00', timestamp) as ts,
+                power_pv as pv,
+                power_load as load,
+                soc as soc,
+                CASE WHEN power_grid > 0 THEN power_grid ELSE 0 END as grid_in,
+                CASE WHEN power_grid < 0 THEN -power_grid ELSE 0 END as grid_out,
+                CASE WHEN power_battery < 0 THEN -power_battery ELSE 0 END as batt_charge,
+                CASE WHEN power_battery > 0 THEN power_battery ELSE 0 END as batt_discharge
+            FROM energy_log
             UNION ALL
-            SELECT strftime('%Y-%m-%d %H:00:00', timestamp) as ts, production_wh as pv, load_wh as load FROM energy_data
+            SELECT 
+                strftime('%Y-%m-%d %H:00:00', timestamp) as ts,
+                production_wh as pv,
+                load_wh as load,
+                NULL as soc,
+                grid_consumption_wh as grid_in,
+                grid_feed_in_wh as grid_out,
+                battery_charge_wh as batt_charge,
+                battery_discharge_wh as batt_discharge
+            FROM energy_data
         )
         WHERE pv IS NOT NULL AND load IS NOT NULL
         GROUP BY ts
@@ -1659,7 +1682,16 @@ app.get('/api/simulation-data', (req, res) => {
         const optimized = rows.map(r => ({
             t: new Date(r.ts).getTime(),
             p: Math.round(r.p_pv),
-            l: Math.round(r.p_load)
+            l: Math.round(r.p_load),
+            // Battery SoC (%) is only available for energy_log-backed data.
+            // Keep it optional for imported energy_data rows.
+            s: (r.soc === null || r.soc === undefined) ? null : Math.round(Number(r.soc) * 10) / 10,
+            // Optional: measured grid/battery flows (W averaged over the hour or Wh per hour).
+            // These help calibrate power limits and round-trip efficiency.
+            gi: (r.grid_in === null || r.grid_in === undefined) ? null : Math.round(Number(r.grid_in)),
+            ge: (r.grid_out === null || r.grid_out === undefined) ? null : Math.round(Number(r.grid_out)),
+            bc: (r.batt_charge === null || r.batt_charge === undefined) ? null : Math.round(Number(r.batt_charge)),
+            bd: (r.batt_discharge === null || r.batt_discharge === undefined) ? null : Math.round(Number(r.batt_discharge))
         }));
         res.json(optimized);
     });
