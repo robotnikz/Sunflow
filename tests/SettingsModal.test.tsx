@@ -117,7 +117,7 @@ describe('SettingsModal Interaction', () => {
       // Production: 1000 + 5000 = 6,000
       // Note: Value is inside a div along with a span "kWh", so strict string match fails. Use Regex.
       // Locale might vary, so we match 6 followed by any separator and 000
-      expect(screen.getByText(/6[,\.\s]?000/)).toBeInTheDocument();
+      expect(screen.getByText(/6[,.\s]?000/)).toBeInTheDocument();
       
       // Eingabewert ändern (Manual Offset)
       const prodInputs = container.querySelectorAll('input[type="number"]');

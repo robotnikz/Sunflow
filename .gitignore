@@ -37,6 +37,8 @@ logs/
 sunflow-data/
 sunflow-data-*/
 sunflow-data.backup*/
+sunflow-data-backup*.tar*
+sunflow-data-*.tar*
 *.db
 *.sqlite
 *.sqlite3

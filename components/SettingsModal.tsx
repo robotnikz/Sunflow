@@ -924,7 +924,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                     const cfg = await getConfig();
                     setFormData(cfg);
                     // Also notify Dashboard to refresh stats
-                    onSave && onSave(cfg);
+                    onSave(cfg);
                 } catch(e) { console.error("Auto-refresh after import failed", e); }
              }} />
           )}
