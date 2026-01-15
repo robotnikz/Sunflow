@@ -1,3 +1,10 @@
+# [1.11.0](https://github.com/robotnikz/Sunflow/compare/v1.10.1...v1.11.0) (2026-01-15)
+
+
+### Features
+
+* trigger 1.11.0 release ([b2531d1](https://github.com/robotnikz/Sunflow/commit/b2531d106fdb0e81e0b045a8ec70003fac59e62b))
+
 ## [1.10.1](https://github.com/robotnikz/Sunflow/compare/v1.10.0...v1.10.1) (2026-01-15)
 
 
