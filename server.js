@@ -2530,17 +2530,27 @@ app.post('/api/import-csv', requireAdmin, upload.single('file'), (req, res) => {
         return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    let mapping = {};
+    if (req.body?.mapping === undefined) {
+        try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+        return res.status(400).json({ error: 'Missing mapping' });
+    }
+
+    let mapping = null;
     try {
-        mapping = JSON.parse(req.body.mapping || '{}');
+        mapping = JSON.parse(req.body.mapping);
     } catch {
         try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
         return res.status(400).json({ error: 'Invalid mapping JSON' });
     }
 
-    if (!mapping || typeof mapping !== 'object') {
+    if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping)) {
         try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
         return res.status(400).json({ error: 'Invalid mapping' });
+    }
+
+    if (!mapping.timestamp || typeof mapping.timestamp !== 'string' || !mapping.timestamp.trim()) {
+        try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+        return res.status(400).json({ error: 'Invalid mapping (missing timestamp)' });
     }
     const filePath = req.file.path;
     const fileContent = fs.readFileSync(filePath, 'utf8');

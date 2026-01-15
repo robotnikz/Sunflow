@@ -502,6 +502,33 @@ describe('Backend API (auth/admin)', () => {
       .attach('file', csvPath);
     expect(importBadMapping.status).toBe(400);
 
+    const importMissingMapping = await request(app)
+      .post('/api/import-csv')
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', csvPath);
+    expect(importMissingMapping.status).toBe(400);
+
+    const importMappingWrongType = await request(app)
+      .post('/api/import-csv')
+      .set('Authorization', `Bearer ${token}`)
+      .field('mapping', '123')
+      .attach('file', csvPath);
+    expect(importMappingWrongType.status).toBe(400);
+
+    const importMappingArray = await request(app)
+      .post('/api/import-csv')
+      .set('Authorization', `Bearer ${token}`)
+      .field('mapping', '[]')
+      .attach('file', csvPath);
+    expect(importMappingArray.status).toBe(400);
+
+    const importMappingNoTimestamp = await request(app)
+      .post('/api/import-csv')
+      .set('Authorization', `Bearer ${token}`)
+      .field('mapping', JSON.stringify({ power_pv: 'power_pv' }))
+      .attach('file', csvPath);
+    expect(importMappingNoTimestamp.status).toBe(400);
+
     const mapping = {
       timestamp: 'timestamp',
       power_pv: 'power_pv',
@@ -560,5 +587,13 @@ describe('Backend API (auth/admin)', () => {
 
     expect(res.status).toBe(413);
     expect(String(res.body?.error || '')).toMatch(/too large|file/i);
+
+    const importRes = await request(app)
+      .post('/api/import-csv')
+      .set('Authorization', `Bearer ${token}`)
+      .field('mapping', JSON.stringify({ timestamp: 'timestamp', power_pv: 'power_pv' }))
+      .attach('file', bigPath);
+    expect(importRes.status).toBe(413);
+    expect(String(importRes.body?.error || '')).toMatch(/too large|file/i);
   });
 });
