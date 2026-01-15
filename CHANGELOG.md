@@ -1,3 +1,10 @@
+## [1.9.2](https://github.com/robotnikz/Sunflow/compare/v1.9.1...v1.9.2) (2026-01-15)
+
+
+### Bug Fixes
+
+* **scenario-planner:** account for PV/battery dependency ([11f25e6](https://github.com/robotnikz/Sunflow/commit/11f25e643468e3578977670a2a6c8151e0cae18d))
+
 ## [1.9.1](https://github.com/robotnikz/Sunflow/compare/v1.9.0...v1.9.1) (2026-01-13)
 
 
