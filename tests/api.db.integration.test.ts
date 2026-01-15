@@ -67,6 +67,14 @@ const waitForTariffs = async (app: any, timeoutMs = 1500) => {
   return request(app).get('/api/tariffs');
 };
 
+const listFiles = (dir: string) => {
+  try {
+    return fs.readdirSync(dir).sort();
+  } catch {
+    return [];
+  }
+};
+
 describe('Backend API (DB integration)', () => {
   const token = 'test-admin-token';
 
@@ -297,5 +305,52 @@ describe('Backend API (DB integration)', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.imported).toBe(0);
+  });
+
+  it('does not write to DB and cleans up upload temp file on invalid mapping', async () => {
+    const uploadsDir = path.join(dataDir, 'uploads');
+
+    const beforeUploads = listFiles(uploadsDir);
+    const beforeCountRow = await dbGet(dbPath, 'SELECT COUNT(*) as c FROM energy_log');
+    const beforeCount = Number(beforeCountRow?.c || 0);
+
+    const csv = [
+      'timestamp,power_pv',
+      '2026-01-15T10:00:00Z,100',
+    ].join('\n');
+    const csvPath = path.join(dataDir, 'bad-mapping.csv');
+    fs.writeFileSync(csvPath, csv, 'utf8');
+
+    // Case 1: mapping is invalid JSON
+    const badJson = await request(app)
+      .post('/api/import-csv')
+      .set('Authorization', `Bearer ${token}`)
+      .field('mapping', '{not-json')
+      .attach('file', csvPath);
+    expect(badJson.status).toBe(400);
+
+    // Case 2: mapping missing timestamp
+    const missingTs = await request(app)
+      .post('/api/import-csv')
+      .set('Authorization', `Bearer ${token}`)
+      .field('mapping', JSON.stringify({ power_pv: 'power_pv' }))
+      .attach('file', csvPath);
+    expect(missingTs.status).toBe(400);
+
+    // Case 3: mapping is an array
+    const mappingArray = await request(app)
+      .post('/api/import-csv')
+      .set('Authorization', `Bearer ${token}`)
+      .field('mapping', '[]')
+      .attach('file', csvPath);
+    expect(mappingArray.status).toBe(400);
+
+    const afterCountRow = await dbGet(dbPath, 'SELECT COUNT(*) as c FROM energy_log');
+    const afterCount = Number(afterCountRow?.c || 0);
+    expect(afterCount).toBe(beforeCount);
+
+    // Uploaded temp file should always be cleaned up on these 400 paths.
+    const afterUploads = listFiles(uploadsDir);
+    expect(afterUploads).toEqual(beforeUploads);
   });
 });
