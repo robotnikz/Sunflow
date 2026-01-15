@@ -38,4 +38,12 @@ test('loads app and shows settings modal', async ({ page }) => {
 
   await page.getByRole('button', { name: /general/i }).click();
   await expect(page.getByPlaceholder('e.g. 192.168.1.50')).toBeVisible();
+
+  // Accessibility smoke: Escape closes the modal.
+  await page.keyboard.press('Escape');
+  await expect(settingsHeading).toBeHidden();
+
+  // Re-open via the Settings button.
+  await page.getByTitle('Settings').click();
+  await expect(settingsHeading).toBeVisible();
 });
