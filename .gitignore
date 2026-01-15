@@ -29,6 +29,7 @@ logs/
 
 # Database & Local Data (WICHTIG: Damit deine echte DB nicht im Repo landet)
 sunflow-data/
+sunflow-data-*/
 *.db
 *.sqlite
 *.sqlite3
