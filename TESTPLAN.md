@@ -1,6 +1,6 @@
 # Testplan (SunFlow)
 
-Status: In Arbeit (Branch: `audit-2026-01-15-security-hardening`)
+Status: In Arbeit (Branch: `audit-2026-01-15-security-hardening`) — Fokus: Regression-Sicherheit + Betriebsszenarien.
 
 ## 1) Funktionale Tests (Was soll die Software tun?)
 
@@ -13,10 +13,10 @@ Ziel: Erfüllt die Software die Anforderungen? „Tut das System genau das, was 
 | Config | Config lesen/schreiben | GET liefert Defaults, POST persistiert, Validierung greift | teilweise |
 | Realtime | Live-Daten abrufen | Bei fehlender IP -> Fehler; bei IP -> Datenmodell stabil | teilweise |
 | Forecast | Solcast Forecast | Tagsüber cached, nachts keine Solcast-Calls, valide Fehlermeldungen | teilweise |
-| Tarife | CRUD | Validierung, min. 1 Tariff bleibt, korrekte Statuscodes | geplant |
-| Expenses | CRUD | Validierung, korrekte Statuscodes | geplant |
-| CSV Import | Preview/Import | Preview liefert Header+Preview, Import schreibt DB, Cleanup tmp, Fehlpfade sauber | geplant |
-| Notifications | Test notification | Nur erlaubte Discord Webhooks; Fehlerhandling sauber | geplant |
+| Tarife | CRUD | Validierung, min. 1 Tariff bleibt, korrekte Statuscodes | vorhanden |
+| Expenses | CRUD | Validierung, korrekte Statuscodes | vorhanden |
+| CSV Import | Preview/Import | Preview liefert Header+Preview, Import schreibt DB, Cleanup tmp, Fehlpfade sauber | vorhanden |
+| Notifications | Test notification | Nur erlaubte Discord Webhooks; Fehlerhandling sauber | vorhanden |
 | Update Check | /api/info | Keine Netz-Abhängigkeit in Tests; latestVersion/updateAvailable gesetzt | vorhanden |
 
 ### Grenzfälle
@@ -73,21 +73,45 @@ Ziel: UI ↔ Backend als Ganzes.
 
 ## 7) Kompatibilität & Umgebung
 
-- Browser: Chromium/Firefox/WebKit (via Playwright)
+- Browser (E2E): Chromium/Firefox/WebKit (via Playwright)
+- OS: Windows & Linux (Tests sind Windows-tauglich; Tempfile-Cleanup berücksichtigt EPERM-Retries)
+- Node.js: via `package.json` getestet; empfohlen LTS (z.B. Node 20/22)
 - Deployment: Docker, Reverse Proxy (TRUST_PROXY), Windows/Linux
+- Storage: SQLite DB persistiert via Volume (`/app/data`)
 
 ## 8) Regression
 
-- Tests laufen bei jedem Release.
+Ziel: Regressionen früh erkennen, ohne CI unnötig zu verlangsamen.
+
+Empfohlene Pipeline (Dokumentation, nicht zwingend exakt der aktuelle CI-Stand):
+
+- Bei jedem PR/Push: `npm ci`, `npm run typecheck`, `npm run test:run`
+- Optional/Nightly: `npm run test:e2e` (Playwright; braucht `npm run playwright:install` in CI)
+- Release: wie PR/Push, zusätzlich Container Build/Publish
+
+Hinweis: E2E kann als nightly laufen, um Flakiness zu entkoppeln.
 
 ## 9) Deployment- & Betriebsszenarien
 
-- Update/Rollback via Image Tags (kein `latest` in Produktion)
+- Update/Rollback via Image Tags (Pinning empfohlen)
+	- Empfehlung: Produktions-Deployments auf Version taggen (`ghcr.io/robotnikz/sunflow:<version>`), nicht ausschließlich `latest`.
+	- Update: Tag wechseln, Container neu starten.
+	- Rollback: vorherigen Tag wieder eintragen und neu starten.
 - DB persistiert via Volume
+	- Docker Compose: `./sunflow-data:/app/data`
+	- Backup: `sunflow-data/solar_data.db` sichern (bei gestopptem Container oder per Copy).
+	- Monitoring: DB Growth, CPU/RAM (insb. bei langem Polling/Soak)
+
+Manuelle Betriebsszenarien (kurz):
+- Restart/Resume: `docker compose restart` während `npm run soaktest` läuft
+- Netzwerk-Unterbrechung: Inverter-IP temporär nicht erreichbar → API darf nicht crashen; UI bleibt bedienbar
 
 ## 10) Doku & Tests
 
 - README/Setup und Beispiele müssen mit aktuellem Behavior konsistent bleiben.
+- Referenzen:
+	- Security: `AUDIT.md`
+	- Tests: dieser Testplan + `npm run test:run` / `npm run test:e2e`
 
 ## How to run
 

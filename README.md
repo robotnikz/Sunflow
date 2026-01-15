@@ -101,6 +101,9 @@ SunFlow is built as a lightweight Docker container. You can run it on a Raspberr
 
 ### Method 1: Docker Compose (Recommended)
 
+> [!TIP]
+> For production, consider pinning a version tag (e.g. `ghcr.io/robotnikz/sunflow:<version>`) so updates/rollbacks are explicit.
+
 Create a `docker-compose.yml` file:
 
 ```yaml
@@ -167,6 +170,23 @@ For details and additional recommendations see [AUDIT.md](AUDIT.md).
 *   **Frontend:** React 18, TypeScript, TailwindCSS, Recharts, Lucide Icons.
 *   **Backend:** Node.js (Express), SQLite3.
 *   **Architecture:** Single-container monolith for easy deployment (GitHub Actions -> GHCR).
+
+---
+
+## 🧪 Testing & QA
+
+- Unit/Integration: `npm run test:run`
+- Typecheck: `npm run typecheck`
+- E2E (Playwright): `npm run playwright:install` then `npm run test:e2e`
+- Load/Soak (manual): `npm run loadtest` / `npm run soaktest`
+
+See [TESTPLAN.md](TESTPLAN.md) for the current regression strategy and operating scenarios.
+
+## 🌍 Compatibility
+
+- OS: Windows/Linux (primarily tested via CI + local dev)
+- Runtime: Node.js LTS recommended
+- Deployment: Docker, optional reverse proxy (set `TRUST_PROXY=1`)
 
 ## 🤝 Contributing
 
