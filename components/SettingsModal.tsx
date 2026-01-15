@@ -160,8 +160,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
   });
 
   // Appliance Edit State
-  const [editingAppliance, setEditingAppliance] = useState<Partial<Appliance> & { durationMinutes?: number }>({
-     name: '', watts: 0, kwhEstimate: 0, iconName: 'zap', color: 'text-slate-400', durationMinutes: 60
+  const [editingAppliance, setEditingAppliance] = useState<Partial<Appliance>>({
+      name: '', watts: 0, kwhEstimate: 0, iconName: 'zap', color: 'text-slate-400', durationMinutes: 60, inputMode: 'kwh_per_run'
   });
   const [isEditingAppliance, setIsEditingAppliance] = useState(false);
 
@@ -344,13 +344,30 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
     if (confirm("Remove this expense?")) { await deleteExpense(id); loadData(); }
   };
 
+  const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+
   const handleSaveAppliance = () => {
-      if (!editingAppliance.name || !editingAppliance.watts) return;
+      const mode = (editingAppliance.inputMode || 'kwh_per_run') as Appliance['inputMode'];
+      const watts = Number(editingAppliance.watts || 0);
+      const durationMinutes = editingAppliance.durationMinutes === undefined ? undefined : Number(editingAppliance.durationMinutes);
+      const kwhEstimate = Number(editingAppliance.kwhEstimate || 0);
+
+      if (!editingAppliance.name) return;
+      if (mode === 'power_duration') {
+          if (!(watts > 0) || !(Number(durationMinutes) > 0)) return;
+      } else {
+          if (!(kwhEstimate > 0)) return;
+      }
+
       const newApp: Appliance = {
           id: editingAppliance.id || Math.random().toString(36).substr(2, 9),
           name: editingAppliance.name,
-          watts: Number(editingAppliance.watts),
-          kwhEstimate: Number(editingAppliance.kwhEstimate),
+          watts: Number.isFinite(watts) ? watts : 0,
+          durationMinutes: (mode === 'power_duration' && Number.isFinite(Number(durationMinutes)) && Number(durationMinutes) > 0)
+            ? Math.round(Number(durationMinutes))
+            : undefined,
+          kwhEstimate: Number.isFinite(kwhEstimate) ? kwhEstimate : 0,
+          inputMode: mode,
           iconName: editingAppliance.iconName || 'zap',
           color: editingAppliance.color || 'text-slate-400'
       };
@@ -359,7 +376,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
       else newAppliances.push(newApp);
       setFormData({ ...formData, appliances: newAppliances });
       setIsEditingAppliance(false);
-      setEditingAppliance({ name: '', watts: 0, kwhEstimate: 0, iconName: 'zap', color: 'text-slate-400', durationMinutes: 60 });
+      setEditingAppliance({ name: '', watts: 0, kwhEstimate: 0, iconName: 'zap', color: 'text-slate-400', durationMinutes: 60, inputMode: 'kwh_per_run' });
   };
 
   const handleDeleteAppliance = (id: string) => {
@@ -372,7 +389,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
   const handlePowerTimeChange = (newWatts: number, newMinutes: number) => {
       const hours = newMinutes / 60;
       const kwh = (newWatts * hours) / 1000;
-      setEditingAppliance(prev => ({ ...prev, watts: newWatts, durationMinutes: newMinutes, kwhEstimate: parseFloat(kwh.toFixed(2)) }));
+      setEditingAppliance(prev => ({ ...prev, watts: newWatts, durationMinutes: newMinutes, kwhEstimate: parseFloat(kwh.toFixed(2)), inputMode: 'power_duration' }));
   };
 
   const hasExpenses = expenses.length > 0;
@@ -518,15 +535,113 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                 {isEditingAppliance ? (
                       <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700 space-y-5">
                            <h3 className="text-slate-300 text-sm font-bold flex items-center gap-2">{editingAppliance.id ? <Edit size={16}/> : <Plus size={16}/>}{editingAppliance.id ? 'Edit Device' : 'Add New Device'}</h3>
-                           {/* ... Form fields ... */}
-                           <div><label className="text-xs text-slate-500 block mb-1 font-semibold uppercase tracking-wider">Device Name</label><input type="text" value={editingAppliance.name} onChange={e => setEditingAppliance({...editingAppliance, name: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-white focus:border-yellow-500 focus:outline-none"/></div>
-                           <div><label className="text-xs text-slate-500 block mb-1 font-semibold uppercase tracking-wider">Watts</label><input type="number" value={editingAppliance.watts} onChange={e => handlePowerTimeChange(Number(e.target.value), editingAppliance.durationMinutes || 60)} className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-white focus:border-yellow-500 focus:outline-none"/></div>
+                                                     <div>
+                                                         <label className="text-xs text-slate-500 block mb-1 font-semibold uppercase tracking-wider">Device Name</label>
+                                                         <input
+                                                             type="text"
+                                                             value={editingAppliance.name}
+                                                             onChange={e => setEditingAppliance({ ...editingAppliance, name: e.target.value })}
+                                                             className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-white focus:border-yellow-500 focus:outline-none"
+                                                         />
+                                                     </div>
+
+                                                     <div>
+                                                         <label className="text-xs text-slate-500 block mb-2 font-semibold uppercase tracking-wider">Input Mode</label>
+                                                         <div className="grid grid-cols-2 gap-2">
+                                                             <button
+                                                                 type="button"
+                                                                 onClick={() => setEditingAppliance(prev => ({ ...prev, inputMode: 'kwh_per_run' }))}
+                                                                 className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                                                                     (editingAppliance.inputMode || 'kwh_per_run') === 'kwh_per_run'
+                                                                         ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-300'
+                                                                         : 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600'
+                                                                 }`}
+                                                             >
+                                                                 kWh per run
+                                                             </button>
+                                                             <button
+                                                                 type="button"
+                                                                 onClick={() => setEditingAppliance(prev => ({ ...prev, inputMode: 'power_duration' }))}
+                                                                 className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                                                                     (editingAppliance.inputMode || 'kwh_per_run') === 'power_duration'
+                                                                         ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-300'
+                                                                         : 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600'
+                                                                 }`}
+                                                             >
+                                                                 Watts + duration
+                                                             </button>
+                                                         </div>
+                                                         <p className="text-[10px] text-slate-500 mt-2">
+                                                             Tip: Many appliances have variable power draw (e.g. heating phases). In that case, entering <strong>kWh per run</strong> is usually more accurate.
+                                                         </p>
+                                                     </div>
+
+                                                     {/* Power threshold (used by Smart Suggestions) */}
+                                                     <div>
+                                                         <label className="text-xs text-slate-500 block mb-1 font-semibold uppercase tracking-wider">Power (W) — for Smart Suggestions</label>
+                                                         <input
+                                                             type="number"
+                                                             value={editingAppliance.watts ?? 0}
+                                                             onChange={e => {
+                                                                 const nextWatts = clamp(Number(e.target.value || 0), 0, 50000);
+                                                                 if ((editingAppliance.inputMode || 'kwh_per_run') === 'power_duration') {
+                                                                     handlePowerTimeChange(nextWatts, Number(editingAppliance.durationMinutes || 60));
+                                                                 } else {
+                                                                     setEditingAppliance(prev => ({ ...prev, watts: nextWatts }));
+                                                                 }
+                                                             }}
+                                                             className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-white focus:border-yellow-500 focus:outline-none"
+                                                             placeholder="e.g. 2000"
+                                                         />
+                                                         <p className="text-[10px] text-slate-500 mt-1">
+                                                             Set to <strong>0</strong> to disable Smart Suggestions for this device.
+                                                         </p>
+                                                     </div>
+
+                                                     {(editingAppliance.inputMode || 'kwh_per_run') === 'kwh_per_run' ? (
+                                                         <div>
+                                                             <label className="text-xs text-slate-500 block mb-1 font-semibold uppercase tracking-wider">kWh per run</label>
+                                                             <input
+                                                                 type="number"
+                                                                 step="0.01"
+                                                                 value={editingAppliance.kwhEstimate ?? 0}
+                                                                 onChange={e => setEditingAppliance(prev => ({ ...prev, kwhEstimate: clamp(Number(e.target.value || 0), 0, 200) }))}
+                                                                 className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-white focus:border-yellow-500 focus:outline-none"
+                                                                 placeholder="e.g. 1.2"
+                                                             />
+                                                             <p className="text-[10px] text-slate-500 mt-1">
+                                                                 Used for energy/ROI estimates.
+                                                             </p>
+                                                         </div>
+                                                     ) : (
+                                                         <div className="grid grid-cols-2 gap-3">
+                                                             <div>
+                                                                 <label className="text-xs text-slate-500 block mb-1 font-semibold uppercase tracking-wider">Duration (min)</label>
+                                                                 <input
+                                                                     type="number"
+                                                                     value={editingAppliance.durationMinutes ?? 60}
+                                                                     onChange={e => handlePowerTimeChange(Number(editingAppliance.watts || 0), clamp(Number(e.target.value || 0), 1, 24 * 60))}
+                                                                     className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-white focus:border-yellow-500 focus:outline-none"
+                                                                 />
+                                                             </div>
+                                                             <div>
+                                                                 <label className="text-xs text-slate-500 block mb-1 font-semibold uppercase tracking-wider">kWh per run (computed)</label>
+                                                                 <input
+                                                                     type="number"
+                                                                     value={editingAppliance.kwhEstimate ?? 0}
+                                                                     disabled
+                                                                     className="w-full bg-slate-800/60 border border-slate-700 rounded px-3 py-2 text-slate-300"
+                                                                 />
+                                                             </div>
+                                                         </div>
+                                                     )}
+
                            <div className="flex justify-end gap-2 pt-4 border-t border-slate-700"><button onClick={() => setIsEditingAppliance(false)} className="px-4 py-2 text-slate-400 hover:text-white text-sm font-medium">Cancel</button><button onClick={handleSaveAppliance} className="px-6 py-2 bg-yellow-500 text-slate-900 font-bold rounded-lg hover:bg-yellow-400 transition shadow-lg shadow-yellow-500/20 text-sm">Save Device</button></div>
                       </div>
                   ) : (
                       <>
-                        <button onClick={() => { setEditingAppliance({ name: '', watts: 0, kwhEstimate: 0, iconName: 'zap', color: 'text-slate-400', durationMinutes: 60 }); setIsEditingAppliance(true); }} className="w-full py-4 border-2 border-dashed border-slate-700 rounded-xl text-slate-400 hover:border-yellow-500 hover:text-yellow-500 hover:bg-yellow-500/5 transition-all flex items-center justify-center gap-2 font-medium"><Plus size={20}/> Add New Device</button>
-                        <div className="space-y-2">{formData.appliances?.map((app) => { const Icon = ICON_MAP[app.iconName] || Zap; return (<div key={app.id} className="bg-slate-900/50 p-3 rounded-xl border border-slate-700 flex items-center justify-between group hover:border-slate-500 transition-colors"><div className="flex items-center gap-4"><div className={`p-2.5 rounded-lg bg-slate-800 ${app.color}`}><Icon size={20} /></div><div><div className="text-sm font-bold text-slate-200">{app.name}</div><div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2"><span className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">{app.watts} W</span><span>•</span><span className="text-emerald-400 font-medium">{app.kwhEstimate} kWh/cycle</span></div></div></div><div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => { setEditingAppliance({ ...app, durationMinutes: Math.round((app.kwhEstimate * 1000 / app.watts) * 60) }); setIsEditingAppliance(true); }} className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-blue-400 transition" title="Edit"><Edit size={18}/></button><button onClick={() => handleDeleteAppliance(app.id)} className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-red-400 transition" title="Delete"><Trash2 size={18}/></button></div></div>); })}</div>
+                                                <button onClick={() => { setEditingAppliance({ name: '', watts: 0, kwhEstimate: 0, iconName: 'zap', color: 'text-slate-400', durationMinutes: 60, inputMode: 'kwh_per_run' }); setIsEditingAppliance(true); }} className="w-full py-4 border-2 border-dashed border-slate-700 rounded-xl text-slate-400 hover:border-yellow-500 hover:text-yellow-500 hover:bg-yellow-500/5 transition-all flex items-center justify-center gap-2 font-medium"><Plus size={20}/> Add New Device</button>
+                                                <div className="space-y-2">{formData.appliances?.map((app) => { const Icon = ICON_MAP[app.iconName] || Zap; const showWatts = (app.watts || 0) > 0; const showDuration = (app.durationMinutes || 0) > 0; return (<div key={app.id} className="bg-slate-900/50 p-3 rounded-xl border border-slate-700 flex items-center justify-between group hover:border-slate-500 transition-colors"><div className="flex items-center gap-4"><div className={`p-2.5 rounded-lg bg-slate-800 ${app.color}`}><Icon size={20} /></div><div><div className="text-sm font-bold text-slate-200">{app.name}</div><div className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-2">{showWatts && (<span className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">{app.watts} W</span>)}{showDuration && (<span className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">{app.durationMinutes} min</span>)}<span className="text-emerald-400 font-medium">{app.kwhEstimate} kWh/run</span></div></div></div><div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => { const mode = (app as any).inputMode || 'kwh_per_run'; setEditingAppliance({ ...app, inputMode: mode, durationMinutes: (app.durationMinutes || (mode === 'power_duration' ? 60 : undefined)) }); setIsEditingAppliance(true); }} className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-blue-400 transition" title="Edit"><Edit size={18}/></button><button onClick={() => handleDeleteAppliance(app.id)} className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-red-400 transition" title="Delete"><Trash2 size={18}/></button></div></div>); })}</div>
                         <div className="pt-4 flex justify-end gap-3 border-t border-slate-700 mt-4"><button onClick={handleConfigSubmit} className="flex items-center gap-2 px-6 py-2 bg-yellow-500 text-slate-900 font-bold rounded-lg hover:bg-yellow-400 transition shadow-lg shadow-yellow-500/20"><Save size={18} /> Save List</button></div>
                       </>
                   )}

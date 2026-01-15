@@ -17,8 +17,20 @@ export interface Expense {
 export interface Appliance {
   id: string;
   name: string;
+  // Used as a *power threshold* for Smart Suggestions (surplus matching).
+  // If you don't know it, you can leave it at 0 to disable suggestions for that device.
   watts: number;
-  kwhEstimate: number; // calculated from watts * duration or manual
+
+  // Optional: how long one typical run takes.
+  // Used when entering (watts + duration) to compute kWh per run.
+  durationMinutes?: number;
+
+  // Energy per run (kWh). Can be entered directly (recommended for appliances with variable power draw)
+  // or computed from watts * duration.
+  kwhEstimate: number;
+
+  // Optional UI hint: how this device was entered.
+  inputMode?: 'power_duration' | 'kwh_per_run';
   iconName: string;    // String reference to Lucide icon key
   color: string;       // Tailwind text color class
 }
