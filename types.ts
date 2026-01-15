@@ -59,6 +59,13 @@ export interface SystemConfig {
   longitude?: string;
   systemCapacity?: number; // kWp
   batteryCapacity?: number; // kWh (Total capacity of the stack)
+
+  // Smart Usage tuning
+  smartUsage?: {
+    // Minimum battery SOC (%) you want to keep until sunset.
+    // Smart Usage may use battery energy above this threshold during daytime.
+    reserveSocPct?: number; // 0..100 (default 100)
+  };
   degradationRate?: number; // % per year (default 0.5)
   inflationRate?: number; // % per year (default 2.0)
   solcastApiKey?: string;

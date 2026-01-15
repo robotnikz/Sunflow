@@ -214,6 +214,13 @@ const getConfig = () => {
     if (!config.appliances || config.appliances.length === 0) {
         config.appliances = DEFAULT_APPLIANCES;
     }
+
+    // Smart Usage defaults
+    if (!config.smartUsage) {
+        config.smartUsage = { reserveSocPct: 100 };
+    } else if (config.smartUsage.reserveSocPct === undefined) {
+        config.smartUsage.reserveSocPct = 100;
+    }
     // Ensure default notifications
     if (!config.notifications) {
         config.notifications = {
@@ -595,14 +602,21 @@ if (!IS_TEST) setInterval(async () => {
 
                 // B) Calculate Battery Needs
                 const batteryCapacity = config.batteryCapacity || 10;
-                const socMissingPct = Math.max(0, 100 - soc);
-                const kwhToFill = (socMissingPct / 100) * batteryCapacity;
+                const reserveSocPctRaw = config?.smartUsage?.reserveSocPct;
+                const reserveSocPct = Math.min(100, Math.max(0, Number.isFinite(Number(reserveSocPctRaw)) ? Number(reserveSocPctRaw) : 100));
+                const socMissingPct = Math.max(0, reserveSocPct - soc);
+                const kwhToReachReserve = (socMissingPct / 100) * batteryCapacity;
 
                 // C) Calculate "Safe Buffer" (Forecast - Fill Need - 10% Margin)
-                const energyBufferKwh = forecastRemainingKwh - (kwhToFill * 1.1);
+                const energyBufferKwh = forecastRemainingKwh - (kwhToReachReserve * 1.1);
 
                 // D) Determine if it's safe to divert battery charge
-                const isBatterySafe = (energyBufferKwh > 0) || (soc > 95);
+                const isBatterySafe = (energyBufferKwh > 0) || (soc >= reserveSocPct) || (soc > 95);
+
+                // E0) Reserve mode: allow suggestions that can be powered from battery energy above reserve
+                // Only do this while we still have remaining solar forecast today (i.e. before sunset).
+                const aboveReserveKwh = Math.max(0, ((soc - reserveSocPct) / 100) * batteryCapacity);
+                const canUseReserveNow = forecastRemainingKwh > 0 && soc > (reserveSocPct + 0.5) && aboveReserveKwh > 0;
 
                 // E) Calculate Total "Smart Surplus"
                 const gridExport = p_grid < -10 ? Math.abs(p_grid) : 0;
@@ -620,6 +634,7 @@ if (!IS_TEST) setInterval(async () => {
 
                 // --- APPLIANCE MATCHING ---
                 let bestAppliance = null;
+                let bestStrategy = 'grid';
 
                 (config.appliances || []).forEach(app => {
                     if (!notifyState.smartAdviceCounters[app.id]) notifyState.smartAdviceCounters[app.id] = 0;
@@ -633,7 +648,11 @@ if (!IS_TEST) setInterval(async () => {
                     }
                     
                     // Check if appliance fits in the SMART surplus
-                    if (totalSurplus >= appWatts) {
+                    const fitsSurplus = totalSurplus >= appWatts;
+                    const appKwh = Number(app?.kwhEstimate || 0);
+                    const fitsReserve = canUseReserveNow && Number.isFinite(appKwh) && appKwh > 0 && appKwh <= aboveReserveKwh;
+
+                    if (fitsSurplus || fitsReserve) {
                         notifyState.smartAdviceCounters[app.id]++;
                     } else {
                         notifyState.smartAdviceCounters[app.id] = 0;
@@ -641,21 +660,41 @@ if (!IS_TEST) setInterval(async () => {
 
                     // Trigger if condition met for 3 consecutive checks (3 minutes)
                     if (notifyState.smartAdviceCounters[app.id] >= 3) {
-                        if (!bestAppliance || appWatts > Number(bestAppliance.watts || 0)) bestAppliance = app;
+                        if (!bestAppliance || appWatts > Number(bestAppliance.watts || 0)) {
+                            bestAppliance = app;
+                            bestStrategy = fitsSurplus ? (isBatterySafe ? 'divert' : 'grid') : 'reserve';
+                        }
                     }
                 });
 
                 if (bestAppliance) {
-                    await sendDiscordNotification(
-                        nConfig.discordWebhook, 
-                        "💡 Smart Suggestion", 
-                        `Excess solar power available (${Math.round(totalSurplus)}W). You can run the **${bestAppliance.name}** now for free!`, 
-                        3447003, 
-                        [
+                    const strategyLabel = bestStrategy === 'reserve'
+                        ? `Reserve (min ${Math.round(reserveSocPct)}%)`
+                        : (isBatterySafe ? "Battery Safe (Diverting Charge)" : "Battery Priority (Grid Only)");
+
+                    const title = "💡 Smart Suggestion";
+                    const message = bestStrategy === 'reserve'
+                        ? `Battery is above your reserve target (~${aboveReserveKwh.toFixed(1)} kWh). You can run the **${bestAppliance.name}** now.`
+                        : `Excess solar power available (${Math.round(totalSurplus)}W). You can run the **${bestAppliance.name}** now for free!`;
+
+                    const fields = bestStrategy === 'reserve'
+                        ? [
+                            { name: "Above Reserve", value: `${aboveReserveKwh.toFixed(1)} kWh`, inline: true },
+                            { name: "Device Energy", value: `${Number(bestAppliance.kwhEstimate || 0)} kWh/run`, inline: true },
+                            { name: "Strategy", value: strategyLabel, inline: false }
+                        ]
+                        : [
                             { name: "Available Surplus", value: `${Math.round(totalSurplus)} W`, inline: true },
                             { name: "Device Power", value: `${bestAppliance.watts} W`, inline: true },
-                            { name: "Strategy", value: isBatterySafe ? "Battery Safe (Diverting Charge)" : "Battery Priority (Grid Only)", inline: false }
-                        ]
+                            { name: "Strategy", value: strategyLabel, inline: false }
+                        ];
+
+                    await sendDiscordNotification(
+                        nConfig.discordWebhook, 
+                        title,
+                        message,
+                        3447003, 
+                        fields
                     );
                     notifyState.lastSmartAdviceSent = now;
                     notifyState.smartAdviceCounters = {}; 

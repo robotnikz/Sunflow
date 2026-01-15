@@ -345,6 +345,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                 hasSolcastKey={!!config.solcastApiKey}
                 currency={config.currency}
                 gridCostPerKwh={activeGridCostPerKwh}
+                reserveSocPct={config.smartUsage?.reserveSocPct}
             />
           </div>
 
