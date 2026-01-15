@@ -184,4 +184,39 @@ describe('Backend API (energy integration)', () => {
       expect(p).not.toHaveProperty('is_high_res');
     }
   });
+
+  it('returns points ordered by timestamp ASC and prefers energy_log on overlap', async () => {
+    // Insert intentionally out of order across both tables.
+    await dbRun(
+      dbPath,
+      'INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, status_code) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ['2026-01-01 00:02:00', 222, 0, 0, 0, 50, 1],
+    );
+    await dbRun(
+      dbPath,
+      'INSERT INTO energy_data (timestamp, production_wh, grid_consumption_wh, grid_feed_in_wh, battery_charge_wh, battery_discharge_wh, load_wh) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ['2026-01-01 00:01:00', 111, 0, 0, 0, 0, 111],
+    );
+    await dbRun(
+      dbPath,
+      'INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, status_code) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ['2026-01-01 00:00:00', 10, 0, 0, 0, 50, 1],
+    );
+    // Overlap timestamp that should be de-duplicated in favor of energy_log (222, not 9999).
+    await dbRun(
+      dbPath,
+      'INSERT INTO energy_data (timestamp, production_wh, grid_consumption_wh, grid_feed_in_wh, battery_charge_wh, battery_discharge_wh, load_wh) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ['2026-01-01 00:02:00', 9999, 0, 0, 0, 0, 9999],
+    );
+
+    const res = await request(app).get('/api/energy?start=2026-01-01 00:00:00&end=2026-01-01 00:05:00');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+
+    const timestamps = res.body.map((p: any) => p.timestamp);
+    expect(timestamps).toEqual(['2026-01-01 00:00:00', '2026-01-01 00:01:00', '2026-01-01 00:02:00']);
+
+    const p2 = res.body.find((p: any) => p.timestamp === '2026-01-01 00:02:00');
+    expect(p2.production).toBe(222);
+  });
 });
