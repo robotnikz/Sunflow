@@ -273,6 +273,36 @@ describe('Backend API (history integration)', () => {
     expect(res.body.stats.batteryDischarged).toBeCloseTo(0.0, 5);
   });
 
+  it('de-duplicates overlap for export case (negative grid), preferring energy_log', async () => {
+    await dbRun(
+      dbPath,
+      'INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, status_code) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      // Export 4kW to grid for 1 minute; no import.
+      ['2026-01-01 00:02:00', 60000, 10000, -4000, 0, 50, 1],
+    );
+    await dbRun(
+      dbPath,
+      'INSERT INTO energy_data (timestamp, production_wh, grid_consumption_wh, grid_feed_in_wh, battery_charge_wh, battery_discharge_wh, load_wh) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      // Conflicting row that would imply import; should be ignored on collision.
+      ['2026-01-01 00:02:00', 1000, 5000, 0, 0, 0, 1000],
+    );
+
+    const res = await request(app).get('/api/history?range=custom&start=2026-01-01&end=2026-01-01');
+    expect(res.status).toBe(200);
+
+    // Find the point for 00:02:00 (other tests may insert earlier points).
+    const point = res.body.chart.find((p: any) => p.timestamp === '2026-01-01 00:02:00');
+    expect(point).toBeTruthy();
+
+    expect(point.production).toBe(60000);
+    expect(point.consumption).toBe(10000);
+    expect(point.grid).toBe(-4000);
+
+    // 4kW export for 1 minute => 0.066666.. kWh exported
+    expect(res.body.stats.exported).toBeCloseTo(0.066666, 5);
+    expect(res.body.stats.imported).toBeCloseTo(0.0, 5);
+  });
+
   it('aggregates week range into daily bars (energy_data)', async () => {
     vi.useFakeTimers();
     try {
