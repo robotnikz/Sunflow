@@ -1140,8 +1140,16 @@ app.get('/api/dynamic-pricing/awattar/compare', async (req, res) => {
 
 app.get('/api/forecast', async (req, res) => {
     const config = getConfig();
-    if (!config.solcastApiKey || !config.solcastSiteId) {
-        return res.status(400).json({ error: "Solcast not configured" });
+    const siteId = String(config.solcastSiteId || '').trim();
+    const apiKey = String(config.solcastApiKey || '').trim();
+
+    if (!apiKey || !siteId) {
+        return res.status(400).json({ error: 'Solcast not configured' });
+    }
+
+    // Validate before serving cache so invalid credentials can't bypass the 400 via a warm cache.
+    if (!/^[A-Za-z0-9-]{3,128}$/.test(siteId) || !/^[A-Za-z0-9_-]{10,256}$/.test(apiKey)) {
+        return res.status(400).json({ error: 'Solcast not configured' });
     }
 
     const now = Date.now();
@@ -1183,12 +1191,6 @@ app.get('/api/forecast', async (req, res) => {
 
     // 3. Fetch new data
     try {
-        const siteId = String(config.solcastSiteId || '').trim();
-        const apiKey = String(config.solcastApiKey || '').trim();
-        if (!/^[A-Za-z0-9-]{3,128}$/.test(siteId) || !/^[A-Za-z0-9_-]{10,256}$/.test(apiKey)) {
-            return res.status(400).json({ error: 'Solcast not configured' });
-        }
-
         const u = new URL(`https://api.solcast.com.au/rooftop_sites/${encodeURIComponent(siteId)}/forecasts`);
         u.searchParams.set('format', 'json');
         u.searchParams.set('api_key', apiKey);
