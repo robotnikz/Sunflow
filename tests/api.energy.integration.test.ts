@@ -219,4 +219,33 @@ describe('Backend API (energy integration)', () => {
     const p2 = res.body.find((p: any) => p.timestamp === '2026-01-01 00:02:00');
     expect(p2.production).toBe(222);
   });
+
+  it('returns ascending timestamps for default /api/energy (no start/end)', async () => {
+    // Default path reads latest 288 rows in DESC order then reverses.
+    await dbRun(
+      dbPath,
+      'INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, status_code) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ['2026-01-01 00:00:00', 1, 0, 0, 0, 50, 1],
+    );
+    await dbRun(
+      dbPath,
+      'INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, status_code) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ['2026-01-01 00:01:00', 2, 0, 0, 0, 50, 1],
+    );
+    await dbRun(
+      dbPath,
+      'INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, status_code) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ['2026-01-01 00:02:00', 3, 0, 0, 0, 50, 1],
+    );
+
+    const res = await request(app).get('/api/energy');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBeLessThanOrEqual(288);
+
+    const timestamps = res.body.map((p: any) => p.timestamp);
+    const expected = ['2026-01-01 00:00:00', '2026-01-01 00:01:00', '2026-01-01 00:02:00'];
+    // It can include more points if other tests inserted data, but in this file we fully clear tables.
+    expect(timestamps).toEqual(expected);
+  });
 });
