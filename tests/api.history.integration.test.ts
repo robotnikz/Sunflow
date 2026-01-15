@@ -237,12 +237,13 @@ describe('Backend API (history integration)', () => {
     await dbRun(
       dbPath,
       'INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, status_code) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      ['2026-01-01 00:00:00', 60000, 0, 0, 0, 50, 1],
+      ['2026-01-01 00:00:00', 60000, 10000, 5000, -2000, 50, 1],
     );
     await dbRun(
       dbPath,
       'INSERT INTO energy_data (timestamp, production_wh, grid_consumption_wh, grid_feed_in_wh, battery_charge_wh, battery_discharge_wh, load_wh) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      ['2026-01-01 00:00:00', 1000, 0, 0, 0, 0, 0],
+      // Intentionally conflicting values; this row should be ignored on timestamp collision.
+      ['2026-01-01 00:00:00', 9000, 3000, 0, 500, 0, 7000],
     );
 
     const res = await request(app).get('/api/history?range=custom&start=2026-01-01&end=2026-01-01');
@@ -253,6 +254,9 @@ describe('Backend API (history integration)', () => {
 
     // From energy_log high-res point (W), not energy_data Wh value.
     expect(res.body.chart[0].production).toBe(60000);
+    expect(res.body.chart[0].consumption).toBe(10000);
+    expect(res.body.chart[0].grid).toBe(5000);
+    expect(res.body.chart[0].battery).toBe(-2000);
 
     // Stats should use only the energy_log contribution:
     // 60kW for 1 minute => 1kWh (default 1/60h integration for single point).
