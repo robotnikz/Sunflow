@@ -56,11 +56,16 @@ Ziel: UI ↔ Backend als Ganzes.
 
 ### b) Stabilität & Zuverlässigkeit
 - Long-run (24h): polling, retention, restart/resume, DB file growth.
+- Soak (leichtgewichtig, automatisierbar): `npm run soaktest -- --url http://localhost:3000 --duration 3600 --interval 2`
+	- Erwartung: keine 5xx, keine Timeouts, Statuscodes bleiben stabil.
+	- Für Docker-Setup: `docker compose up -d` und dann soaktest gegen den veröffentlichten Port.
+	- Optional: währenddessen `docker compose restart` ausführen und beobachten, ob der Service sauber wieder hochkommt.
 
 ### c) Sicherheit
 - AuthN/Z: Admin token enforced
 - Input validation: invalid bodies/IDs
 - Secrets: redaction wenn Admin token aktiv
+- Automated regressions: siehe Tests in `tests/api.security.regression.test.ts` (CORS-Allowlist + Webhook-SSRF-Guard).
 
 ## 6) Usability & UX
 
@@ -89,3 +94,4 @@ Ziel: UI ↔ Backend als Ganzes.
 - Unit/Integration: `npm run test:run`
 - Typecheck: `npm run typecheck`
 - Loadtest (manuell): `npm run loadtest -- --url http://localhost:3000 --duration 10 --connections 25`
+- Soak/Stability (manuell): `npm run soaktest -- --url http://localhost:3000 --duration 3600 --interval 2`

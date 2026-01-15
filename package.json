@@ -21,7 +21,8 @@
     "playwright:install": "playwright install",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "loadtest": "node scripts/loadtest.mjs"
+    "loadtest": "node scripts/loadtest.mjs",
+    "soaktest": "node scripts/soaktest.mjs"
   },
   "dependencies": {
     "@types/multer": "^2.0.0",
