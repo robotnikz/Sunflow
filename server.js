@@ -214,6 +214,13 @@ const getConfig = () => {
     if (!config.appliances || config.appliances.length === 0) {
         config.appliances = DEFAULT_APPLIANCES;
     }
+
+    // Smart Usage defaults
+    if (!config.smartUsage) {
+        config.smartUsage = { reserveSocPct: 100 };
+    } else if (config.smartUsage.reserveSocPct === undefined) {
+        config.smartUsage.reserveSocPct = 100;
+    }
     // Ensure default notifications
     if (!config.notifications) {
         config.notifications = {
@@ -267,6 +274,100 @@ const getLocalTimestamp = (date = new Date()) => {
 let solcastCache = {
     timestamp: 0,
     data: null
+};
+
+// --- GLOBAL OPEN-METEO SUN TIMES CACHE (Shared between API and Notification Logic) ---
+let openMeteoSunCache = {
+    key: null,
+    timestamp: 0,
+    data: null
+};
+
+const getLocalIsoDate = (date = new Date()) => {
+    const timeZone = process.env.TZ || 'Europe/Berlin';
+    // sv-SE reliably produces YYYY-MM-DD
+    return date.toLocaleDateString('sv-SE', { timeZone });
+};
+
+const parseFiniteNumber = (value) => {
+    const n = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(n) ? n : null;
+};
+
+const getTodaySunTimes = async (config) => {
+    // Avoid outbound calls in tests.
+    if (IS_TEST) return null;
+
+    const lat = parseFiniteNumber(config?.latitude);
+    const lon = parseFiniteNumber(config?.longitude);
+    if (lat === null || lon === null) return null;
+
+    const dateKey = getLocalIsoDate();
+    const cacheKey = `${lat},${lon},${dateKey}`;
+
+    if (openMeteoSunCache.data && openMeteoSunCache.key === cacheKey) {
+        return openMeteoSunCache.data;
+    }
+
+    try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=sunrise,sunset&timezone=auto&forecast_days=1`;
+        const response = await axios.get(url, { timeout: 8000 });
+
+        const sunriseIso = Array.isArray(response?.data?.daily?.sunrise) ? response.data.daily.sunrise[0] : null;
+        const sunsetIso = Array.isArray(response?.data?.daily?.sunset) ? response.data.daily.sunset[0] : null;
+        const utcOffsetSecondsRaw = response?.data?.utc_offset_seconds;
+        const utcOffsetSeconds = Number.isFinite(Number(utcOffsetSecondsRaw)) ? Number(utcOffsetSecondsRaw) : 0;
+
+        if (typeof sunriseIso !== 'string' || typeof sunsetIso !== 'string') return null;
+
+        const data = { sunriseIso, sunsetIso, utcOffsetSeconds };
+
+        openMeteoSunCache = {
+            key: cacheKey,
+            timestamp: Date.now(),
+            data
+        };
+
+        return data;
+    } catch (e) {
+        return null;
+    }
+};
+
+const parseOpenMeteoLocalIsoToUtcMs = (isoString, utcOffsetSeconds = 0) => {
+    if (typeof isoString !== 'string') return NaN;
+
+    // If the string already contains an explicit timezone, let Date.parse handle it.
+    if (/[zZ]$/.test(isoString) || /[+-]\d\d:?\d\d$/.test(isoString)) {
+        return Date.parse(isoString);
+    }
+
+    const m = isoString.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (!m) return Date.parse(isoString);
+
+    const year = Number(m[1]);
+    const month = Number(m[2]);
+    const day = Number(m[3]);
+    const hour = Number(m[4]);
+    const minute = Number(m[5]);
+    const second = m[6] ? Number(m[6]) : 0;
+
+    // Treat components as local time in the location timezone (UTC + offset).
+    // Convert to UTC by subtracting the offset.
+    const utcMsAssumingUtc = Date.UTC(year, month - 1, day, hour, minute, second);
+    return utcMsAssumingUtc - (Number(utcOffsetSeconds) * 1000);
+};
+
+const isNowBetweenSunriseAndSunset = (sunTimes, nowDate = new Date()) => {
+    if (!sunTimes?.sunriseIso || !sunTimes?.sunsetIso) return null;
+    const utcOffsetSeconds = Number.isFinite(Number(sunTimes?.utcOffsetSeconds)) ? Number(sunTimes.utcOffsetSeconds) : 0;
+
+    const sunriseMs = parseOpenMeteoLocalIsoToUtcMs(sunTimes.sunriseIso, utcOffsetSeconds);
+    const sunsetMs = parseOpenMeteoLocalIsoToUtcMs(sunTimes.sunsetIso, utcOffsetSeconds);
+    if (!Number.isFinite(sunriseMs) || !Number.isFinite(sunsetMs)) return null;
+
+    const nowMs = nowDate.getTime();
+    return nowMs >= sunriseMs && nowMs < sunsetMs;
 };
 
 // --- FRONIUS INVERTER CACHE (Throttling) ---
@@ -595,14 +696,21 @@ if (!IS_TEST) setInterval(async () => {
 
                 // B) Calculate Battery Needs
                 const batteryCapacity = config.batteryCapacity || 10;
-                const socMissingPct = Math.max(0, 100 - soc);
-                const kwhToFill = (socMissingPct / 100) * batteryCapacity;
+                const reserveSocPctRaw = config?.smartUsage?.reserveSocPct;
+                const reserveSocPct = Math.min(100, Math.max(0, Number.isFinite(Number(reserveSocPctRaw)) ? Number(reserveSocPctRaw) : 100));
+                const socMissingPct = Math.max(0, reserveSocPct - soc);
+                const kwhToReachReserve = (socMissingPct / 100) * batteryCapacity;
 
                 // C) Calculate "Safe Buffer" (Forecast - Fill Need - 10% Margin)
-                const energyBufferKwh = forecastRemainingKwh - (kwhToFill * 1.1);
+                const energyBufferKwh = forecastRemainingKwh - (kwhToReachReserve * 1.1);
 
                 // D) Determine if it's safe to divert battery charge
-                const isBatterySafe = (energyBufferKwh > 0) || (soc > 95);
+                const isBatterySafe = (energyBufferKwh > 0) || (soc >= reserveSocPct) || (soc > 95);
+
+                // E0) Reserve mode: allow suggestions that can be powered from battery energy above reserve
+                // Only do this while we still have remaining solar forecast today (i.e. before sunset).
+                const aboveReserveKwh = Math.max(0, ((soc - reserveSocPct) / 100) * batteryCapacity);
+                const canUseReserveNow = forecastRemainingKwh > 0 && soc > (reserveSocPct + 0.5) && aboveReserveKwh > 0;
 
                 // E) Calculate Total "Smart Surplus"
                 const gridExport = p_grid < -10 ? Math.abs(p_grid) : 0;
@@ -620,6 +728,7 @@ if (!IS_TEST) setInterval(async () => {
 
                 // --- APPLIANCE MATCHING ---
                 let bestAppliance = null;
+                let bestStrategy = 'grid';
 
                 (config.appliances || []).forEach(app => {
                     if (!notifyState.smartAdviceCounters[app.id]) notifyState.smartAdviceCounters[app.id] = 0;
@@ -633,7 +742,11 @@ if (!IS_TEST) setInterval(async () => {
                     }
                     
                     // Check if appliance fits in the SMART surplus
-                    if (totalSurplus >= appWatts) {
+                    const fitsSurplus = totalSurplus >= appWatts;
+                    const appKwh = Number(app?.kwhEstimate || 0);
+                    const fitsReserve = canUseReserveNow && Number.isFinite(appKwh) && appKwh > 0 && appKwh <= aboveReserveKwh;
+
+                    if (fitsSurplus || fitsReserve) {
                         notifyState.smartAdviceCounters[app.id]++;
                     } else {
                         notifyState.smartAdviceCounters[app.id] = 0;
@@ -641,21 +754,41 @@ if (!IS_TEST) setInterval(async () => {
 
                     // Trigger if condition met for 3 consecutive checks (3 minutes)
                     if (notifyState.smartAdviceCounters[app.id] >= 3) {
-                        if (!bestAppliance || appWatts > Number(bestAppliance.watts || 0)) bestAppliance = app;
+                        if (!bestAppliance || appWatts > Number(bestAppliance.watts || 0)) {
+                            bestAppliance = app;
+                            bestStrategy = fitsSurplus ? (isBatterySafe ? 'divert' : 'grid') : 'reserve';
+                        }
                     }
                 });
 
                 if (bestAppliance) {
-                    await sendDiscordNotification(
-                        nConfig.discordWebhook, 
-                        "💡 Smart Suggestion", 
-                        `Excess solar power available (${Math.round(totalSurplus)}W). You can run the **${bestAppliance.name}** now for free!`, 
-                        3447003, 
-                        [
+                    const strategyLabel = bestStrategy === 'reserve'
+                        ? `Reserve (min ${Math.round(reserveSocPct)}%)`
+                        : (isBatterySafe ? "Battery Safe (Diverting Charge)" : "Battery Priority (Grid Only)");
+
+                    const title = "💡 Smart Suggestion";
+                    const message = bestStrategy === 'reserve'
+                        ? `Battery is above your reserve target (~${aboveReserveKwh.toFixed(1)} kWh). You can run the **${bestAppliance.name}** now.`
+                        : `Excess solar power available (${Math.round(totalSurplus)}W). You can run the **${bestAppliance.name}** now for free!`;
+
+                    const fields = bestStrategy === 'reserve'
+                        ? [
+                            { name: "Above Reserve", value: `${aboveReserveKwh.toFixed(1)} kWh`, inline: true },
+                            { name: "Device Energy", value: `${Number(bestAppliance.kwhEstimate || 0)} kWh/run`, inline: true },
+                            { name: "Strategy", value: strategyLabel, inline: false }
+                        ]
+                        : [
                             { name: "Available Surplus", value: `${Math.round(totalSurplus)} W`, inline: true },
                             { name: "Device Power", value: `${bestAppliance.watts} W`, inline: true },
-                            { name: "Strategy", value: isBatterySafe ? "Battery Safe (Diverting Charge)" : "Battery Priority (Grid Only)", inline: false }
-                        ]
+                            { name: "Strategy", value: strategyLabel, inline: false }
+                        ];
+
+                    await sendDiscordNotification(
+                        nConfig.discordWebhook, 
+                        title,
+                        message,
+                        3447003, 
+                        fields
                     );
                     notifyState.lastSmartAdviceSent = now;
                     notifyState.smartAdviceCounters = {}; 
@@ -928,10 +1061,26 @@ app.get('/api/forecast', async (req, res) => {
     }
 
     const now = Date.now();
-    const currentHour = new Date().getHours();
-    
-    // User Request: Only fetch between 06:00 and 18:00
-    const isDaytime = currentHour >= 6 && currentHour < 18; 
+    const nowDate = new Date(now);
+    const currentHour = nowDate.getHours();
+
+    // Only fetch around daylight. Prefer real sunrise/sunset boundaries from Open-Meteo,
+    // but allow a small buffer window so the forecast can refresh shortly before sunrise.
+    // Fallback to the legacy 06:00-18:00 window if sun times are unavailable.
+    const sunTimes = await getTodaySunTimes(config);
+    let isDaytime = (currentHour >= 6 && currentHour < 18);
+    if (sunTimes) {
+        const utcOffsetSeconds = Number.isFinite(Number(sunTimes?.utcOffsetSeconds)) ? Number(sunTimes.utcOffsetSeconds) : 0;
+        const sunriseMs = parseOpenMeteoLocalIsoToUtcMs(sunTimes.sunriseIso, utcOffsetSeconds);
+        const sunsetMs = parseOpenMeteoLocalIsoToUtcMs(sunTimes.sunsetIso, utcOffsetSeconds);
+
+        if (Number.isFinite(sunriseMs) && Number.isFinite(sunsetMs)) {
+            const bufferMs = 2 * 60 * 60 * 1000;
+            const windowStartMs = sunriseMs - bufferMs;
+            const windowEndMs = sunsetMs + bufferMs;
+            isDaytime = now >= windowStartMs && now < windowEndMs;
+        }
+    }
     
     // Calculated: 12 hours window / 10 allowed requests = 1.2 hours (72 mins)
     // We use 75 minutes to be safest and evenly distribute ~10 calls per day.
@@ -942,9 +1091,15 @@ app.get('/api/forecast', async (req, res) => {
         return res.json(solcastCache.data);
     }
 
-    // 2. If OUTSIDE WINDOW, return stale cache or empty
+                    // Only do this before sunset (hard boundary via Open-Meteo when possible).
     if (!isDaytime) {
-         if (solcastCache.data) return res.json(solcastCache.data);
+                    const sunTimes = await getTodaySunTimes(config);
+                    const isDaylightNow = sunTimes ? isNowBetweenSunriseAndSunset(sunTimes) : null;
+                    const isBeforeSunsetWindow = (typeof isDaylightNow === 'boolean')
+                        ? isDaylightNow
+                        : (new Date().getHours() >= 6 && new Date().getHours() < 18);
+
+                    const canUseReserveNow = isBeforeSunsetWindow && soc > (reserveSocPct + 0.5) && aboveReserveKwh > 0;
          return res.json({ forecasts: [] });
     }
 

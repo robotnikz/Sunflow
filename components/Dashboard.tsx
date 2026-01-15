@@ -31,6 +31,10 @@ export interface WeatherData {
       weatherCode: number;
       isDay: boolean; 
     };
+        sun?: {
+            sunrise: string; // ISO string
+            sunset: string;  // ISO string
+        };
 }
 
 // SKELETON LOADER COMPONENT (Moved outside for Performance)
@@ -159,19 +163,23 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
         const lat = config.latitude;
         const lon = config.longitude;
         // Fetch current weather ONLY. No radiation/yield calculation.
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,is_day&timezone=auto&forecast_days=1`;
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,is_day&daily=sunrise,sunset&timezone=auto&forecast_days=1`;
         
         const res = await fetch(url);
         if (!res.ok) throw new Error("Weather API failed");
         
         const wData = await res.json();
+
+                const sunrise = Array.isArray(wData?.daily?.sunrise) ? wData.daily.sunrise[0] : undefined;
+                const sunset = Array.isArray(wData?.daily?.sunset) ? wData.daily.sunset[0] : undefined;
         
         setWeather({
             current: {
                 temp: wData.current.temperature_2m,
                 weatherCode: wData.current.weather_code,
                 isDay: wData.current.is_day === 1
-            }
+                        },
+                        sun: (sunrise && sunset) ? { sunrise, sunset } : undefined
         });
       } catch (err) {
         console.error("Failed to load weather", err);
@@ -340,11 +348,14 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                 solcastRateLimited={solcastRateLimited}
                 todayProduction={data.energy.today.production}
                 isDay={weather?.current.isDay ?? true} // Fallback to true if loading
+                                sunriseIso={weather?.sun?.sunrise}
+                                sunsetIso={weather?.sun?.sunset}
                 batteryCapacity={config.batteryCapacity || 10}
                 appliances={config.appliances || []}
                 hasSolcastKey={!!config.solcastApiKey}
                 currency={config.currency}
                 gridCostPerKwh={activeGridCostPerKwh}
+                reserveSocPct={config.smartUsage?.reserveSocPct}
             />
           </div>
 

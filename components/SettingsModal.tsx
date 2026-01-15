@@ -50,6 +50,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
           config.initialValues = { production: 0, import: 0, export: 0, financialReturn: 0 };
       }
 
+      if (!config.smartUsage) {
+          config.smartUsage = { reserveSocPct: 100 };
+      } else if (config.smartUsage.reserveSocPct === undefined) {
+          config.smartUsage.reserveSocPct = 100;
+      }
+
       return config;
   });
 
@@ -93,7 +99,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                 financialReturn: 0
             },
             appliances: currentConfig.appliances || prev.appliances || [],
-            notifications: robustNotifs
+            notifications: robustNotifs,
+            smartUsage: {
+                ...(prev.smartUsage || {}),
+                ...(currentConfig.smartUsage || {}),
+                reserveSocPct: (currentConfig.smartUsage?.reserveSocPct ?? prev.smartUsage?.reserveSocPct ?? 100)
+            }
         };
     });
   }, [currentConfig]);
@@ -104,7 +115,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
         ...prev,
         degradationRate: prev.degradationRate !== undefined ? prev.degradationRate : 0.5,
         inflationRate: prev.inflationRate !== undefined ? prev.inflationRate : 2.0,
-        batteryCapacity: prev.batteryCapacity !== undefined ? prev.batteryCapacity : 10.0
+                batteryCapacity: prev.batteryCapacity !== undefined ? prev.batteryCapacity : 10.0,
+                smartUsage: {
+                        ...(prev.smartUsage || {}),
+                        reserveSocPct: (prev.smartUsage?.reserveSocPct ?? 100)
+                }
     }));
   }, []);
 
@@ -192,6 +207,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
             import: Number(formData.initialValues?.import || 0),
             export: Number(formData.initialValues?.export || 0),
             financialReturn: Number(formData.initialValues?.financialReturn || 0),
+        },
+        smartUsage: {
+            ...(formData.smartUsage || {}),
+            reserveSocPct: Math.min(100, Math.max(0, Number(formData.smartUsage?.reserveSocPct ?? 100)))
         }
     };
     onSave(cleanedConfig);
@@ -468,6 +487,39 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                  <div className="grid grid-cols-2 gap-4">
                     <div><label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2"><Zap size={14} className="text-yellow-500"/> Solar Capacity (kWp)</label><input type="number" step="0.1" value={formData.systemCapacity || ''} onChange={(e) => setFormData({...formData, systemCapacity: parseFloat(e.target.value)})} placeholder="e.g. 10.5" className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" /></div>
                     <div><label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2"><Battery size={14} className="text-emerald-500"/> Battery Size (kWh)</label><input type="number" step="0.1" value={formData.batteryCapacity || ''} onChange={(e) => setFormData({...formData, batteryCapacity: parseFloat(e.target.value)})} placeholder="e.g. 7.7" className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" /></div>
+                 </div>
+              </div>
+
+              <div className="space-y-4 pt-4">
+                 <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2 flex items-center gap-2"><Sliders size={18}/> Smart Usage</h3>
+                 <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700/50">
+                    <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-medium text-slate-400">Reserve until sunset</label>
+                        <span className="text-sm font-bold text-slate-200">{Math.round(Number(formData.smartUsage?.reserveSocPct ?? 100))}%</span>
+                    </div>
+                    <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={Number(formData.smartUsage?.reserveSocPct ?? 100)}
+                        onChange={(e) => setFormData({
+                            ...formData,
+                            smartUsage: {
+                                ...(formData.smartUsage || {}),
+                                reserveSocPct: Number(e.target.value)
+                            }
+                        })}
+                        className="w-full accent-yellow-500"
+                    />
+                    <div className="mt-2 text-xs text-slate-500 space-y-1">
+                        <p>
+                            Smart Usage may use battery energy <strong>above</strong> this threshold during daytime.
+                        </p>
+                        <p>
+                            Set to <strong>100%</strong> to keep current behavior (battery-first).
+                        </p>
+                    </div>
                  </div>
               </div>
               <div className="space-y-4 pt-4">

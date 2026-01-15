@@ -15,9 +15,15 @@ interface SmartRecommendationsProps {
   solcastRateLimited: boolean;
   todayProduction: number; // kWh
   isDay: boolean; // From Open-Meteo
+    sunriseIso?: string;
+    sunsetIso?: string;
   batteryCapacity: number; // kWh
   appliances: Appliance[]; // User configured appliances
   hasSolcastKey: boolean;
+
+    // Smart Usage: keep at least this SOC until sunset.
+    // If battery SOC is above this threshold (and it is daytime), Smart Usage may also use battery energy.
+    reserveSocPct?: number; // 0..100 (default 100)
 
     // Optional: used only for UI helper text.
     currency?: string;
@@ -49,9 +55,18 @@ const currencySymbolFor = (currency: string | undefined) => {
     return '$';
 };
 
-const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc, forecast, solcastRateLimited, todayProduction, isDay, batteryCapacity, appliances, hasSolcastKey, currency, gridCostPerKwh }) => {
+const clampNumber = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+
+const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc, forecast, solcastRateLimited, todayProduction, isDay, sunriseIso, sunsetIso, batteryCapacity, appliances, hasSolcastKey, reserveSocPct, currency, gridCostPerKwh }) => {
     const deviceList = (appliances || []).filter(app => Number(app?.watts || 0) > 0);
     const currencySymbol = currencySymbolFor(currency);
+
+    const socPct = clampNumber(Number(soc || 0), 0, 100);
+    const reservePct = clampNumber(Number(reserveSocPct ?? 100), 0, 100);
+    const batteryCapacityKwh = Math.max(0, Number(batteryCapacity || 0));
+    const socKwh = (socPct / 100) * batteryCapacityKwh;
+    const reserveKwh = (reservePct / 100) * batteryCapacityKwh;
+    const aboveReserveKwh = Math.max(0, socKwh - reserveKwh);
 
   // --- REALTIME DATA ---
   const gridExport = power.grid < -10 ? Math.abs(power.grid) : 0;
@@ -80,10 +95,27 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
   const hasAnyForecastData = hasSolcastKey && !!forecast;
 
   // --- BATTERY STRATEGY ---
-  const socMissing = Math.max(0, 100 - soc);
-  const kwhToFill = (socMissing / 100) * batteryCapacity;
-  const energyBufferKwh = forecastRemainingKwh - (kwhToFill * 1.1);
-  const isBatterySafe = (energyBufferKwh > 0) || soc > 95;
+    const socMissingToReserve = Math.max(0, reservePct - socPct);
+    const kwhToReachReserve = (socMissingToReserve / 100) * batteryCapacityKwh;
+    const energyBufferKwh = forecastRemainingKwh - (kwhToReachReserve * 1.1);
+    const isBatterySafe = (energyBufferKwh > 0) || socPct >= reservePct || socPct > 95;
+
+        const nowMs = Date.now();
+        const sunriseMs = sunriseIso ? new Date(sunriseIso).getTime() : null;
+        const sunsetMs = sunsetIso ? new Date(sunsetIso).getTime() : null;
+        const hasSunTimes = Number.isFinite(Number(sunriseMs)) && Number.isFinite(Number(sunsetMs));
+        const isBetweenSunriseAndSunset = hasSunTimes
+                ? (nowMs >= (sunriseMs as number) && nowMs < (sunsetMs as number))
+                : isDay;
+
+        const canRunFromBatteryReserve = (app: Appliance) => {
+            if (!isBetweenSunriseAndSunset) return false;
+            if (!(batteryCapacityKwh > 0)) return false;
+            if (!(socPct > reservePct + 0.5)) return false;
+            const runKwh = Number(app.kwhEstimate || 0);
+            if (!Number.isFinite(runKwh) || runKwh <= 0) return false;
+            return runKwh <= aboveReserveKwh;
+    };
   
   // Available Power Logic
   let totalAvailablePower = 0;
@@ -99,7 +131,7 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
 
   // Fallback if strictly NO data at all
   if (!hasAnyForecastData) {
-      if (soc >= 80) { 
+      if (socPct >= 80) { 
           divertableAmount = batteryCharging;
           totalAvailablePower = gridExport + batteryCharging;
       } else {
@@ -117,9 +149,11 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
       const isGridOnly = app.watts <= gridExport;
       let hasEnergyBudget = true;
       if (!isGridOnly && hasAnyForecastData) {
-          hasEnergyBudget = app.kwhEstimate <= energyBufferKwh || soc > 95;
+          hasEnergyBudget = app.kwhEstimate <= energyBufferKwh || socPct > 95;
       }
-      return hasPower && hasEnergyBudget;
+      const bySurplus = hasPower && hasEnergyBudget;
+      const byReserve = canRunFromBatteryReserve(app);
+      return bySurplus || byReserve;
   });
 
   const energyBlocked = deviceList.find(app => 
@@ -155,17 +189,28 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
            </h3>
            <div className="mt-1 flex flex-col">
               <div className="flex items-baseline gap-1">
-                <span className={`text-2xl font-bold ${totalAvailablePower > 0 ? 'text-emerald-400' : 'text-slate-500'}`}>
-                    {Math.round(totalAvailablePower)} W
-                </span>
-                <span className="text-xs text-slate-500 font-medium">Free</span>
+                    <span className={`text-2xl font-bold ${totalAvailablePower > 0 || (isDay && aboveReserveKwh > 0) ? 'text-emerald-400' : 'text-slate-500'}`}>
+                        {totalAvailablePower > 0 ? `${Math.round(totalAvailablePower)} W` : (isDay && aboveReserveKwh > 0 ? `${aboveReserveKwh.toFixed(1)} kWh` : '0 W')}
+                    </span>
+                    <span className="text-xs text-slate-500 font-medium">
+                        {totalAvailablePower > 0 ? 'Free' : (isDay && aboveReserveKwh > 0 ? 'Above reserve' : 'Free')}
+                    </span>
               </div>
-              
-              {divertableAmount > 0 && (
-                   <div className="flex items-center gap-1 text-[10px] text-blue-400 mt-1">
-                      <CheckCircle2 size={10} />
-                      <span>Buffering {Math.round(divertableAmount)}W</span>
-                   </div>
+
+              {(batteryCapacityKwh > 0 || divertableAmount > 0) && (
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0 text-[10px] leading-tight">
+                      {batteryCapacityKwh > 0 && (
+                          <span className="text-slate-500">
+                              Reserve: <span className="text-slate-300">{Math.round(reservePct)}%</span>
+                          </span>
+                      )}
+                      {divertableAmount > 0 && (
+                          <span className="flex items-center gap-1 text-blue-400">
+                              <CheckCircle2 size={10} />
+                              <span>Buffering {Math.round(divertableAmount)}W</span>
+                          </span>
+                      )}
+                  </div>
               )}
 
            </div>
@@ -200,9 +245,9 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
                     )}
                 </div>
                 <span className="text-slate-600 text-[9px]">vs</span>
-                <div className="flex items-center gap-1" title="Energy needed to reach 100% Charge">
+                <div className="flex items-center gap-1" title="Energy needed to reach your reserve target">
                     <Battery size={10} className="text-blue-400"/> 
-                    <span className="text-slate-300">-{Math.round(kwhToFill)}k</span>
+                    <span className="text-slate-300">-{Math.round(kwhToReachReserve)}k</span>
                 </div>
             </div>
 
@@ -241,7 +286,9 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
             <div className="space-y-3">
                 {topRecommendations.map(app => {
                     const isUsingDiverted = app.watts > gridExport;
-                    const usagePercent = Math.min(100, (app.watts / totalAvailablePower) * 100);
+                    const denom = Math.max(1, totalAvailablePower > 0 ? totalAvailablePower : app.watts);
+                    const usagePercent = Math.min(100, (app.watts / denom) * 100);
+                    const isUsingReserve = totalAvailablePower <= 0 && canRunFromBatteryReserve(app);
                     const runKwh = Number(app.kwhEstimate || 0);
                     const hasRunKwh = Number.isFinite(runKwh) && runKwh > 0;
                     const hasCost = hasRunKwh && Number.isFinite(Number(gridCostPerKwh)) && Number(gridCostPerKwh) > 0;
@@ -250,6 +297,19 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
                     const batteryPct = hasBatteryEq ? Math.min(999, (runKwh / Number(batteryCapacity)) * 100) : null;
                     // Resolve Icon Component
                     const IconComponent = ICON_MAP[app.iconName] || Zap;
+
+                    const sourceBadge = (() => {
+                        if (isUsingReserve) {
+                            return { label: 'Battery Reserve', cls: 'bg-purple-500/10 text-purple-300 border-purple-500/20' };
+                        }
+                        if (app.watts <= gridExport) {
+                            return { label: 'Grid Export', cls: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' };
+                        }
+                        if (totalAvailablePower > 0 && isUsingDiverted) {
+                            return { label: 'Battery Divert', cls: 'bg-blue-500/10 text-blue-300 border-blue-500/20' };
+                        }
+                        return null;
+                    })();
 
                     return (
                         <div key={app.id} className="group">
@@ -277,15 +337,22 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
                                 </div>
                                 <div className="text-right">
                                     <span className="text-xs font-bold text-slate-500 block">{app.watts} W</span>
+                                    {sourceBadge && (
+                                        <span className={`mt-1 inline-flex items-center justify-end px-1.5 py-0.5 rounded border text-[9px] font-semibold ${sourceBadge.cls}`}>
+                                            {sourceBadge.label}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                             {/* Usage Bar */}
                             <div className="w-full h-1.5 bg-slate-700/50 rounded-full overflow-hidden">
                                 <div 
                                     className={`h-full rounded-full ${
-                                        isUsingDiverted
-                                        ? 'bg-blue-500' // Blue = Smart Divert
-                                        : usagePercent < 50 ? 'bg-emerald-500' : 'bg-yellow-500' 
+                                        isUsingReserve
+                                        ? 'bg-purple-500'
+                                        : isUsingDiverted
+                                            ? 'bg-blue-500' // Blue = Smart Divert
+                                            : usagePercent < 50 ? 'bg-emerald-500' : 'bg-yellow-500' 
                                     }`}
                                     style={{ width: `${usagePercent}%` }}
                                 ></div>
