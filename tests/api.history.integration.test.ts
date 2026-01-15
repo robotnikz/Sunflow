@@ -261,6 +261,16 @@ describe('Backend API (history integration)', () => {
     // Stats should use only the energy_log contribution:
     // 60kW for 1 minute => 1kWh (default 1/60h integration for single point).
     expect(res.body.stats.production).toBeCloseTo(1.0, 5);
+
+    // Also assert key flow stats are from energy_log (not the conflicting energy_data row).
+    // 10kW load for 1 minute => 0.166666.. kWh
+    expect(res.body.stats.consumption).toBeCloseTo(0.166666, 5);
+    // 5kW grid import for 1 minute => 0.083333.. kWh
+    expect(res.body.stats.imported).toBeCloseTo(0.083333, 5);
+    expect(res.body.stats.exported).toBeCloseTo(0.0, 5);
+    // -2kW battery means charging for 1 minute => 0.033333.. kWh charged
+    expect(res.body.stats.batteryCharged).toBeCloseTo(0.033333, 5);
+    expect(res.body.stats.batteryDischarged).toBeCloseTo(0.0, 5);
   });
 
   it('aggregates week range into daily bars (energy_data)', async () => {
