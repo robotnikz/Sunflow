@@ -92,6 +92,46 @@ const upload = multer({
 const DB_FILE = path.join(DATA_DIR, 'solar_data.db');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 
+const canWritePath = (p) => {
+    try {
+        fs.accessSync(p, fs.constants.W_OK);
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+const explainReadonlyDbAndExit = (details) => {
+    console.error('');
+    console.error('FATAL: SunFlow cannot write to its data directory / database.');
+    console.error(`DATA_DIR: ${DATA_DIR}`);
+    console.error(`DB_FILE:  ${DB_FILE}`);
+    if (details) console.error(details);
+    console.error('');
+    console.error('This usually happens after upgrading to a non-root container when your bind-mounted data');
+    console.error('directory (or the existing solar_data.db file) is owned by root or marked read-only.');
+    console.error('');
+    console.error('Fix options:');
+    console.error('- Ensure the host folder is writable (recommended)');
+    console.error('- Linux: `sudo chown -R 1000:1000 ./sunflow-data && sudo chmod -R u+rwX ./sunflow-data`');
+    console.error('- Docker helper (Linux/WSL):');
+    console.error('  `docker run --rm -v "${PWD}/sunflow-data:/data" alpine sh -lc "chown -R 1000:1000 /data || true"`');
+    console.error('- Windows (PowerShell): remove read-only attribute if set: `attrib -R .\\sunflow-data\\* /S /D`');
+    console.error('');
+    process.exit(1);
+};
+
+// Fail fast with a clear message if the DB file or data dir is not writable.
+if (fs.existsSync(DB_FILE)) {
+    if (!canWritePath(DB_FILE)) {
+        explainReadonlyDbAndExit('The existing DB file is not writable by the current process.');
+    }
+} else {
+    if (!canWritePath(DATA_DIR)) {
+        explainReadonlyDbAndExit('The data directory is not writable and the DB file does not yet exist.');
+    }
+}
+
 // --- SECURITY MIDDLEWARE ---
 // 1. Helmet: Sets various HTTP headers to secure the app
 app.use(helmet({
@@ -248,7 +288,9 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
                 soc REAL,
                 energy_day_prod REAL,
                 status_code INTEGER DEFAULT 1
-            )`);
+            )`, (err) => {
+                if (err) console.error('DB init error (energy_log):', err.message);
+            });
             
             // Migration: Add status_code column if it doesn't exist
             db.run("ALTER TABLE energy_log ADD COLUMN status_code INTEGER DEFAULT 1", (err) => {
@@ -259,7 +301,9 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
                 }
             });
 
-            db.run(`CREATE INDEX IF NOT EXISTS idx_timestamp ON energy_log(timestamp)`);
+            db.run(`CREATE INDEX IF NOT EXISTS idx_timestamp ON energy_log(timestamp)`, (err) => {
+                if (err) console.error('DB init error (idx_timestamp):', err.message);
+            });
 
             // Tariffs Table
             db.run(`CREATE TABLE IF NOT EXISTS tariffs (
@@ -277,8 +321,12 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
                         const oldConfig = getConfig();
                         console.log("Seeding initial tariff from config...");
                         const stmt = db.prepare("INSERT INTO tariffs (valid_from, cost_per_kwh, feed_in_tariff) VALUES (?, ?, ?)");
-                        stmt.run("2000-01-01", oldConfig.costPerKwh || 0.30, oldConfig.feedInTariff || 0.08);
-                        stmt.finalize();
+                        stmt.run("2000-01-01", oldConfig.costPerKwh || 0.30, oldConfig.feedInTariff || 0.08, (sErr) => {
+                            if (sErr) console.error('Failed to seed initial tariff:', sErr.message);
+                        });
+                        stmt.finalize((fErr) => {
+                            if (fErr) console.error('Failed to finalize seed statement:', fErr.message);
+                        });
                     }
                 });
             });
@@ -290,7 +338,9 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
                 amount REAL NOT NULL,
                 type TEXT NOT NULL, -- 'one_time' or 'yearly'
                 date DATE NOT NULL
-            )`);
+            )`, (err) => {
+                if (err) console.error('DB init error (expenses):', err.message);
+            });
 
             // Main data table for long-term storage from imports
             db.run(`CREATE TABLE IF NOT EXISTS energy_data (
@@ -302,7 +352,9 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
                 battery_charge_wh REAL,
                 battery_discharge_wh REAL,
                 load_wh REAL
-            )`);
+            )`, (err) => {
+                if (err) console.error('DB init error (energy_data):', err.message);
+            });
         });
     }
 });
@@ -930,8 +982,14 @@ if (!IS_TEST) setInterval(async () => {
     // Insert with Explicit LOCAL TIMESTAMP
     const timestamp = getLocalTimestamp();
     const stmt = db.prepare(`INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, energy_day_prod, status_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
-    stmt.run(timestamp, p_pv, p_load, p_grid, p_batt, soc, e_day, statusCode);
-    stmt.finalize();
+    stmt.run(timestamp, p_pv, p_load, p_grid, p_batt, soc, e_day, statusCode, (err) => {
+        if (err) {
+            console.error('Failed to insert energy_log row:', err.message);
+        }
+    });
+    stmt.finalize((err) => {
+        if (err) console.error('Failed to finalize energy_log insert statement:', err.message);
+    });
 
 }, 60 * 1000); // 1 Minute
 

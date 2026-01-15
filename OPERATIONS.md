@@ -18,6 +18,8 @@ Typical files:
 - `solar_data.db` (SQLite database)
 - `uploads/` (temporary upload files)
 
+If you see `SQLITE_READONLY: attempt to write a readonly database`, the container user likely cannot write to your bind-mounted data directory (common after upgrading from an older image that ran as root). Fix the host folder permissions/attributes, then restart the container.
+
 ## Backup & restore
 
 ### Backup (Docker Compose)
