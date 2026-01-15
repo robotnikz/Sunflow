@@ -92,6 +92,24 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         return { days, percent, missingDays, quality };
     }, [windowedData, windowBounds.expectedDays]);
 
+    // Only use full (hourly) days for battery simulations.
+    const filteredHourlyData = useMemo(() => {
+        if (windowedData.length === 0) return null as SimulationDataPoint[] | null;
+
+        const dayCounts: Record<string, number> = {};
+        windowedData.forEach(d => {
+            const dateKey = toLocalDateKey(d.t);
+            dayCounts[dateKey] = (dayCounts[dateKey] || 0) + 1;
+        });
+
+        const validDates = new Set(
+            Object.keys(dayCounts).filter(date => dayCounts[date] >= 23)
+        );
+
+        const filtered = windowedData.filter(d => validDates.has(toLocalDateKey(d.t)));
+        return filtered.length > 0 ? filtered : null;
+    }, [windowedData]);
+
     useEffect(() => {
         if (isOpen && data.length === 0) {
             setLoading(true);
@@ -119,98 +137,70 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
     }, [tariffs]);
 
     // The Simulation Core
+    type ScenarioSimResult = {
+        totalLoadWh: number;
+        totalPvWh: number;
+        importedWh: number;
+        exportedWh: number;
+        autonomyPct: number;
+    };
+
+    const simulate = (dataPoints: SimulationDataPoint[], pvPercent: number, batteryCapacityWh: number): ScenarioSimResult => {
+        let currentSocWh = 0;
+        let totalLoadWh = 0;
+        let totalPvWh = 0;
+        let importedWh = 0;
+        let exportedWh = 0;
+
+        dataPoints.forEach(point => {
+            const loadWh = point.l;
+            const pvWh = point.p * (1 + (pvPercent / 100));
+
+            totalLoadWh += loadWh;
+            totalPvWh += pvWh;
+
+            const net = pvWh - loadWh;
+            if (net > 0) {
+                const space = batteryCapacityWh - currentSocWh;
+                const charge = Math.min(net, space);
+                currentSocWh += charge;
+                exportedWh += (net - charge);
+            } else {
+                const discharge = Math.min(Math.abs(net), currentSocWh);
+                currentSocWh -= discharge;
+                importedWh += (Math.abs(net) - discharge);
+            }
+        });
+
+        const autonomyPct = totalLoadWh > 0 ? 100 * (1 - (importedWh / totalLoadWh)) : 0;
+        return { totalLoadWh, totalPvWh, importedWh, exportedWh, autonomyPct };
+    };
+
+    const simulations = useMemo(() => {
+        if (!filteredHourlyData) return null;
+
+        const baseBatteryWh = (config.batteryCapacity || 5) * 1000;
+
+        const base = simulate(filteredHourlyData, 0, baseBatteryWh);
+        const pvOnly = simulate(filteredHourlyData, addedPvPercent, baseBatteryWh);
+        const pvPlusBattery = simulate(filteredHourlyData, addedPvPercent, baseBatteryWh + (addedBatteryKwh * 1000));
+
+        return { base, pvOnly, pvPlusBattery };
+    }, [filteredHourlyData, addedPvPercent, addedBatteryKwh, config.batteryCapacity]);
+
+    // Backwards-compatible view model for the existing UI
     const results = useMemo(() => {
-        if (windowedData.length === 0) return null;
-
-        // NEW: Filter data to only include days that are "complete" (>= 23 hours)
-        // to ensure the simulation is statistically sound.
-        const dayCounts: Record<string, number> = {};
-        windowedData.forEach(d => {
-            const dateKey = toLocalDateKey(d.t);
-            dayCounts[dateKey] = (dayCounts[dateKey] || 0) + 1;
-        });
-
-        const validDates = new Set(
-            Object.keys(dayCounts).filter(date => dayCounts[date] >= 23)
-        );
-
-        const filteredData = windowedData.filter(d => {
-            const dateKey = toLocalDateKey(d.t);
-            return validDates.has(dateKey);
-        });
-
-        if (filteredData.length === 0) return null;
-
-        let totalLoad = 0;
-        let totalPvOriginal = 0;
-        let totalPvSimulated = 0;
-        
-        // Sim State
-        const batteryCapacityWh = (config.batteryCapacity || 5) * 1000 + (addedBatteryKwh * 1000);
-        let currentSocWh = 0; 
-        let currentSocWhOriginal = 0;
-        
-        let importedOriginal = 0;
-        let importedSimulated = 0;
-        let exportedOriginal = 0;
-        let exportedSimulated = 0;
-
-        // Iterate ONLY through filtered (complete hourly) data
-        filteredData.forEach(point => {
-            const loadWh = point.l; 
-            const pvWhOriginal = point.p; 
-            const pvWhSimulated = point.p * (1 + (addedPvPercent / 100));
-
-            totalLoad += loadWh;
-            totalPvOriginal += pvWhOriginal;
-            totalPvSimulated += pvWhSimulated;
-
-            // --- Net Logic ---
-            const netOriginal = pvWhOriginal - loadWh;
-            if (netOriginal > 0) {
-                const space = (config.batteryCapacity || 5) * 1000 - currentSocWhOriginal;
-                const charge = Math.min(netOriginal, space);
-                currentSocWhOriginal += charge;
-                exportedOriginal += (netOriginal - charge);
-            } else {
-                const discharge = Math.min(Math.abs(netOriginal), currentSocWhOriginal);
-                currentSocWhOriginal -= discharge;
-                importedOriginal += (Math.abs(netOriginal) - discharge);
-            }
-
-            const netSimulated = pvWhSimulated - loadWh;
-            if (netSimulated > 0) {
-                 const space = batteryCapacityWh - currentSocWh;
-                 const charge = Math.min(netSimulated, space);
-                 currentSocWh += charge;
-                 exportedSimulated += (netSimulated - charge);
-            } else {
-                 const discharge = Math.min(Math.abs(netSimulated), currentSocWh);
-                 currentSocWh -= discharge;
-                 importedSimulated += (Math.abs(netSimulated) - discharge);
-            }
-        });
-
-        // Autonomy = 1 - (Imported / TotalLoad)
-        const autonomyOriginal = 100 * (1 - (importedOriginal / totalLoad));
-        const autonomySimulated = 100 * (1 - (importedSimulated / totalLoad));
-
+        if (!simulations) return null;
         return {
-            autonomyOriginal,
-            autonomySimulated,
-            totalPvSimulated,
-            totalLoad,
-            importedOriginal,
-            importedSimulated,
-            exportedOriginal,
-            exportedSimulated
+            autonomyOriginal: simulations.base.autonomyPct,
+            autonomySimulated: simulations.pvPlusBattery.autonomyPct,
         };
-    }, [windowedData, addedPvPercent, addedBatteryKwh, config.batteryCapacity]);
+    }, [simulations]);
 
 
     // Financial Calculation
     const financials = useMemo(() => {
-        if (!results) return null;
+        if (!simulations) return null;
 
         // Normalize to 1 Year (since data could span multiple years or just a few months)
         const yearsCovered = Math.max(0.1, dataCoverage.days / 365);
@@ -218,15 +208,25 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         // Use active tariff from settings
         const gridCost = activeTariff.costPerKwh; 
         const feedIn = activeTariff.feedInTariff; 
-        
-        // Total Benefits over the entire dataset
-        const totalSavedImportKwh = (results.importedOriginal - results.importedSimulated) / 1000;
-        const totalExtraExportKwh = (results.exportedSimulated - results.exportedOriginal) / 1000;
-        
-        const totalBenefit = (totalSavedImportKwh * gridCost) + (totalExtraExportKwh * feedIn);
-        
-        // Normalize to YEARLY benefit
-        const totalYearlyBenefit = totalBenefit / yearsCovered;
+
+        const benefitOverDataset = (from: ScenarioSimResult, to: ScenarioSimResult) => {
+            const savedImportKwh = (from.importedWh - to.importedWh) / 1000;
+            const extraExportKwh = (to.exportedWh - from.exportedWh) / 1000;
+            return (savedImportKwh * gridCost) + (extraExportKwh * feedIn);
+        };
+
+        // Benefits over the entire dataset
+        // - PV-only: base -> pvOnly
+        // - Combined: base -> pvPlusBattery
+        // - Battery incremental: pvOnly -> pvPlusBattery (this captures the dependency you described)
+        const totalBenefitPvOnly = benefitOverDataset(simulations.base, simulations.pvOnly);
+        const totalBenefitCombined = benefitOverDataset(simulations.base, simulations.pvPlusBattery);
+        const totalBenefitBatteryIncremental = benefitOverDataset(simulations.pvOnly, simulations.pvPlusBattery);
+
+        // Normalize to YEARLY benefits
+        const yearlyBenefitPvOnly = totalBenefitPvOnly / yearsCovered;
+        const yearlyBenefitCombined = totalBenefitCombined / yearsCovered;
+        const yearlyBenefitBatteryIncremental = totalBenefitBatteryIncremental / yearsCovered;
 
         let estimatedBaseKwp = 5;
         if (config.systemCapacity && config.systemCapacity > 0) {
@@ -241,16 +241,92 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         const investBat = addedBatteryKwh * costPerKwhBat;
         const totalInvest = investPv + investBat;
 
-        const roiYears = totalInvest / (totalYearlyBenefit || 1); // Avoid div/0
+        const safeRoiYears = (invest: number, yearlyBenefit: number) => {
+            if (invest <= 0) return 0;
+            if (yearlyBenefit <= 0) return Infinity;
+            return invest / yearlyBenefit;
+        };
+
+        const roiYearsCombined = safeRoiYears(totalInvest, yearlyBenefitCombined);
+        const roiYearsPvOnly = safeRoiYears(investPv, yearlyBenefitPvOnly);
+        const roiYearsBatteryIncremental = safeRoiYears(investBat, yearlyBenefitBatteryIncremental);
 
         return {
             totalInvest,
-            totalYearlyBenefit,
-            roiYears,
+            totalYearlyBenefit: yearlyBenefitCombined,
+            roiYears: roiYearsCombined,
+            pvOnly: {
+                invest: investPv,
+                yearlyBenefit: yearlyBenefitPvOnly,
+                roiYears: roiYearsPvOnly,
+            },
+            batteryIncremental: {
+                invest: investBat,
+                yearlyBenefit: yearlyBenefitBatteryIncremental,
+                roiYears: roiYearsBatteryIncremental,
+            },
             estimatedBaseKwp
         };
 
-    }, [results, costPerKwp, costPerKwhBat, addedPvPercent, addedBatteryKwh, windowedData, activeTariff, config.systemCapacity, dataCoverage.days]);
+    }, [simulations, costPerKwp, costPerKwhBat, addedPvPercent, addedBatteryKwh, windowedData, activeTariff, config.systemCapacity, dataCoverage.days]);
+
+    // Auto-recommend battery size (0..30 kWh) for the currently selected PV slider.
+    const batteryRecommendation = useMemo(() => {
+        if (!filteredHourlyData) return null;
+        if (!financials) return null;
+
+        const yearsCovered = Math.max(0.1, dataCoverage.days / 365);
+        const gridCost = activeTariff.costPerKwh;
+        const feedIn = activeTariff.feedInTariff;
+
+        const baseBatteryWh = (config.batteryCapacity || 5) * 1000;
+        const pvOnly = simulate(filteredHourlyData, addedPvPercent, baseBatteryWh);
+
+        const benefitOverDataset = (from: ScenarioSimResult, to: ScenarioSimResult) => {
+            const savedImportKwh = (from.importedWh - to.importedWh) / 1000;
+            const extraExportKwh = (to.exportedWh - from.exportedWh) / 1000;
+            return (savedImportKwh * gridCost) + (extraExportKwh * feedIn);
+        };
+
+        type Candidate = {
+            addedBatteryKwh: number;
+            yearlyBenefit: number;
+            yearlySavedImportKwh: number;
+            yearlyExportDeltaKwh: number;
+            invest: number;
+            roiYears: number;
+        };
+
+        const candidates: Candidate[] = [];
+        for (let kwh = 0; kwh <= 30; kwh += 1) {
+            const sim = simulate(filteredHourlyData, addedPvPercent, baseBatteryWh + (kwh * 1000));
+            const savedImportKwh = (pvOnly.importedWh - sim.importedWh) / 1000;
+            const exportDeltaKwh = (sim.exportedWh - pvOnly.exportedWh) / 1000;
+
+            const totalBenefit = (savedImportKwh * gridCost) + (exportDeltaKwh * feedIn);
+            const yearlyBenefit = totalBenefit / yearsCovered;
+            const yearlySavedImportKwh = savedImportKwh / yearsCovered;
+            const yearlyExportDeltaKwh = exportDeltaKwh / yearsCovered;
+            const invest = kwh * costPerKwhBat;
+            const roiYears = invest <= 0 ? 0 : (yearlyBenefit > 0 ? invest / yearlyBenefit : Infinity);
+            candidates.push({ addedBatteryKwh: kwh, yearlyBenefit, yearlySavedImportKwh, yearlyExportDeltaKwh, invest, roiYears });
+        }
+
+        const addOns = candidates.filter(c => c.addedBatteryKwh > 0);
+        const positive = addOns.filter(c => c.yearlyBenefit > 0);
+        const bestYearlyAny = [...addOns].sort((a, b) => b.yearlyBenefit - a.yearlyBenefit)[0] || null;
+
+        if (positive.length === 0) {
+            return {
+                recommended: null as Candidate | null,
+                bestYearly: bestYearlyAny,
+            };
+        }
+
+        const recommended = [...positive].sort((a, b) => a.roiYears - b.roiYears)[0];
+        const bestYearly = [...positive].sort((a, b) => b.yearlyBenefit - a.yearlyBenefit)[0];
+        return { recommended, bestYearly: bestYearlyAny || bestYearly };
+    }, [filteredHourlyData, financials, dataCoverage.days, activeTariff, config.batteryCapacity, addedPvPercent, costPerKwhBat]);
 
 
     if (!isOpen) {
@@ -537,6 +613,75 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                             </div>
                                         )}
                                     </div>
+                                </div>
+                            )}
+
+                            {/* ROI Breakdown: makes PV/battery dependency explicit */}
+                            {(addedPvPercent > 0 || addedBatteryKwh > 0) && (
+                                <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 text-xs text-slate-300">
+                                    <div className="font-bold uppercase text-slate-400 mb-2">ROI Breakdown</div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-slate-400">PV-only (base → PV)</span>
+                                        <span className="text-yellow-300 font-semibold">
+                                            {financials.pvOnly.invest > 0
+                                                ? (Number.isFinite(financials.pvOnly.roiYears) ? `${financials.pvOnly.roiYears.toFixed(1)}y` : '∞')
+                                                : '—'}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center justify-between mt-1">
+                                        <span className="text-slate-400">Battery incremental (PV → PV+Battery)</span>
+                                        <span className="text-green-300 font-semibold">
+                                            {financials.batteryIncremental.invest > 0
+                                                ? (Number.isFinite(financials.batteryIncremental.roiYears) ? `${financials.batteryIncremental.roiYears.toFixed(1)}y` : '∞')
+                                                : '—'}
+                                        </span>
+                                    </div>
+                                    <div className="mt-2 text-[10px] text-slate-500">
+                                        Battery ROI is calculated using the current PV slider (captures PV→Battery coupling).
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Recommendation */}
+                            {batteryRecommendation && (
+                                <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-700">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="text-xs font-bold uppercase text-slate-400">Battery Suggestion</div>
+                                        <div className="text-[10px] text-slate-500">Based on current PV slider + timeframe</div>
+                                    </div>
+
+                                    {batteryRecommendation.recommended ? (
+                                        <div className="text-sm text-slate-200">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-slate-400">Recommended add-on</span>
+                                                <span className="text-white font-bold">+{batteryRecommendation.recommended.addedBatteryKwh} kWh</span>
+                                            </div>
+                                            <div className="flex items-center justify-between mt-1">
+                                                <span className="text-slate-400">Battery ROI (incremental)</span>
+                                                <span className="text-emerald-400 font-semibold">{batteryRecommendation.recommended.roiYears.toFixed(1)}y</span>
+                                            </div>
+                                            <div className="flex items-center justify-between mt-1">
+                                                <span className="text-slate-400">Yearly benefit (battery)</span>
+                                                <span className="text-emerald-300 font-semibold">+{batteryRecommendation.recommended.yearlyBenefit.toLocaleString(undefined, { maximumFractionDigits: 0 })} {config.currency}</span>
+                                            </div>
+                                            {batteryRecommendation.bestYearly && batteryRecommendation.bestYearly.addedBatteryKwh !== batteryRecommendation.recommended.addedBatteryKwh && (
+                                                <div className="mt-2 text-[10px] text-slate-500">
+                                                    Max yearly benefit at +{batteryRecommendation.bestYearly.addedBatteryKwh} kWh.
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="text-xs text-slate-400">
+                                            <div>No positive battery ROI detected for this PV setting in the selected timeframe.</div>
+                                            {batteryRecommendation.bestYearly && (
+                                                <div className="mt-2 text-[10px] text-slate-500">
+                                                    Best-case add-on: +{batteryRecommendation.bestYearly.addedBatteryKwh} kWh → {batteryRecommendation.bestYearly.yearlyBenefit.toLocaleString(undefined, { maximumFractionDigits: 0 })} {config.currency}/yr,
+                                                    saves ~{batteryRecommendation.bestYearly.yearlySavedImportKwh.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh import/yr,
+                                                    export Δ ~{batteryRecommendation.bestYearly.yearlyExportDeltaKwh.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh/yr.
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
