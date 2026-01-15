@@ -15,6 +15,8 @@ interface SmartRecommendationsProps {
   solcastRateLimited: boolean;
   todayProduction: number; // kWh
   isDay: boolean; // From Open-Meteo
+    sunriseIso?: string;
+    sunsetIso?: string;
   batteryCapacity: number; // kWh
   appliances: Appliance[]; // User configured appliances
   hasSolcastKey: boolean;
@@ -55,7 +57,7 @@ const currencySymbolFor = (currency: string | undefined) => {
 
 const clampNumber = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
-const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc, forecast, solcastRateLimited, todayProduction, isDay, batteryCapacity, appliances, hasSolcastKey, reserveSocPct, currency, gridCostPerKwh }) => {
+const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc, forecast, solcastRateLimited, todayProduction, isDay, sunriseIso, sunsetIso, batteryCapacity, appliances, hasSolcastKey, reserveSocPct, currency, gridCostPerKwh }) => {
     const deviceList = (appliances || []).filter(app => Number(app?.watts || 0) > 0);
     const currencySymbol = currencySymbolFor(currency);
 
@@ -98,8 +100,16 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
     const energyBufferKwh = forecastRemainingKwh - (kwhToReachReserve * 1.1);
     const isBatterySafe = (energyBufferKwh > 0) || socPct >= reservePct || socPct > 95;
 
-    const canRunFromBatteryReserve = (app: Appliance) => {
-            if (!isDay) return false;
+        const nowMs = Date.now();
+        const sunriseMs = sunriseIso ? new Date(sunriseIso).getTime() : null;
+        const sunsetMs = sunsetIso ? new Date(sunsetIso).getTime() : null;
+        const hasSunTimes = Number.isFinite(Number(sunriseMs)) && Number.isFinite(Number(sunsetMs));
+        const isBetweenSunriseAndSunset = hasSunTimes
+                ? (nowMs >= (sunriseMs as number) && nowMs < (sunsetMs as number))
+                : isDay;
+
+        const canRunFromBatteryReserve = (app: Appliance) => {
+            if (!isBetweenSunriseAndSunset) return false;
             if (!(batteryCapacityKwh > 0)) return false;
             if (!(socPct > reservePct + 0.5)) return false;
             const runKwh = Number(app.kwhEstimate || 0);
