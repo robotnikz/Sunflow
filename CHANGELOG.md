@@ -1,3 +1,11 @@
+## [1.9.3](https://github.com/robotnikz/Sunflow/compare/v1.9.2...v1.9.3) (2026-01-15)
+
+
+### Bug Fixes
+
+* **scenario-planner:** align baseline with measured flows ([0fa93f7](https://github.com/robotnikz/Sunflow/commit/0fa93f7923ee79b466b3ff17947aab471e816c04))
+* **scenario-planner:** avoid misleading battery suggestion ([9372a23](https://github.com/robotnikz/Sunflow/commit/9372a231263864397bbec6d31b8f173e137c2390))
+
 ## [1.9.2](https://github.com/robotnikz/Sunflow/compare/v1.9.1...v1.9.2) (2026-01-15)
 
 
