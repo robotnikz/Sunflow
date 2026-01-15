@@ -328,4 +328,34 @@ describe('Backend API (history integration)', () => {
       vi.useRealTimers();
     }
   });
+
+  it('returns 400 for invalid range', async () => {
+    const res = await request(app).get('/api/history?range=wat');
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Invalid range' });
+  });
+
+  it('returns 400 for invalid offset', async () => {
+    const res = await request(app).get('/api/history?range=day&offset=abc');
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Invalid offset' });
+  });
+
+  it('returns 400 when custom range is missing start/end', async () => {
+    const res = await request(app).get('/api/history?range=custom&start=2026-01-01');
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Missing start/end for custom range' });
+  });
+
+  it('returns 400 when custom range has invalid date', async () => {
+    const res = await request(app).get('/api/history?range=custom&start=not-a-date&end=2026-01-01');
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Invalid start/end date' });
+  });
+
+  it('returns 400 when custom end is before start', async () => {
+    const res = await request(app).get('/api/history?range=custom&start=2026-01-02&end=2026-01-01');
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'End date must be >= start date' });
+  });
 });

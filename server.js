@@ -2007,19 +2007,43 @@ app.get('/api/simulation-data', (req, res) => {
 
 // HISTORY
 app.get('/api/history', (req, res) => {
-    const range = req.query.range || 'day'; 
-    const startDate = req.query.start; 
-    const endDate = req.query.end;     
+    const range = String(req.query.range || 'day');
+    const startDate = req.query.start;
+    const endDate = req.query.end;
     let queryTimeClause = "";
     let groupBy = 1; 
 
     // Variable declaration for boundary checks
     let start, end;
 
-    if (range === 'custom' && startDate && endDate) {
-        start = new Date(startDate);
+    const allowedRanges = new Set(['hour', 'day', 'week', 'month', 'year', 'custom']);
+    if (!allowedRanges.has(range)) {
+        return res.status(400).json({ error: 'Invalid range' });
+    }
+
+    // Validate offset (only meaningful for non-custom ranges)
+    if (range !== 'custom' && req.query.offset !== undefined) {
+        const raw = Array.isArray(req.query.offset) ? req.query.offset[0] : req.query.offset;
+        const n = Number(raw);
+        if (!Number.isFinite(n) || !Number.isInteger(n)) {
+            return res.status(400).json({ error: 'Invalid offset' });
+        }
+    }
+
+    if (range === 'custom') {
+        if (!startDate || !endDate) {
+            return res.status(400).json({ error: 'Missing start/end for custom range' });
+        }
+
+        start = new Date(String(startDate));
         start.setHours(0,0,0,0);
-        end = new Date(endDate);
+        end = new Date(String(endDate));
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+            return res.status(400).json({ error: 'Invalid start/end date' });
+        }
+        if (end.getTime() < start.getTime()) {
+            return res.status(400).json({ error: 'End date must be >= start date' });
+        }
         end.setDate(end.getDate() + 1);
         end.setHours(0,0,0,0);
     } else {
