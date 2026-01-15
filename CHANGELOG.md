@@ -1,3 +1,11 @@
+## [1.10.1](https://github.com/robotnikz/Sunflow/compare/v1.10.0...v1.10.1) (2026-01-15)
+
+
+### Bug Fixes
+
+* **smart-usage:** respect reserve SOC in smart usage and notifications ([db3409d](https://github.com/robotnikz/Sunflow/commit/db3409dccc9a7248f525fd4f70ace32be7e6dba8))
+* **smart-usage:** use real sunrise/sunset boundaries ([542ec5d](https://github.com/robotnikz/Sunflow/commit/542ec5d84ad77e19c5b9afa6477a3dd0eb2435ed))
+
 # [1.10.0](https://github.com/robotnikz/Sunflow/compare/v1.9.3...v1.10.0) (2026-01-15)
 
 
