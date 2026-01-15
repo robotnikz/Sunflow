@@ -25,8 +25,8 @@ If you see `SQLITE_READONLY: attempt to write a readonly database`, the containe
 ### Backup (Docker Compose)
 
 SunFlow can be deployed either with:
-- a named volume (default in the provided compose file)
-- a bind mount (host folder)
+- a bind mount (host folder; default in the provided compose file)
+- a named volume (optional; can avoid bind-mount permission issues on some hosts)
 
 Choose the matching backup method below.
 
