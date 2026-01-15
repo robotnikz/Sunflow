@@ -1,121 +1,121 @@
-# Testplan (SunFlow)
+# Test Plan (SunFlow)
 
-Status: In Arbeit (Branch: `audit-2026-01-15-security-hardening`) — Fokus: Regression-Sicherheit + Betriebsszenarien.
+Status: Work in progress (Branch: `audit-2026-01-15-security-hardening`) — focus: regression safety + operational scenarios.
 
-## 1) Funktionale Tests (Was soll die Software tun?)
+## 1) Functional Tests (What should the software do?)
 
-Ziel: Erfüllt die Software die Anforderungen? „Tut das System genau das, was spezifiziert ist?“
+Goal: Verify the application meets its requirements (“does the system do exactly what is specified?”).
 
-### Kernfunktionen / Business-Logik (Use-Cases)
+### Core features / business logic (use cases)
 
-| Bereich | Use Case | Erwartung | Automatisiert? |
+| Area | Use case | Expectation | Automated? |
 |---|---|---|---|
-| Config | Config lesen/schreiben | GET liefert Defaults, POST persistiert, Validierung greift | teilweise |
-| Realtime | Live-Daten abrufen | Bei fehlender IP -> Fehler; bei IP -> Datenmodell stabil | teilweise |
-| Forecast | Solcast Forecast | Tagsüber cached, nachts keine Solcast-Calls, valide Fehlermeldungen | teilweise |
-| Tarife | CRUD | Validierung, min. 1 Tariff bleibt, korrekte Statuscodes | vorhanden |
-| Expenses | CRUD | Validierung, korrekte Statuscodes | vorhanden |
-| CSV Import | Preview/Import | Preview liefert Header+Preview, Import schreibt DB, Cleanup tmp, Fehlpfade sauber | vorhanden |
-| Notifications | Test notification | Nur erlaubte Discord Webhooks; Fehlerhandling sauber | vorhanden |
-| Update Check | /api/info | Keine Netz-Abhängigkeit in Tests; latestVersion/updateAvailable gesetzt | vorhanden |
+| Config | Read/write config | GET returns defaults, POST persists, validation enforced | partially |
+| Realtime | Fetch live data | Missing IP -> error; with IP -> stable data model | partially |
+| Forecast | Solcast forecast | Cached during daytime, no Solcast calls at night, meaningful errors | partially |
+| Tariffs | CRUD | Validation, at least 1 tariff remains, correct status codes | yes |
+| Expenses | CRUD | Validation, correct status codes | yes |
+| CSV Import | Preview/import | Preview returns headers+preview; import writes DB; tmp cleanup; clean error paths | yes |
+| Notifications | Test notification | Only allowed Discord webhooks; robust error handling | yes |
+| Update Check | /api/info | No network dependency in tests; latestVersion/updateAvailable set | yes |
 
-### Grenzfälle
-- Leere Eingaben (z.B. `mapping` fehlt/invalid)
-- Maximalwerte (Upload-Größe, JSON Body Limit)
-- Ungültige Daten (IDs, Dates, negative Werte außerhalb Clamp)
+### Edge cases
+- Empty inputs (e.g. missing/invalid `mapping`)
+- Limits (upload size, JSON body limit)
+- Invalid data (IDs, dates, negative values outside allowed ranges)
 
-### Fehlermeldungen & Exception-Handling
-- Jede API liefert konsistente JSON-Errors und passende Statuscodes.
+### Error handling
+- Every API returns consistent JSON errors and appropriate status codes.
 
-### Berechtigungen & Rollen
-- Optional: `SUNFLOW_ADMIN_TOKEN` aktiviert Admin-only Verhalten für mutierende Endpunkte.
+### Authorization / roles
+- Optional: `SUNFLOW_ADMIN_TOKEN` enables admin-only behavior for mutating endpoints.
 
 ## 2) Unit Tests
 
-Ziel: Einzelne Funktionen isoliert testen (schnell, CI-geeignet).
+Goal: Test isolated logic (fast, CI-friendly).
 
-- `services/api.ts`: QueryString-Building, Fehlerpfade bei `!res.ok`, Parsing.
+- `services/api.ts`: query string building, error paths for `!res.ok`, parsing.
 
-## 3) Integrationstests
+## 3) Integration Tests
 
-Ziel: Zusammenspiel Komponenten.
+Goal: Validate component interaction.
 
-- Backend ↔ SQLite (temp data dir)
-- Backend ↔ externe APIs via mocks (axios)
+- Backend ↔ SQLite (temporary data dir)
+- Backend ↔ external APIs via mocks (axios)
 
-## 4) Systemtests / E2E
+## 4) System Tests / E2E
 
-Ziel: UI ↔ Backend als Ganzes.
+Goal: Validate UI ↔ backend as a whole.
 
-- Playwright Smoke: App lädt, Dashboard sichtbar, Settings öffnen.
+- Playwright smoke: app loads, dashboard visible, settings open.
 
-## 5) Nicht-funktionale Tests
+## 5) Non-functional Tests
 
-### a) Performance & Last
-- Manuell/optional automatisiert mit `autocannon` gegen `/api/info` und `/api/history`.
+### a) Performance & load
+- Manual/optional automated load with `autocannon` against `/api/info` and `/api/history`.
 
-### b) Stabilität & Zuverlässigkeit
+### b) Stability & reliability
 - Long-run (24h): polling, retention, restart/resume, DB file growth.
-- Soak (leichtgewichtig, automatisierbar): `npm run soaktest -- --url http://localhost:3000 --duration 3600 --interval 2`
-	- Erwartung: keine 5xx, keine Timeouts, Statuscodes bleiben stabil.
-	- Für Docker-Setup: `docker compose up -d` und dann soaktest gegen den veröffentlichten Port.
-	- Optional: währenddessen `docker compose restart` ausführen und beobachten, ob der Service sauber wieder hochkommt.
+- Soak (lightweight, automatable): `npm run soaktest -- --url http://localhost:3000 --duration 3600 --interval 2`
+	- Expected: no 5xx, no timeouts, stable status codes.
+	- For Docker: `docker compose up -d` then run soaktest against the published port.
+	- Optional: run `docker compose restart` during the soak and verify the service recovers cleanly.
 
-### c) Sicherheit
-- AuthN/Z: Admin token enforced
+### c) Security
+- AuthN/Z: admin token enforced
 - Input validation: invalid bodies/IDs
-- Secrets: redaction wenn Admin token aktiv
-- Automated regressions: siehe Tests in `tests/api.security.regression.test.ts` (CORS-Allowlist + Webhook-SSRF-Guard).
+- Secrets: redaction when admin token is enabled
+- Automated regressions: see `tests/api.security.regression.test.ts` (CORS allowlist + webhook SSRF guard).
 
 ## 6) Usability & UX
 
-- Verständliche Texte, konsistente Validierung, klare Fehlermeldungen.
+- Clear copy, consistent validation, actionable error messages.
 
-## 7) Kompatibilität & Umgebung
+## 7) Compatibility & environment
 
 - Browser (E2E): Chromium/Firefox/WebKit (via Playwright)
-- OS: Windows & Linux (Tests sind Windows-tauglich; Tempfile-Cleanup berücksichtigt EPERM-Retries)
-- Node.js: via `package.json` getestet; empfohlen LTS (z.B. Node 20/22)
-- Deployment: Docker, Reverse Proxy (TRUST_PROXY), Windows/Linux
-- Storage: SQLite DB persistiert via Volume (`/app/data`)
+- OS: Windows & Linux (tests are Windows-friendly; temp file cleanup accounts for EPERM retries)
+- Node.js: tested via `package.json`; recommended: LTS (e.g. Node 20/22)
+- Deployment: Docker, reverse proxy (TRUST_PROXY), Windows/Linux
+- Storage: SQLite DB persisted via volume (`/app/data`)
 
 ## 8) Regression
 
-Ziel: Regressionen früh erkennen, ohne CI unnötig zu verlangsamen.
+Goal: Catch regressions early without slowing CI unnecessarily.
 
-Empfohlene Pipeline (Dokumentation, nicht zwingend exakt der aktuelle CI-Stand):
+Recommended pipeline (documentation; may differ from current CI implementation):
 
-- Bei jedem PR/Push: `npm ci`, `npm run typecheck`, `npm run test:run`
-- Optional/Nightly: `npm run test:e2e` (Playwright; braucht `npm run playwright:install` in CI)
-- Release: wie PR/Push, zusätzlich Container Build/Publish
+- On every PR/push: `npm ci`, `npm run typecheck`, `npm run test:run`
+- Optional/nightly: `npm run test:e2e` (Playwright; requires `npm run playwright:install` in CI)
+- Release: same as PR/push, plus container build/publish
 
-Hinweis: E2E kann als nightly laufen, um Flakiness zu entkoppeln.
+Note: E2E can run nightly to reduce CI flakiness impact.
 
-## 9) Deployment- & Betriebsszenarien
+## 9) Deployment & operations scenarios
 
-- Update/Rollback via Image Tags (Pinning empfohlen)
-	- Empfehlung: Produktions-Deployments auf Version taggen (`ghcr.io/robotnikz/sunflow:<version>`), nicht ausschließlich `latest`.
-	- Update: Tag wechseln, Container neu starten.
-	- Rollback: vorherigen Tag wieder eintragen und neu starten.
-- DB persistiert via Volume
+- Update/rollback via image tags (pinning recommended)
+	- Recommendation: pin production deployments to a version tag (`ghcr.io/robotnikz/sunflow:<version>`), not only `latest`.
+	- Update: change the tag and restart the container.
+	- Rollback: switch back to the previous tag and restart.
+- DB persisted via volume
 	- Docker Compose: `./sunflow-data:/app/data`
-	- Backup: `sunflow-data/solar_data.db` sichern (bei gestopptem Container oder per Copy).
-	- Monitoring: DB Growth, CPU/RAM (insb. bei langem Polling/Soak)
+	- Backup: copy `sunflow-data/solar_data.db` (container stopped or via file copy).
+	- Monitoring: DB growth, CPU/RAM (especially during long polling/soak)
 
-Manuelle Betriebsszenarien (kurz):
-- Restart/Resume: `docker compose restart` während `npm run soaktest` läuft
-- Netzwerk-Unterbrechung: Inverter-IP temporär nicht erreichbar → API darf nicht crashen; UI bleibt bedienbar
+Manual ops scenarios (short):
+- Restart/resume: `docker compose restart` while `npm run soaktest` is running
+- Network outage: inverter IP temporarily unreachable → API must not crash; UI should remain usable
 
-## 10) Doku & Tests
+## 10) Docs & tests
 
-- README/Setup und Beispiele müssen mit aktuellem Behavior konsistent bleiben.
-- Referenzen:
+- README/setup/examples must stay consistent with current behavior.
+- References:
 	- Security: `AUDIT.md`
-	- Tests: dieser Testplan + `npm run test:run` / `npm run test:e2e`
+	- Tests: this test plan + `npm run test:run` / `npm run test:e2e`
 
 ## How to run
 
-- Unit/Integration: `npm run test:run`
+- Unit/integration: `npm run test:run`
 - Typecheck: `npm run typecheck`
-- Loadtest (manuell): `npm run loadtest -- --url http://localhost:3000 --duration 10 --connections 25`
-- Soak/Stability (manuell): `npm run soaktest -- --url http://localhost:3000 --duration 3600 --interval 2`
+- Load test (manual): `npm run loadtest -- --url http://localhost:3000 --duration 10 --connections 25`
+- Soak/stability (manual): `npm run soaktest -- --url http://localhost:3000 --duration 3600 --interval 2`
