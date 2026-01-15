@@ -110,7 +110,7 @@ If you run SunFlow behind a reverse proxy (nginx, Traefik, Caddy):
 
 ### 1) UI loads but charts are empty
 
-- Verify the DB volume is mounted correctly (`./sunflow-data:/app/data`).
+- Verify the DB volume is mounted correctly (`/app/data`).
 - Check logs for SQLite errors.
 
 ### 2) Forecast fails
@@ -134,7 +134,7 @@ This is a practical long-run validation to catch leaks, unhandled errors, and â€
 
 ### Before you start
 
-- Use a persistent volume mount (`./sunflow-data:/app/data`).
+- Use a persistent volume mount (`/app/data`).
 - Ensure the container is healthy:
    - `docker ps` (should show `healthy`)
    - `docker logs --tail 200 sunflow` (no crash loop)

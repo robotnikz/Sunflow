@@ -13,8 +13,11 @@ services:
       
     volumes:
       # Persist database and config
-      # Data will be stored in a 'sunflow-data' folder next to this file
-      - ./sunflow-data:/app/data
+      # Use a named volume by default (best cross-platform; avoids bind-mount permission issues)
+      - sunflow-data:/app/data
       
     environment:
       - TZ=Europe/Berlin
+
+volumes:
+  sunflow-data:

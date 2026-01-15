@@ -26,6 +26,7 @@ RUN npm ci --omit=dev \
 # Copy built assets from builder stage
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server.js ./
+COPY --from=builder /app/entrypoint.sh ./entrypoint.sh
 
 # Create persistent data directory and drop root privileges
 RUN mkdir -p /app/data \
@@ -40,6 +41,6 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 	CMD node -e "fetch('http://127.0.0.1:3000/api/info').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-USER node
+RUN chmod +x /app/entrypoint.sh
 
-CMD ["node", "server.js"]
+ENTRYPOINT ["/app/entrypoint.sh"]

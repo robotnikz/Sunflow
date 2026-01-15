@@ -117,9 +117,12 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./sunflow-data:/app/data
+      - sunflow-data:/app/data
     environment:
       - TZ=Europe/Berlin  # Set your Timezone!
+
+volumes:
+  sunflow-data:
 ```
 
 Run it:
@@ -132,10 +135,12 @@ docker-compose up -d
 ```bash
 docker run -d \
   -p 3000:3000 \
-  -v $(pwd)/sunflow-data:/app/data \
+  -v sunflow-data:/app/data \
   -e TZ=Europe/Berlin \
   --name sunflow \
   ghcr.io/robotnikz/sunflow:latest
+
+Note: If you prefer a bind mount (host folder) instead of a named volume, ensure the folder is writable by the container user. See [OPERATIONS.md](OPERATIONS.md) if you run into `SQLITE_READONLY`.
 ```
 
 ---
