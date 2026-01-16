@@ -66,6 +66,26 @@ if (!fs.existsSync(UPLOADS_DIR)){
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
+const uploadsDirPrefix = (() => {
+    const root = path.resolve(UPLOADS_DIR);
+    const withSep = root.endsWith(path.sep) ? root : root + path.sep;
+    return process.platform === 'win32' ? withSep.toLowerCase() : withSep;
+})();
+
+const resolveUnderUploadsDir = (maybePath) => {
+    if (!maybePath || typeof maybePath !== 'string') return null;
+    const resolved = path.resolve(maybePath);
+    const cmp = process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+    if (!cmp.startsWith(uploadsDirPrefix)) return null;
+    return resolved;
+};
+
+const safeUnlinkIfExists = (maybePath) => {
+    const p = resolveUnderUploadsDir(maybePath);
+    if (!p) return;
+    try { fs.unlinkSync(p); } catch { /* ignore */ }
+};
+
 // Upload config for middleware
 const upload = multer({
     dest: UPLOADS_DIR,
@@ -2622,8 +2642,13 @@ app.post('/api/import-csv', requireAdmin, upload.single('file'), (req, res) => {
         return res.status(400).json({ error: 'No file uploaded' });
     }
 
+    const filePath = resolveUnderUploadsDir(req.file.path);
+    if (!filePath) {
+        return res.status(400).json({ error: 'Invalid upload path' });
+    }
+
     if (req.body?.mapping === undefined) {
-        try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+        safeUnlinkIfExists(filePath);
         return res.status(400).json({ error: 'Missing mapping' });
     }
 
@@ -2631,20 +2656,20 @@ app.post('/api/import-csv', requireAdmin, upload.single('file'), (req, res) => {
     try {
         mapping = JSON.parse(req.body.mapping);
     } catch {
-        try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+        safeUnlinkIfExists(filePath);
         return res.status(400).json({ error: 'Invalid mapping JSON' });
     }
 
     if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping)) {
-        try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+        safeUnlinkIfExists(filePath);
         return res.status(400).json({ error: 'Invalid mapping' });
     }
 
     if (!mapping.timestamp || typeof mapping.timestamp !== 'string' || !mapping.timestamp.trim()) {
-        try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+        safeUnlinkIfExists(filePath);
         return res.status(400).json({ error: 'Invalid mapping (missing timestamp)' });
     }
-    const filePath = req.file.path;
+
     const fileContent = fs.readFileSync(filePath, 'utf8');
 
     Papa.parse(fileContent, {
@@ -2653,9 +2678,7 @@ app.post('/api/import-csv', requireAdmin, upload.single('file'), (req, res) => {
         complete: (results) => {
              const rows = results.data;
              if (rows.length === 0) {
-                 if (fs.existsSync(filePath)) {
-                    try { fs.unlinkSync(filePath); } catch { /* ignore */ }
-                 }
+                 safeUnlinkIfExists(filePath);
                  return res.json({ success: true, imported: 0 });
              }
 
@@ -2664,9 +2687,7 @@ app.post('/api/import-csv', requireAdmin, upload.single('file'), (req, res) => {
                                  .filter(r => !isNaN(r._d.getTime()));
                                  
              if (dateRows.length === 0) {
-                 if (fs.existsSync(filePath)) {
-                    try { fs.unlinkSync(filePath); } catch { /* ignore */ }
-                 }
+                 safeUnlinkIfExists(filePath);
                  return res.json({ success: true, imported: 0 });
              }
 
@@ -2743,9 +2764,7 @@ app.post('/api/import-csv', requireAdmin, upload.single('file'), (req, res) => {
                  stmtData.finalize();
                  
                  db.run("COMMIT", (err) => {
-                     if (fs.existsSync(filePath)) {
-                        try { fs.unlinkSync(filePath); } catch { /* ignore */ }
-                     }
+                     safeUnlinkIfExists(filePath);
                      if (err) return res.status(500).json({ error: "Commit failed: " + err.message });
                      
                      // Recalculate calibration values after every successful import
@@ -2757,9 +2776,7 @@ app.post('/api/import-csv', requireAdmin, upload.single('file'), (req, res) => {
              });
         },
         error: (err) => {
-               if (fs.existsSync(filePath)) {
-                 try { fs.unlinkSync(filePath); } catch { /* ignore */ }
-               }
+                         safeUnlinkIfExists(filePath);
              res.status(500).json({ error: "CSV Parsing failed: " + err.message });
         }
     });
@@ -2777,7 +2794,10 @@ app.post('/api/preview-csv', requireAdmin, upload.single('file'), (req, res) => 
         return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const filePath = req.file.path;
+    const filePath = resolveUnderUploadsDir(req.file.path);
+    if (!filePath) {
+        return res.status(400).json({ error: 'Invalid upload path' });
+    }
     const fileContent = fs.readFileSync(filePath, 'utf8');
     
     // Parse partial
@@ -2786,11 +2806,11 @@ app.post('/api/preview-csv', requireAdmin, upload.single('file'), (req, res) => 
         preview: 5,
         skipEmptyLines: true,
         complete: (results) => {
-            try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+            safeUnlinkIfExists(filePath);
             res.json({ headers: results.meta.fields, preview: results.data });
         },
         error: (err) => {
-             try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+             safeUnlinkIfExists(filePath);
              res.status(500).json({ error: err.message });
         }
     });
