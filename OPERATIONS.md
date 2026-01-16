@@ -25,8 +25,8 @@ If you see `SQLITE_READONLY: attempt to write a readonly database`, the containe
 ### Backup (Docker Compose)
 
 SunFlow can be deployed either with:
-- a bind mount (host folder; default in the provided compose file)
-- a named volume (optional; can avoid bind-mount permission issues on some hosts)
+- a named volume (default in the provided compose file; avoids host permission issues on some hosts)
+- a bind mount (host folder; optional)
 
 Choose the matching backup method below.
 
@@ -38,6 +38,7 @@ Choose the matching backup method below.
 
 2. Create an archive from the volume:
 
+   - `docker volume ls` (find the actual volume name; often looks like `sunflow_sunflow-data`)
    - `docker run --rm -v sunflow_sunflow-data:/data -v "${PWD}:/backup" alpine sh -lc "cd /data && tar -czf /backup/sunflow-data.backup-YYYYMMDD.tgz ."`
 
 3. Start the container again:
@@ -141,7 +142,9 @@ Check status:
 ### Basic resource monitoring
 
 - CPU/memory: `docker stats sunflow`
-- Disk usage: monitor the `sunflow-data/` directory growth over time
+- Disk usage:
+   - named volume: inspect via `docker system df` / `docker volume inspect` (or your host's Docker UI)
+   - bind mount: monitor the `sunflow-data/` directory growth over time
 
 ## Reverse proxy notes
 

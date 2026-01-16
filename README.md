@@ -134,6 +134,18 @@ docker-compose up -d
 ```bash
 docker run -d \
   -p 3000:3000 \
+  # Recommended: named volume (no host permission fiddling)
+  -v sunflow-data:/app/data \
+  -e TZ=Europe/Berlin \
+  --name sunflow \
+  ghcr.io/robotnikz/sunflow:latest
+```
+
+Alternative (bind mount to a host folder):
+
+```bash
+docker run -d \
+  -p 3000:3000 \
   -v "${PWD}/sunflow-data:/app/data" \
   -e TZ=Europe/Berlin \
   --name sunflow \

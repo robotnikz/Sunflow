@@ -104,8 +104,11 @@ Note: E2E can run nightly to reduce CI flakiness impact.
 	- Update: change the tag and restart the container.
 	- Rollback: switch back to the previous tag and restart.
 - DB persisted via volume
-	- Docker Compose: `./sunflow-data:/app/data`
-	- Backup: copy `sunflow-data/solar_data.db` (container stopped or via file copy).
+	- Docker Compose (default in provided compose): named volume (`sunflow-data:/app/data`)
+	- Docker Compose (alternative): bind mount (`./sunflow-data:/app/data`)
+	- Backup:
+		- named volume: export the volume (see `OPERATIONS.md`)
+		- bind mount: copy the `sunflow-data/` directory (container stopped or via file copy)
 	- Monitoring: DB growth, CPU/RAM (especially during long polling/soak)
 
 Manual ops scenarios (short):
