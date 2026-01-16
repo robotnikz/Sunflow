@@ -35,6 +35,20 @@ vi.mock('axios', () => {
   };
 });
 
+const rmDirWithRetries = async (dir: string) => {
+  const attempts = 8;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+      return;
+    } catch (e: any) {
+      if (e?.code !== 'EPERM') throw e;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+  fs.rmSync(dir, { recursive: true, force: true });
+};
+
 describe('Backend API (integration)', () => {
   let dataDir: string;
   let app: any;
@@ -62,18 +76,15 @@ describe('Backend API (integration)', () => {
     try {
       shutdown?.(false);
     } finally {
-      try {
-        fs.rmSync(dataDir, { recursive: true, force: true });
-      } catch {
-        // ignore cleanup issues on Windows file locks
-      }
+      delete process.env.DATA_DIR;
+      await rmDirWithRetries(dataDir);
     }
   });
 
   it('GET /api/config returns defaults with appliances + notifications', async () => {
     const res = await request(app).get('/api/config');
-    expect(res.status).toBe(200);
 
+    expect(res.status).toBe(200);
     expect(res.body).toBeTypeOf('object');
     expect(res.body.currency).toBeTruthy();
 
@@ -87,7 +98,7 @@ describe('Backend API (integration)', () => {
   it('POST /api/config persists config changes', async () => {
     const postRes = await request(app)
       .post('/api/config')
-      .send({ currency: 'USD', inverterIp: '1.2.3.4' })
+      .send({ currency: 'USD', inverterIp: '192.168.1.50' })
       .set('Content-Type', 'application/json');
 
     expect(postRes.status).toBe(200);
@@ -96,7 +107,7 @@ describe('Backend API (integration)', () => {
     const getRes = await request(app).get('/api/config');
     expect(getRes.status).toBe(200);
     expect(getRes.body.currency).toBe('USD');
-    expect(getRes.body.inverterIp).toBe('1.2.3.4');
+    expect(getRes.body.inverterIp).toBe('192.168.1.50');
   });
 
   it('POST /api/config rejects invalid inverterIp', async () => {

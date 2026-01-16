@@ -8,6 +8,7 @@ import axios from 'axios';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -55,8 +56,34 @@ const IS_MAIN = (() => {
     }
 })();
 
+const isSubPath = (parentDir, childDir) => {
+    const rel = path.relative(parentDir, childDir);
+    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+};
+
+// Treat DATA_DIR as configuration, but validate any override so filesystem paths are not
+// derived from uncontrolled input (helps CodeQL and avoids accidental writes to unexpected locations).
+const resolveSafeDataDir = (maybeDir) => {
+    const defaultDir = path.join(__dirname, 'data');
+    if (!maybeDir || typeof maybeDir !== 'string' || maybeDir.includes('\0')) return defaultDir;
+
+    const resolved = path.resolve(process.cwd(), maybeDir);
+    const allowedRoots = [
+        path.resolve(__dirname),
+        path.resolve(process.cwd()),
+        path.resolve(os.tmpdir()),
+    ];
+
+    for (const root of allowedRoots) {
+        if (isSubPath(root, resolved)) return resolved;
+    }
+
+    console.warn(`Ignoring unsafe DATA_DIR override: ${maybeDir}`);
+    return defaultDir;
+};
+
 // Data Directory Setup (Crucial for Docker persistence)
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const DATA_DIR = resolveSafeDataDir(process.env.DATA_DIR);
 if (!fs.existsSync(DATA_DIR)){
     fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -217,9 +244,33 @@ const isAdminRequest = (req) => {
 const sanitizeInverterHost = (host) => {
     if (!host || typeof host !== 'string') return null;
     const h = host.trim();
-    // Must be host[:port] only; reject URLs/paths/userinfo.
-    if (!h || /[\s\/\\\?#@]/.test(h)) return null;
-    return h;
+
+    // Must be IPv4[:port] only. This keeps the inverter request constrained to typical LAN IPs.
+    const m = /^([0-9]{1,3}(?:\.[0-9]{1,3}){3})(?::([0-9]{1,5}))?$/.exec(h);
+    if (!m) return null;
+
+    const ip = m[1];
+    const parts = ip.split('.').map(n => Number(n));
+    if (parts.length !== 4 || parts.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+
+    const [a, b] = parts;
+    const isPrivate = (
+        a === 10 ||
+        (a === 172 && b >= 16 && b <= 31) ||
+        (a === 192 && b === 168) ||
+        (a === 169 && b === 254) ||
+        a === 127
+    );
+    if (!isPrivate) return null;
+
+    const portRaw = m[2];
+    if (portRaw !== undefined) {
+        const port = Number(portRaw);
+        if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
+        return `${ip}:${port}`;
+    }
+
+    return ip;
 };
 
 const isAllowedDiscordWebhook = (webhookUrl) => {
