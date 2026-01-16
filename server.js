@@ -56,21 +56,6 @@ const IS_MAIN = (() => {
     }
 })();
 
-const normalizePathForCompare = (p) => {
-    const abs = path.resolve(p);
-    return process.platform === 'win32' ? abs.toLowerCase() : abs;
-};
-
-// CodeQL-friendly containment check: uses canonical absolute paths + prefix match.
-const isSubPath = (parentDir, childDir) => {
-    const parentAbs = normalizePathForCompare(parentDir);
-    const childAbs = normalizePathForCompare(childDir);
-    if (childAbs === parentAbs) return true;
-
-    const parentWithSep = parentAbs.endsWith(path.sep) ? parentAbs : `${parentAbs}${path.sep}`;
-    return childAbs.startsWith(parentWithSep);
-};
-
 // Treat DATA_DIR as configuration, but validate any override so filesystem paths are not
 // derived from uncontrolled input (helps CodeQL and avoids accidental writes to unexpected locations).
 const resolveSafeDataDir = (maybeDir) => {
@@ -78,14 +63,21 @@ const resolveSafeDataDir = (maybeDir) => {
     if (!maybeDir || typeof maybeDir !== 'string' || maybeDir.includes('\0')) return defaultDir;
 
     const resolved = path.resolve(process.cwd(), maybeDir);
-    const allowedRoots = [
-        path.resolve(__dirname),
-        path.resolve(process.cwd()),
-        path.resolve(os.tmpdir()),
-    ];
+
+    // CodeQL-friendly containment check: inline canonical absolute paths + prefix match.
+    const normalizeForCompare = (p) => {
+        const abs = path.resolve(p);
+        return process.platform === 'win32' ? abs.toLowerCase() : abs;
+    };
+
+    const childAbs = normalizeForCompare(resolved);
+    const allowedRoots = [__dirname, process.cwd(), os.tmpdir()];
 
     for (const root of allowedRoots) {
-        if (isSubPath(root, resolved)) return resolved;
+        const parentAbs = normalizeForCompare(root);
+        if (childAbs === parentAbs) return resolved;
+        const parentWithSep = parentAbs.endsWith(path.sep) ? parentAbs : `${parentAbs}${path.sep}`;
+        if (childAbs.startsWith(parentWithSep)) return resolved;
     }
 
     console.warn(`Ignoring unsafe DATA_DIR override: ${maybeDir}`);
@@ -103,20 +95,7 @@ if (!fs.existsSync(UPLOADS_DIR)){
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
-// IMPORTANT: keep all filesystem operations for uploaded temp files confined to UPLOADS_DIR.
-// Use path.basename() as a sanitizer that CodeQL understands.
-const resolveUnderUploadsDir = (maybePath) => {
-    if (!maybePath || typeof maybePath !== 'string') return null;
-    const base = path.basename(maybePath);
-    if (!base) return null;
-    return path.join(UPLOADS_DIR, base);
-};
 
-const safeUnlinkIfExists = (maybePath) => {
-    const p = resolveUnderUploadsDir(maybePath);
-    if (!p) return;
-    try { fs.unlinkSync(p); } catch { /* ignore */ }
-};
 
 // Upload config for middleware
 const upload = multer({
@@ -2710,13 +2689,16 @@ app.post('/api/import-csv', requireAdmin, upload.single('file'), (req, res) => {
         return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const filePath = resolveUnderUploadsDir(req.file.path);
-    if (!filePath) {
+    // Keep all filesystem operations confined to UPLOADS_DIR.
+    // Use path.basename() as a sanitizer that CodeQL recognizes.
+    const safeFileName = path.basename(String(req.file.path || ''));
+    if (!safeFileName) {
         return res.status(400).json({ error: 'Invalid upload path' });
     }
+    const filePath = path.join(UPLOADS_DIR, safeFileName);
 
     if (req.body?.mapping === undefined) {
-        safeUnlinkIfExists(filePath);
+        try { fs.unlinkSync(filePath); } catch { /* ignore */ }
         return res.status(400).json({ error: 'Missing mapping' });
     }
 
@@ -2724,17 +2706,17 @@ app.post('/api/import-csv', requireAdmin, upload.single('file'), (req, res) => {
     try {
         mapping = JSON.parse(req.body.mapping);
     } catch {
-        safeUnlinkIfExists(filePath);
+        try { fs.unlinkSync(filePath); } catch { /* ignore */ }
         return res.status(400).json({ error: 'Invalid mapping JSON' });
     }
 
     if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping)) {
-        safeUnlinkIfExists(filePath);
+        try { fs.unlinkSync(filePath); } catch { /* ignore */ }
         return res.status(400).json({ error: 'Invalid mapping' });
     }
 
     if (!mapping.timestamp || typeof mapping.timestamp !== 'string' || !mapping.timestamp.trim()) {
-        safeUnlinkIfExists(filePath);
+        try { fs.unlinkSync(filePath); } catch { /* ignore */ }
         return res.status(400).json({ error: 'Invalid mapping (missing timestamp)' });
     }
 
@@ -2746,7 +2728,7 @@ app.post('/api/import-csv', requireAdmin, upload.single('file'), (req, res) => {
         complete: (results) => {
              const rows = results.data;
              if (rows.length === 0) {
-                 safeUnlinkIfExists(filePath);
+                 try { fs.unlinkSync(filePath); } catch { /* ignore */ }
                  return res.json({ success: true, imported: 0 });
              }
 
@@ -2755,7 +2737,7 @@ app.post('/api/import-csv', requireAdmin, upload.single('file'), (req, res) => {
                                  .filter(r => !isNaN(r._d.getTime()));
                                  
              if (dateRows.length === 0) {
-                 safeUnlinkIfExists(filePath);
+                 try { fs.unlinkSync(filePath); } catch { /* ignore */ }
                  return res.json({ success: true, imported: 0 });
              }
 
@@ -2832,7 +2814,7 @@ app.post('/api/import-csv', requireAdmin, upload.single('file'), (req, res) => {
                  stmtData.finalize();
                  
                  db.run("COMMIT", (err) => {
-                     safeUnlinkIfExists(filePath);
+                     try { fs.unlinkSync(filePath); } catch { /* ignore */ }
                      if (err) return res.status(500).json({ error: "Commit failed: " + err.message });
                      
                      // Recalculate calibration values after every successful import
@@ -2844,7 +2826,7 @@ app.post('/api/import-csv', requireAdmin, upload.single('file'), (req, res) => {
              });
         },
         error: (err) => {
-                         safeUnlinkIfExists(filePath);
+             try { fs.unlinkSync(filePath); } catch { /* ignore */ }
              res.status(500).json({ error: "CSV Parsing failed: " + err.message });
         }
     });
@@ -2862,10 +2844,13 @@ app.post('/api/preview-csv', requireAdmin, upload.single('file'), (req, res) => 
         return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const filePath = resolveUnderUploadsDir(req.file.path);
-    if (!filePath) {
+    // Keep all filesystem operations confined to UPLOADS_DIR.
+    // Use path.basename() as a sanitizer that CodeQL recognizes.
+    const safeFileName = path.basename(String(req.file.path || ''));
+    if (!safeFileName) {
         return res.status(400).json({ error: 'Invalid upload path' });
     }
+    const filePath = path.join(UPLOADS_DIR, safeFileName);
     const fileContent = fs.readFileSync(filePath, 'utf8');
     
     // Parse partial
@@ -2874,11 +2859,11 @@ app.post('/api/preview-csv', requireAdmin, upload.single('file'), (req, res) => 
         preview: 5,
         skipEmptyLines: true,
         complete: (results) => {
-            safeUnlinkIfExists(filePath);
+            try { fs.unlinkSync(filePath); } catch { /* ignore */ }
             res.json({ headers: results.meta.fields, preview: results.data });
         },
         error: (err) => {
-             safeUnlinkIfExists(filePath);
+             try { fs.unlinkSync(filePath); } catch { /* ignore */ }
              res.status(500).json({ error: err.message });
         }
     });
