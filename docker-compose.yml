@@ -10,8 +10,14 @@ services:
       - "3000:3000"
       
     volumes:
-      # Persist database and config (bind mount)
-      - ./sunflow-data:/app/data
+      # Persist database and config (recommended: named volume = no host permission fiddling)
+      - sunflow-data:/app/data
+
+      # Alternative (advanced): bind mount to a host folder
+      # - ./sunflow-data:/app/data
       
     environment:
       - TZ=Europe/Berlin
+
+volumes:
+  sunflow-data:

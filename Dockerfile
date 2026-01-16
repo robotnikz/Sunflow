@@ -18,6 +18,12 @@ RUN npm run build
 FROM node:22-slim
 WORKDIR /app
 
+# Ensure we can reliably drop privileges at runtime.
+# (Some slim images may not include a usable `su` binary by default.)
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends gosu \
+	&& rm -rf /var/lib/apt/lists/*
+
 # Install only production dependencies
 COPY package*.json ./
 RUN npm ci --omit=dev \

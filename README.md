@@ -107,7 +107,6 @@ SunFlow is built as a lightweight Docker container. You can run it on a Raspberr
 Create a `docker-compose.yml` file:
 
 ```yaml
-version: '3.8'
 services:
   sunflow:
     # Uses the public image from GitHub Container Registry
@@ -117,9 +116,12 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./sunflow-data:/app/data
+      - sunflow-data:/app/data
     environment:
       - TZ=Europe/Berlin  # Set your Timezone!
+
+volumes:
+  sunflow-data:
 ```
 
 Run it:

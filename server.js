@@ -373,12 +373,14 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
                 cost_per_kwh REAL NOT NULL,
                 feed_in_tariff REAL NOT NULL
             )`, () => {
+                if (isShuttingDown) return;
                 db.get("SELECT count(*) as count FROM tariffs", (err, row) => {
                     if (err) {
                         console.error('Failed to seed initial tariff:', err.message);
                         return;
                     }
                     if (!row || row.count === 0) {
+                        if (isShuttingDown) return;
                         const oldConfig = getConfig();
                         console.log("Seeding initial tariff from config...");
                         const stmt = db.prepare("INSERT INTO tariffs (valid_from, cost_per_kwh, feed_in_tariff) VALUES (?, ?, ?)");
@@ -3040,9 +3042,13 @@ app.get(/.*/, (req, res) => {
 
 let httpServer = null;
 
+let isShuttingDown = false;
+
 // Graceful Shutdown: Close DB connection ensures journal is flushed
 const shutdown = (exitProcess = true) => {
     console.log("Shutting down...");
+
+    isShuttingDown = true;
 
     if (httpServer) {
         try {
