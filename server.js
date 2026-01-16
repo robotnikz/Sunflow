@@ -66,18 +66,13 @@ if (!fs.existsSync(UPLOADS_DIR)){
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
-const uploadsDirPrefix = (() => {
-    const root = path.resolve(UPLOADS_DIR);
-    const withSep = root.endsWith(path.sep) ? root : root + path.sep;
-    return process.platform === 'win32' ? withSep.toLowerCase() : withSep;
-})();
-
+// IMPORTANT: keep all filesystem operations for uploaded temp files confined to UPLOADS_DIR.
+// Use path.basename() as a sanitizer that CodeQL understands.
 const resolveUnderUploadsDir = (maybePath) => {
     if (!maybePath || typeof maybePath !== 'string') return null;
-    const resolved = path.resolve(maybePath);
-    const cmp = process.platform === 'win32' ? resolved.toLowerCase() : resolved;
-    if (!cmp.startsWith(uploadsDirPrefix)) return null;
-    return resolved;
+    const base = path.basename(maybePath);
+    if (!base) return null;
+    return path.join(UPLOADS_DIR, base);
 };
 
 const safeUnlinkIfExists = (maybePath) => {
