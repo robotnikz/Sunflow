@@ -23,15 +23,19 @@ const waitForTariffs = async (app: any, timeoutMs = 1500) => {
 };
 
 vi.mock('axios', () => {
+  const get = vi.fn(async (url: string) => {
+    // This file focuses on auth/config behavior; block accidental external calls.
+    throw new Error(`Unexpected axios.get in tests: ${url}`);
+  });
+  const post = vi.fn(async (url: string) => {
+    throw new Error(`Unexpected axios.post in tests: ${url}`);
+  });
+
   return {
     default: {
-      get: vi.fn(async (url: string) => {
-        // This file focuses on auth/config behavior; block accidental external calls.
-        throw new Error(`Unexpected axios.get in tests: ${url}`);
-      }),
-      post: vi.fn(async (url: string) => {
-        throw new Error(`Unexpected axios.post in tests: ${url}`);
-      }),
+      get,
+      post,
+      create: vi.fn(() => ({ get, post })),
     },
   };
 });
@@ -192,44 +196,30 @@ describe('Backend API (auth/admin)', () => {
     expect(String(res.body?.error || '')).toContain('too large');
   });
 
-  it('validates /api/test-notification payloads (no outbound calls)', async () => {
+  it('requires auth and a configured webhook for /api/test-notification', async () => {
     const unauth = await request(app)
       .post('/api/test-notification')
-      .send({ webhookUrl: 'https://discord.com/api/webhooks/123/abc' })
+      .send({})
       .set('Content-Type', 'application/json');
     expect(unauth.status).toBe(401);
 
-    const badType = await request(app)
+    const notConfigured = await request(app)
       .post('/api/test-notification')
       .set('Authorization', `Bearer ${token}`)
-      .send({ webhookUrl: 123 })
+      .send({})
       .set('Content-Type', 'application/json');
-    expect(badType.status).toBe(400);
-
-    const badUrl = await request(app)
-      .post('/api/test-notification')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ webhookUrl: 'https://example.com/api/webhooks/123/abc' })
-      .set('Content-Type', 'application/json');
-    expect(badUrl.status).toBe(400);
-
-    const badShape = await request(app)
-      .post('/api/test-notification')
-      .set('Authorization', `Bearer ${token}`)
-      .send([])
-      .set('Content-Type', 'application/json');
-    expect(badShape.status).toBe(400);
-
-    const badContentType = await request(app)
-      .post('/api/test-notification')
-      .set('Authorization', `Bearer ${token}`)
-      .set('Content-Type', 'text/plain')
-      .send('hello');
-    expect(badContentType.status).toBe(400);
+    expect(notConfigured.status).toBe(400);
   });
 
   it('sends /api/test-notification with an allowed webhook (mocked axios)', async () => {
     const webhookUrl = 'https://discord.com/api/webhooks/123/abc';
+
+    const cfgRes = await request(app)
+      .post('/api/config')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ notifications: { discordWebhook: webhookUrl } })
+      .set('Content-Type', 'application/json');
+    expect(cfgRes.status).toBe(200);
 
     // Enable exactly this outbound call path; everything else still fails loudly.
     vi.mocked((axios as any).post).mockResolvedValueOnce({ status: 204, data: {} });
@@ -237,7 +227,7 @@ describe('Backend API (auth/admin)', () => {
     const res = await request(app)
       .post('/api/test-notification')
       .set('Authorization', `Bearer ${token}`)
-      .send({ webhookUrl })
+      .send({})
       .set('Content-Type', 'application/json');
 
     expect(res.status).toBe(200);
@@ -245,7 +235,7 @@ describe('Backend API (auth/admin)', () => {
 
     expect((axios as any).post).toHaveBeenCalledTimes(1);
     expect((axios as any).post).toHaveBeenCalledWith(
-      webhookUrl,
+      '/api/webhooks/123/abc',
       expect.objectContaining({
         embeds: [
           expect.objectContaining({

@@ -9,14 +9,17 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('axios', () => {
+  const get = vi.fn(async (url: string) => {
+    throw new Error(`Unexpected axios.get in tests: ${url}`);
+  });
+  const post = vi.fn(async (url: string) => {
+    throw new Error(`Unexpected axios.post in tests: ${url}`);
+  });
   return {
     default: {
-      get: vi.fn(async (url: string) => {
-        throw new Error(`Unexpected axios.get in tests: ${url}`);
-      }),
-      post: vi.fn(async (url: string) => {
-        throw new Error(`Unexpected axios.post in tests: ${url}`);
-      }),
+      get,
+      post,
+      create: vi.fn(() => ({ get, post })),
     },
   };
 });
@@ -77,20 +80,35 @@ describe('Backend API (security regressions)', () => {
     expect(denied.headers['access-control-allow-origin']).toBeUndefined();
   });
 
-  it('blocks non-https and non-webhook-path Discord URLs for /api/test-notification', async () => {
+  it('validates Discord webhook URL on /api/config and tests only persisted webhook', async () => {
     const badHttp = await request(app)
-      .post('/api/test-notification')
+      .post('/api/config')
       .set('Authorization', `Bearer ${token}`)
-      .send({ webhookUrl: 'http://discord.com/api/webhooks/123/abc' })
+      .send({ notifications: { discordWebhook: 'http://discord.com/api/webhooks/123/abc' } })
       .set('Content-Type', 'application/json');
     expect(badHttp.status).toBe(400);
 
     const badPath = await request(app)
-      .post('/api/test-notification')
+      .post('/api/config')
       .set('Authorization', `Bearer ${token}`)
-      .send({ webhookUrl: 'https://discord.com/not-webhooks/123/abc' })
+      .send({ notifications: { discordWebhook: 'https://discord.com/not-webhooks/123/abc' } })
       .set('Content-Type', 'application/json');
     expect(badPath.status).toBe(400);
+
+    // Not configured => cannot test
+    const notConfigured = await request(app)
+      .post('/api/test-notification')
+      .set('Authorization', `Bearer ${token}`)
+      .send({})
+      .set('Content-Type', 'application/json');
+    expect(notConfigured.status).toBe(400);
+
+    const okCfg = await request(app)
+      .post('/api/config')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ notifications: { discordWebhook: 'https://discord.com/api/webhooks/123/abc' } })
+      .set('Content-Type', 'application/json');
+    expect(okCfg.status).toBe(200);
 
     // Avoid log noise (this should be "allowed" but must not hit the network in tests)
     vi.mocked((axios as any).post).mockResolvedValueOnce({ status: 204, data: {} });
@@ -98,7 +116,7 @@ describe('Backend API (security regressions)', () => {
     const ok = await request(app)
       .post('/api/test-notification')
       .set('Authorization', `Bearer ${token}`)
-      .send({ webhookUrl: 'https://discord.com/api/webhooks/123/abc' })
+      .send({})
       .set('Content-Type', 'application/json');
     expect(ok.status).toBe(200);
     expect(ok.body).toEqual({ success: true });

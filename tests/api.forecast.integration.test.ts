@@ -14,10 +14,13 @@ type ServerModule = {
 };
 
 vi.mock('axios', () => {
+  const get = vi.fn();
+  const post = vi.fn();
   return {
     default: {
-      get: vi.fn(),
-      post: vi.fn(),
+      get,
+      post,
+      create: vi.fn(() => ({ get, post })),
     },
   };
 });

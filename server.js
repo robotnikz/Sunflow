@@ -34,6 +34,9 @@ const multer = require('multer'); // New: File Uploads
 const Papa = require('papaparse'); // New: CSV Parsing
 const compression = require('compression'); // Performance: Gzip Compression
 
+// Fixed-origin HTTP client for Discord webhook calls (helps CodeQL SSRF detection).
+const DISCORD_WEBHOOK_CLIENT = axios.create({ baseURL: 'https://discord.com' });
+
 app.disable('x-powered-by');
 
 // If running behind a reverse proxy (Traefik/Nginx/Caddy), set TRUST_PROXY=1 (or "true")
@@ -701,10 +704,10 @@ const sendDiscordNotification = async (webhookUrl, title, description, color, fi
 
     const m = /^\/api\/webhooks\/(\d+)\/([A-Za-z0-9_-]+)$/.exec(u.pathname);
     if (!m) return;
-    const safeWebhookUrl = `https://discord.com/api/webhooks/${m[1]}/${m[2]}`;
+    const safePath = `/api/webhooks/${m[1]}/${m[2]}`;
 
     try {
-        await axios.post(safeWebhookUrl, {
+        await DISCORD_WEBHOOK_CLIENT.post(safePath, {
             embeds: [{
                 title: title,
                 description: description,
@@ -1240,25 +1243,15 @@ app.post('/api/config', requireAdmin, (req, res) => {
 });
 
 app.post('/api/test-notification', requireAdmin, async (req, res) => {
-    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : null;
-    if (!body) return res.status(400).json({ error: 'Invalid JSON payload' });
-    const { webhookUrl } = body;
-    if (!webhookUrl || typeof webhookUrl !== 'string') return res.status(400).json({ error: "Missing or invalid webhook URL" });
-    // Inline, CodeQL-friendly SSRF hardening.
-    let u;
-    try {
-        u = new URL(webhookUrl);
-    } catch {
-        return res.status(400).json({ error: "Invalid Discord webhook URL" });
+    // Important: do NOT accept arbitrary webhook URLs from the request body.
+    // This endpoint only tests the persisted config webhook (prevents SSRF via request input).
+    const config = getConfig();
+    const configuredWebhook = config?.notifications?.discordWebhook;
+    const safeWebhookUrl = canonicalizeDiscordWebhookUrl(configuredWebhook);
+    if (!safeWebhookUrl) {
+        return res.status(400).json({ error: 'Discord webhook not configured' });
     }
-    if (u.protocol !== 'https:') return res.status(400).json({ error: "Invalid Discord webhook URL" });
-    const host = u.hostname.toLowerCase();
-    const allowedHosts = new Set(['discord.com', 'discordapp.com', 'canary.discord.com', 'ptb.discord.com']);
-    if (!allowedHosts.has(host)) return res.status(400).json({ error: "Invalid Discord webhook URL" });
-    const m = /^\/api\/webhooks\/(\d+)\/([A-Za-z0-9_-]+)$/.exec(u.pathname);
-    if (!m) return res.status(400).json({ error: "Invalid Discord webhook URL" });
-    const safeWebhookUrl = `https://discord.com/api/webhooks/${m[1]}/${m[2]}`;
-    
+
     try {
         await sendDiscordNotification(safeWebhookUrl, "🔔 Test Notification", "SunFlow notifications are working correctly!", 16776960);
         res.json({ success: true });

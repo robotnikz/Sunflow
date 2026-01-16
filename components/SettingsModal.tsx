@@ -226,14 +226,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
   };
 
   const handleTestNotification = async () => {
-      const webhookUrl = formData.notifications?.discordWebhook;
-      if (!webhookUrl) return alert("Please enter a Discord Webhook URL first.");
+      const draftWebhook = (formData.notifications?.discordWebhook || '').trim();
+      const savedWebhook = (currentConfig?.notifications?.discordWebhook || '').trim();
+
+      if (!draftWebhook && !savedWebhook) {
+          return alert("Please enter and save a Discord Webhook URL first.");
+      }
+
+      // To prevent SSRF and keep backend strict, /api/test-notification only tests the persisted config.
+      if (draftWebhook && draftWebhook !== savedWebhook) {
+          return alert("Please save settings first, then test the notification.");
+      }
       
       try {
           const res = await fetch('/api/test-notification', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ webhookUrl })
+              body: JSON.stringify({})
           });
           if(res.ok) alert("Test notification sent! Check your Discord channel.");
           else throw new Error("Failed");

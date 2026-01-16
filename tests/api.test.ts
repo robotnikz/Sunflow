@@ -12,25 +12,32 @@ const require = createRequire(import.meta.url);
 const sqlite3 = require('sqlite3').verbose();
 
 vi.mock('axios', () => {
+  const get = vi.fn(async (url: string) => {
+    if (url.includes('api.awattar.de/v1/marketdata') || url.includes('api.awattar.at/v1/marketdata')) {
+      const u = new URL(url);
+      const start = Number(u.searchParams.get('start'));
+      // Return 2 hours starting at the requested start.
+      return {
+        data: {
+          data: [
+            { start_timestamp: start, end_timestamp: start + 3600000, marketprice: 50, unit: 'Eur/MWh' },
+            { start_timestamp: start + 3600000, end_timestamp: start + 7200000, marketprice: 100, unit: 'Eur/MWh' },
+          ],
+        },
+      };
+    }
+
+    throw new Error(`Unexpected axios.get in tests: ${url}`);
+  });
+  const post = vi.fn(async (url: string) => {
+    throw new Error(`Unexpected axios.post in tests: ${url}`);
+  });
+
   return {
     default: {
-      get: vi.fn(async (url: string) => {
-        if (url.includes('api.awattar.de/v1/marketdata') || url.includes('api.awattar.at/v1/marketdata')) {
-          const u = new URL(url);
-          const start = Number(u.searchParams.get('start'));
-          // Return 2 hours starting at the requested start.
-          return {
-            data: {
-              data: [
-                { start_timestamp: start, end_timestamp: start + 3600000, marketprice: 50, unit: 'Eur/MWh' },
-                { start_timestamp: start + 3600000, end_timestamp: start + 7200000, marketprice: 100, unit: 'Eur/MWh' },
-              ],
-            },
-          };
-        }
-
-        throw new Error(`Unexpected axios.get in tests: ${url}`);
-      }),
+      get,
+      post,
+      create: vi.fn(() => ({ get, post })),
     },
   };
 });

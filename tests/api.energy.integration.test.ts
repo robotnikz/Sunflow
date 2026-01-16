@@ -12,14 +12,17 @@ const require = createRequire(import.meta.url);
 const sqlite3 = require('sqlite3').verbose();
 
 vi.mock('axios', () => {
+  const get = vi.fn(async (url: string) => {
+    throw new Error(`Unexpected axios.get in tests: ${url}`);
+  });
+  const post = vi.fn(async (url: string) => {
+    throw new Error(`Unexpected axios.post in tests: ${url}`);
+  });
   return {
     default: {
-      get: vi.fn(async (url: string) => {
-        throw new Error(`Unexpected axios.get in tests: ${url}`);
-      }),
-      post: vi.fn(async (url: string) => {
-        throw new Error(`Unexpected axios.post in tests: ${url}`);
-      }),
+      get,
+      post,
+      create: vi.fn(() => ({ get, post })),
     },
   };
 });
