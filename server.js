@@ -548,8 +548,15 @@ const getTodaySunTimes = async (config) => {
     }
 
     try {
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=sunrise,sunset&timezone=auto&forecast_days=1`;
-        const response = await axios.get(url, { timeout: 8000 });
+        // CodeQL-friendly SSRF hardening: fixed host + URLSearchParams encoding.
+        const u = new URL('https://api.open-meteo.com/v1/forecast');
+        u.searchParams.set('latitude', String(lat));
+        u.searchParams.set('longitude', String(lon));
+        u.searchParams.set('daily', 'sunrise,sunset');
+        u.searchParams.set('timezone', 'auto');
+        u.searchParams.set('forecast_days', '1');
+
+        const response = await axios.get(u.toString(), { timeout: 8000 });
 
         const sunriseIso = Array.isArray(response?.data?.daily?.sunrise) ? response.data.daily.sunrise[0] : null;
         const sunsetIso = Array.isArray(response?.data?.daily?.sunset) ? response.data.daily.sunset[0] : null;
@@ -1839,13 +1846,17 @@ const getHourlyGridEnergyKwh = (startTs, endTs, callback) => {
 const awattarCache = new Map();
 
 const fetchAwattarMarketdata = async ({ country, startMs, endMs }) => {
-    const c = (country || 'DE').toUpperCase();
-    const baseUrl = c === 'AT' ? 'https://api.awattar.at/v1/marketdata' : 'https://api.awattar.de/v1/marketdata';
+    // CodeQL-friendly SSRF hardening: explicit allowlist + fixed origins.
+    const cRaw = String(country || 'DE').toUpperCase();
+    const c = cRaw === 'AT' ? 'AT' : 'DE';
     const cacheKey = `${c}:${startMs}:${endMs}`;
     if (awattarCache.has(cacheKey)) return awattarCache.get(cacheKey);
 
-    const url = `${baseUrl}?start=${startMs}&end=${endMs}`;
-    const response = await axios.get(url, { timeout: 10000 });
+    const u = new URL(c === 'AT' ? 'https://api.awattar.at/v1/marketdata' : 'https://api.awattar.de/v1/marketdata');
+    u.searchParams.set('start', String(startMs));
+    u.searchParams.set('end', String(endMs));
+
+    const response = await axios.get(u.toString(), { timeout: 10000 });
     const data = response.data?.data || [];
 
     // Map: local hour key -> €/kWh (marketprice is Eur/MWh)
