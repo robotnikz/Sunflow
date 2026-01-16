@@ -27,5 +27,5 @@ This checklist is meant for quick manual validation after changes or upgrades.
 
 ## Regression smoke (recommended)
 
-- Run Playwright smoke: `npm run test:e2e`
+- Run the Playwright smoke suite (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 - Open Settings, switch to Notifications, verify toggle is reachable and labeled.

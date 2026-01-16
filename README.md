@@ -94,31 +94,6 @@ Solar is an investment. Track it like one.
 
 SunFlow is built as a lightweight Docker container. You can run it on a Raspberry Pi, a Synology NAS, or any server.
 
-## 🧑‍💻 Local Development
-
-### Prerequisites
-* Node.js + npm
-
-> [!NOTE]
-> **Windows / PowerShell:** If you see an error like "npm.ps1 cannot be loaded because script execution is disabled", either run commands via `npm.cmd` (e.g. `npm.cmd ci`) or set an execution policy for your user: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
-
-### Install & Run
-```bash
-npm ci
-npm run dev
-```
-
-Local dev starts:
-* Frontend (Vite): `http://localhost:5173/`
-* Backend (Express): `http://localhost:3000/`
-
-### Quality Checks
-```bash
-npm run test:run
-npm run typecheck
-npm run lint
-```
-
 ### Docker Prerequisites
 1.  **Fronius Gen24 Inverter** (Symo/Primo) with `Solar API` enabled.
     *   *Enable via Inverter Web Interface: Communication > Solar API > Enable.*
@@ -131,6 +106,7 @@ npm run lint
 Use the included `docker-compose.yml` in this repository (or create your own):
 
 ```yaml
+version: '3.8'
 services:
   sunflow:
     # Uses the public image from GitHub Container Registry
@@ -140,40 +116,28 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - sunflow-data:/app/data
+      # Persist database and config
+      # Data will be stored in a 'sunflow-data' folder next to this file
+      - ./sunflow-data:/app/data
     environment:
       - TZ=Europe/Berlin  # Set your Timezone!
-
-volumes:
-  sunflow-data:
 ```
 
 Run it:
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
-> [!TIP]
-> Newer Docker installs also support `docker compose up -d`.
+> [!IMPORTANT]
+> **Upgrade safety (data/history):** keep your `./sunflow-data` directory when updating. If you delete or change this mount, SunFlow will start with an empty database.
 
 ### Method 2: Docker CLI
 
 ```bash
 docker run -d \
   -p 3000:3000 \
-  # Recommended: named volume (no host permission fiddling)
-  -v sunflow-data:/app/data \
-  -e TZ=Europe/Berlin \
-  --name sunflow \
-  ghcr.io/robotnikz/sunflow:latest
-```
-
-Alternative (bind mount to a host folder):
-
-```bash
-docker run -d \
-  -p 3000:3000 \
-  -v "${PWD}/sunflow-data:/app/data" \
+  # Recommended (compat): bind mount to a host folder
+  -v "$(pwd)/sunflow-data:/app/data" \
   -e TZ=Europe/Berlin \
   --name sunflow \
   ghcr.io/robotnikz/sunflow:latest
@@ -208,58 +172,9 @@ Practical checklist for self-hosting: [SECURITY_CHECKLIST.md](SECURITY_CHECKLIST
 
 ---
 
-## 🛠 Tech Stack
-
-*   **Frontend:** React, TypeScript, TailwindCSS, Recharts, Lucide Icons.
-*   **Backend:** Node.js (Express), SQLite3.
-*   **Architecture:** Single-container monolith for easy deployment (GitHub Actions -> GHCR).
-
----
-
-## 🧪 Testing & QA
-
-- Unit/Integration: `npm run test:run`
-- Typecheck: `npm run typecheck`
-- E2E (Playwright): `npm run playwright:install` then `npm run test:e2e`
-- Load/Soak (manual): `npm run loadtest` / `npm run soaktest`
-
-### Playwright E2E suites
-
-SunFlow’s E2E tests are split into a few suites so you can choose the right trade-off between realism and determinism:
-
-- Smoke: basic app boot + settings modal
-- Regression: settings persistence + critical guards
-- Mocked broad coverage: UI flows with fully mocked `/api/*` + Open‑Meteo (no inverter, no network required)
-
-Run only the mocked suite:
-
-```bash
-npm run test:e2e -- e2e/everything-mocked.spec.ts
-```
-
-Note: the mocked suite uses Playwright request interception (in `e2e/helpers/mockApi.ts`) and intentionally uses synthetic fixture data, which is safe for a public repository.
-
-See [TESTPLAN.md](TESTPLAN.md) for the current regression strategy and operating scenarios.
-
-For day-2 operations (backup/restore, upgrades/rollbacks, monitoring), see [OPERATIONS.md](OPERATIONS.md).
-
-For UI/usability validation notes, see [UX_CHECKLIST.md](UX_CHECKLIST.md).
-
-## 🌍 Compatibility
-
-- OS: Windows/Linux (primarily tested via CI + local dev)
-- Runtime: Node.js LTS recommended
-- Deployment: Docker, optional reverse proxy (set `TRUST_PROXY=1`)
-
 ## 🤝 Contributing
 
-Contributions are welcome! Whether it's fixing a bug, adding a translation, or suggesting a new feature.
-
-1.  Fork the repository.
-2.  Create your feature branch (`git checkout -b feature/AmazingFeature`).
-3.  Commit your changes.
-4.  Push to the branch.
-5.  Open a Pull Request.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for developer setup, testing, and PR guidelines.
 
 ---
 

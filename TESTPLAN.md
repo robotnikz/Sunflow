@@ -62,10 +62,11 @@ Notes:
 
 ### b) Stability & reliability
 - Long-run (24h): polling, retention, restart/resume, DB file growth.
-- Soak (lightweight, automatable): `npm run soaktest -- --url http://localhost:3000 --duration 3600 --interval 2`
+
+- Soak (lightweight, automatable): run the soak test script (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 	- Expected: no 5xx, no timeouts, stable status codes.
-	- For Docker: `docker compose up -d` then run soaktest against the published port.
-	- Optional: run `docker compose restart` during the soak and verify the service recovers cleanly.
+	- For Docker: start the container via Compose, then run the soak test against the published port.
+	- Optional: restart the container during the soak and verify the service recovers cleanly.
 
 For a concrete 24h checklist (restart/resume, outage simulation, what to monitor), see `OPERATIONS.md`.
 
@@ -86,10 +87,10 @@ Checklist: `UX_CHECKLIST.md`.
 ## 7) Compatibility & environment
 
 - Browser (E2E): Chromium/Firefox/WebKit (via Playwright)
-- OS: Windows & Linux (tests are Windows-friendly; temp file cleanup accounts for EPERM retries)
+- OS: Linux (recommended for self-hosting and CI-like parity)
 - Node.js: tested via `package.json`; recommended: LTS (e.g. Node 20/22)
-- Deployment: Docker, reverse proxy (TRUST_PROXY), Windows/Linux
-- Storage: SQLite DB persisted via volume (`/app/data`)
+- Deployment: Docker, reverse proxy (TRUST_PROXY)
+- Storage: SQLite DB persisted in `./sunflow-data/` (bind mount to `/app/data`)
 
 ## 8) Regression
 
@@ -97,8 +98,8 @@ Goal: Catch regressions early without slowing CI unnecessarily.
 
 Recommended pipeline (documentation; may differ from current CI implementation):
 
-- On every PR/push: `npm ci`, `npm run typecheck`, `npm run test:run`
-- Optional/nightly: `npm run test:e2e` (Playwright; requires `npm run playwright:install` in CI)
+- On every PR/push: run the standard checks (see [CONTRIBUTING.md](CONTRIBUTING.md))
+- Optional/nightly: run E2E (Playwright)
 - Release: same as PR/push, plus container build/publish
 
 Note: E2E can run nightly to reduce CI flakiness impact.
@@ -109,16 +110,13 @@ Note: E2E can run nightly to reduce CI flakiness impact.
 	- Recommendation: pin production deployments to a version tag (`ghcr.io/robotnikz/sunflow:<version>`), not only `latest`.
 	- Update: change the tag and restart the container.
 	- Rollback: switch back to the previous tag and restart.
-- DB persisted via volume
-	- Docker Compose (default in provided compose): named volume (`sunflow-data:/app/data`)
-	- Docker Compose (alternative): bind mount (`./sunflow-data:/app/data`)
-	- Backup:
-		- named volume: export the volume (see `OPERATIONS.md`)
-		- bind mount: copy the `sunflow-data/` directory (container stopped or via file copy)
+
+- DB persisted via bind mount (Docker Compose default): `./sunflow-data:/app/data`
+	- Backup: stop container, then copy the `sunflow-data/` directory (see `OPERATIONS.md`).
 	- Monitoring: DB growth, CPU/RAM (especially during long polling/soak)
 
 Manual ops scenarios (short):
-- Restart/resume: `docker compose restart` while `npm run soaktest` is running
+- Restart/resume: restart the container while a soak test is running
 - Network outage: inverter IP temporarily unreachable → API must not crash; UI should remain usable
 
 For a practical runbook (backup/restore, upgrades/rollbacks, monitoring), see `OPERATIONS.md`.
@@ -128,11 +126,8 @@ For a practical runbook (backup/restore, upgrades/rollbacks, monitoring), see `O
 - README/setup/examples must stay consistent with current behavior.
 - References:
 	- Security: `AUDIT.md`
-	- Tests: this test plan + `npm run test:run` / `npm run test:e2e`
+	- How to run tests: see [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## How to run
 
-- Unit/integration: `npm run test:run`
-- Typecheck: `npm run typecheck`
-- Load test (manual): `npm run loadtest -- --url http://localhost:3000 --duration 10 --connections 25`
-- Soak/stability (manual): `npm run soaktest -- --url http://localhost:3000 --duration 3600 --interval 2`
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the exact commands (tests, Playwright, load/soak scripts).

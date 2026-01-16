@@ -55,7 +55,7 @@ services:
 ```
 
 Notes:
-- `read_only: true` requires all writes to happen under the mounted `/app/data` volume and temp files to use `/tmp`.
+- `read_only: true` requires all writes to happen under the mounted `/app/data` data directory and temp files to use `/tmp`.
 
 ## 5) Updates & rollback strategy
 

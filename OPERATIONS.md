@@ -5,7 +5,7 @@ This document focuses on day-2 operations: backups, upgrades, rollbacks, and bas
 ## Recommended deployment defaults
 
 - Pin production deployments to a version tag (or digest), not only `:latest`.
-- Persist data via a volume mount to `/app/data`.
+- Persist data via a bind mount (`./sunflow-data:/app/data`).
 - If exposed beyond your LAN, use a reverse proxy with TLS and authentication.
 
 ## Data persistence layout
@@ -24,28 +24,9 @@ If you see `SQLITE_READONLY: attempt to write a readonly database`, the containe
 
 ### Backup (Docker Compose)
 
-SunFlow can be deployed either with:
-- a named volume (default in the provided compose file; avoids host permission issues on some hosts)
-- a bind mount (host folder; optional)
+SunFlow stores its data in the `./sunflow-data/` folder next to your `docker-compose.yml` (mounted to `/app/data` in the container).
 
-Choose the matching backup method below.
-
-#### Backup (named volume)
-
-1. Stop the container (recommended to avoid copying a changing DB):
-
-   - `docker compose stop`
-
-2. Create an archive from the volume:
-
-   - `docker volume ls` (find the actual volume name; often looks like `sunflow_sunflow-data`)
-   - `docker run --rm -v sunflow_sunflow-data:/data -v "${PWD}:/backup" alpine sh -lc "cd /data && tar -czf /backup/sunflow-data.backup-YYYYMMDD.tgz ."`
-
-3. Start the container again:
-
-   - `docker compose start`
-
-#### Backup (bind mount)
+#### Backup
 
 1. Stop the container (recommended to avoid copying a changing DB):
 
@@ -61,27 +42,7 @@ Choose the matching backup method below.
 
 ### Restore (Docker Compose)
 
-#### Restore (named volume)
-
-1. Stop the container:
-
-   - `docker compose stop`
-
-2. Remove the old volume and recreate it:
-
-   - `docker volume rm sunflow_sunflow-data`
-   - `docker compose up -d` (creates a fresh empty volume)
-   - `docker compose stop`
-
-3. Restore the archive into the volume:
-
-   - `docker run --rm -v sunflow_sunflow-data:/data -v "${PWD}:/backup" alpine sh -lc "cd /data && tar -xzf /backup/sunflow-data.backup-YYYYMMDD.tgz"`
-
-4. Start the container:
-
-   - `docker compose start`
-
-#### Restore (bind mount)
+#### Restore
 
 1. Stop the container:
 
@@ -104,6 +65,8 @@ Notes:
 ## Upgrade & rollback
 
 ### Upgrade
+
+Upgrade keeps your DB/history as long as you keep your `./sunflow-data/` folder and the mount `./sunflow-data:/app/data` unchanged.
 
 1. Update the image tag in `docker-compose.yml`.
 
@@ -143,8 +106,7 @@ Check status:
 
 - CPU/memory: `docker stats sunflow`
 - Disk usage:
-   - named volume: inspect via `docker system df` / `docker volume inspect` (or your host's Docker UI)
-   - bind mount: monitor the `sunflow-data/` directory growth over time
+   - monitor the `sunflow-data/` directory growth over time
 
 ## Reverse proxy notes
 
@@ -157,7 +119,7 @@ If you run SunFlow behind a reverse proxy (nginx, Traefik, Caddy):
 
 ### 1) UI loads but charts are empty
 
-- Verify the DB volume is mounted correctly (`/app/data`).
+- Verify the data directory is mounted correctly (`./sunflow-data:/app/data`).
 - Check logs for SQLite errors.
 
 ### 2) Forecast fails
@@ -172,7 +134,7 @@ If you run SunFlow behind a reverse proxy (nginx, Traefik, Caddy):
 
 ## Stability exercises (manual)
 
-- Restart/resume: run `npm run soaktest` and execute `docker compose restart` during the run.
+- Restart/resume: run a soak test (see [CONTRIBUTING.md](CONTRIBUTING.md)) and execute `docker compose restart` during the run.
 - Network outage: temporarily block inverter access and confirm the process stays alive and the UI remains usable.
 
 ## 24h stability checklist (manual)
@@ -181,7 +143,7 @@ This is a practical long-run validation to catch leaks, unhandled errors, and â€
 
 ### Before you start
 
-- Use a persistent volume mount (`/app/data`).
+- Use a persistent bind mount (`./sunflow-data:/app/data`).
 - Ensure the container is healthy:
    - `docker ps` (should show `healthy`)
    - `docker logs --tail 200 sunflow` (no crash loop)
@@ -194,7 +156,7 @@ This is a practical long-run validation to catch leaks, unhandled errors, and â€
 
 2. Start a lightweight soak against the running service:
 
-    - `npm run soaktest -- --url http://localhost:3000 --duration 86400 --interval 5`
+   - Run the soak test script (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 
 3. During the 24h period, perform these exercises:
 

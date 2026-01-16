@@ -6,7 +6,7 @@ Branch: `audit-2026-01-15-security-hardening`
 ## Architecture (as implemented)
 
 - Single-container “monolith”: React/Vite static frontend served from the same Express backend.
-- Persistent state stored in SQLite under `/app/data` (mounted volume in Docker Compose).
+- Persistent state stored in SQLite under `/app/data` (mounted data directory in Docker Compose; bind-mounted by default).
 - Background jobs:
   - 1-minute inverter polling
   - hourly retention/aggregation job
@@ -63,7 +63,7 @@ Because of that, the safest stance is: **do not expose SunFlow to the internet w
 
 - Container hardening (see `Dockerfile`):
   - Node 22 LTS
-  - `npm ci` for reproducible installs
+  - reproducible installs via lockfile
   - non-root execution (`USER node`)
   - healthcheck to `/api/info`
 
