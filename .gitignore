@@ -19,6 +19,10 @@ build/
 # Vite cache
 .vite/
 
+# Tooling caches
+.eslintcache
+.cache/
+
 # Environment Variables
 .env
 .env.local
