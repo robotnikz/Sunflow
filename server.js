@@ -67,20 +67,19 @@ const resolveSafeDataDir = (maybeDir) => {
 
     const resolved = path.resolve(process.cwd(), maybeDir);
 
-    // CodeQL-friendly containment check: inline canonical absolute paths + prefix match.
-    const normalizeForCompare = (p) => {
-        const abs = path.resolve(p);
-        return process.platform === 'win32' ? abs.toLowerCase() : abs;
+    // CodeQL-friendly containment check (no loops / no case transforms):
+    // allow only paths that are within one of a few safe roots.
+    const isWithin = (parent, child) => {
+        const rel = path.relative(parent, child);
+        return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
     };
 
-    const childAbs = normalizeForCompare(resolved);
-    const allowedRoots = [__dirname, process.cwd(), os.tmpdir()];
-
-    for (const root of allowedRoots) {
-        const parentAbs = normalizeForCompare(root);
-        if (childAbs === parentAbs) return resolved;
-        const parentWithSep = parentAbs.endsWith(path.sep) ? parentAbs : `${parentAbs}${path.sep}`;
-        if (childAbs.startsWith(parentWithSep)) return resolved;
+    if (
+        isWithin(__dirname, resolved) ||
+        isWithin(process.cwd(), resolved) ||
+        isWithin(os.tmpdir(), resolved)
+    ) {
+        return resolved;
     }
 
     console.warn(`Ignoring unsafe DATA_DIR override: ${maybeDir}`);
