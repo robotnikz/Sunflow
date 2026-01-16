@@ -56,9 +56,19 @@ const IS_MAIN = (() => {
     }
 })();
 
+const normalizePathForCompare = (p) => {
+    const abs = path.resolve(p);
+    return process.platform === 'win32' ? abs.toLowerCase() : abs;
+};
+
+// CodeQL-friendly containment check: uses canonical absolute paths + prefix match.
 const isSubPath = (parentDir, childDir) => {
-    const rel = path.relative(parentDir, childDir);
-    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+    const parentAbs = normalizePathForCompare(parentDir);
+    const childAbs = normalizePathForCompare(childDir);
+    if (childAbs === parentAbs) return true;
+
+    const parentWithSep = parentAbs.endsWith(path.sep) ? parentAbs : `${parentAbs}${path.sep}`;
+    return childAbs.startsWith(parentWithSep);
 };
 
 // Treat DATA_DIR as configuration, but validate any override so filesystem paths are not
@@ -257,9 +267,7 @@ const sanitizeInverterHost = (host) => {
     const isPrivate = (
         a === 10 ||
         (a === 172 && b >= 16 && b <= 31) ||
-        (a === 192 && b === 168) ||
-        (a === 169 && b === 254) ||
-        a === 127
+        (a === 192 && b === 168)
     );
     if (!isPrivate) return null;
 
@@ -273,25 +281,31 @@ const sanitizeInverterHost = (host) => {
     return ip;
 };
 
-const isAllowedDiscordWebhook = (webhookUrl) => {
-    if (!webhookUrl || typeof webhookUrl !== 'string') return false;
+const canonicalizeDiscordWebhookUrl = (webhookUrl) => {
+    if (!webhookUrl || typeof webhookUrl !== 'string') return null;
     let u;
     try {
         u = new URL(webhookUrl);
     } catch {
-        return false;
+        return null;
     }
-    if (u.protocol !== 'https:') return false;
+    if (u.protocol !== 'https:') return null;
 
     const host = u.hostname.toLowerCase();
     // Discord webhook hosts (new + legacy). Keep narrow to avoid SSRF.
     const allowedHosts = new Set(['discord.com', 'discordapp.com', 'canary.discord.com', 'ptb.discord.com']);
-    if (!allowedHosts.has(host)) return false;
+    if (!allowedHosts.has(host)) return null;
 
-    // Require webhook path structure
-    if (!u.pathname.startsWith('/api/webhooks/')) return false;
-    return true;
+    // Require strict webhook path structure and canonicalize the origin.
+    // Typical format: /api/webhooks/<id>/<token>
+    if (!/^\/api\/webhooks\/\d+\/[A-Za-z0-9_-]+$/.test(u.pathname)) return null;
+
+    const canonical = new URL('https://discord.com');
+    canonical.pathname = u.pathname;
+    return canonical.toString();
 };
+
+const isAllowedDiscordWebhook = (webhookUrl) => !!canonicalizeDiscordWebhookUrl(webhookUrl);
 
 const stripDangerousKeys = (value) => {
     if (!value || typeof value !== 'object') return value;
@@ -633,8 +647,12 @@ const fetchFroniusData = async (ip) => {
     }
 
     try {
-        const url = `http://${safeHost}/solar_api/v1/GetPowerFlowRealtimeData.fcgi`;
-        const response = await axios.get(url, { timeout: 3000 });
+        const [host, port] = safeHost.split(':');
+        const url = new URL('http://127.0.0.1/solar_api/v1/GetPowerFlowRealtimeData.fcgi');
+        url.hostname = host;
+        if (port) url.port = port;
+
+        const response = await axios.get(url.toString(), { timeout: 3000 });
         
         // Update Cache
         inverterCache = {
@@ -660,10 +678,11 @@ const notifyState = {
 };
 
 const sendDiscordNotification = async (webhookUrl, title, description, color, fields = []) => {
-    if (!isAllowedDiscordWebhook(webhookUrl)) return;
+    const safeWebhookUrl = canonicalizeDiscordWebhookUrl(webhookUrl);
+    if (!safeWebhookUrl) return;
 
     try {
-        await axios.post(webhookUrl, {
+        await axios.post(safeWebhookUrl, {
             embeds: [{
                 title: title,
                 description: description,
@@ -1148,8 +1167,10 @@ app.post('/api/config', requireAdmin, (req, res) => {
             if (w !== '' && w !== undefined && typeof w !== 'string') {
                 return res.status(400).json({ error: 'Invalid Discord webhook URL' });
             }
-            if (w && typeof w === 'string' && !isAllowedDiscordWebhook(w)) {
-                return res.status(400).json({ error: 'Invalid Discord webhook URL' });
+            if (w && typeof w === 'string') {
+                const canonical = canonicalizeDiscordWebhookUrl(w);
+                if (!canonical) return res.status(400).json({ error: 'Invalid Discord webhook URL' });
+                patch.notifications.discordWebhook = canonical;
             }
         }
     }
@@ -1163,10 +1184,11 @@ app.post('/api/test-notification', requireAdmin, async (req, res) => {
     if (!body) return res.status(400).json({ error: 'Invalid JSON payload' });
     const { webhookUrl } = body;
     if (!webhookUrl || typeof webhookUrl !== 'string') return res.status(400).json({ error: "Missing or invalid webhook URL" });
-    if (!isAllowedDiscordWebhook(webhookUrl)) return res.status(400).json({ error: "Invalid Discord webhook URL" });
+    const safeWebhookUrl = canonicalizeDiscordWebhookUrl(webhookUrl);
+    if (!safeWebhookUrl) return res.status(400).json({ error: "Invalid Discord webhook URL" });
     
     try {
-        await sendDiscordNotification(webhookUrl, "🔔 Test Notification", "SunFlow notifications are working correctly!", 16776960);
+        await sendDiscordNotification(safeWebhookUrl, "🔔 Test Notification", "SunFlow notifications are working correctly!", 16776960);
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
