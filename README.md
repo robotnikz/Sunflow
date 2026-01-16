@@ -12,7 +12,7 @@
   <!-- Badges -->
   [![CI/CD Pipeline](https://github.com/robotnikz/Sunflow/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/robotnikz/Sunflow/actions/workflows/docker-publish.yml)
   [![GitHub Release](https://img.shields.io/github/v/release/robotnikz/Sunflow?logo=docker&label=ghcr.io)](https://github.com/robotnikz/Sunflow/pkgs/container/sunflow)
-  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENCE)
   [![Frontend](https://img.shields.io/badge/Stack-React%20%7C%20Node.js%20%7C%20SQLite-blue)](https://reactjs.org/)
   
 </div>
@@ -94,17 +94,41 @@ Solar is an investment. Track it like one.
 
 SunFlow is built as a lightweight Docker container. You can run it on a Raspberry Pi, a Synology NAS, or any server.
 
+## 🧑‍💻 Local Development
+
 ### Prerequisites
+* Node.js + npm
+
+> [!NOTE]
+> **Windows / PowerShell:** If you see an error like "npm.ps1 cannot be loaded because script execution is disabled", either run commands via `npm.cmd` (e.g. `npm.cmd ci`) or set an execution policy for your user: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+
+### Install & Run
+```bash
+npm ci
+npm run dev
+```
+
+Local dev starts:
+* Frontend (Vite): `http://localhost:5173/`
+* Backend (Express): `http://localhost:3000/`
+
+### Quality Checks
+```bash
+npm run test:run
+npm run typecheck
+npm run lint
+```
+
+### Docker Prerequisites
 1.  **Fronius Gen24 Inverter** (Symo/Primo) with `Solar API` enabled.
     *   *Enable via Inverter Web Interface: Communication > Solar API > Enable.*
 2.  **Docker** installed on your machine.
 
 ### Method 1: Docker Compose (Recommended)
-
 > [!TIP]
 > For production, consider pinning a version tag (e.g. `ghcr.io/robotnikz/sunflow:<version>`) so updates/rollbacks are explicit.
 
-Create a `docker-compose.yml` file:
+Use the included `docker-compose.yml` in this repository (or create your own):
 
 ```yaml
 services:
@@ -128,6 +152,9 @@ Run it:
 ```bash
 docker-compose up -d
 ```
+
+> [!TIP]
+> Newer Docker installs also support `docker compose up -d`.
 
 ### Method 2: Docker CLI
 
@@ -183,7 +210,7 @@ Practical checklist for self-hosting: [SECURITY_CHECKLIST.md](SECURITY_CHECKLIST
 
 ## 🛠 Tech Stack
 
-*   **Frontend:** React 18, TypeScript, TailwindCSS, Recharts, Lucide Icons.
+*   **Frontend:** React, TypeScript, TailwindCSS, Recharts, Lucide Icons.
 *   **Backend:** Node.js (Express), SQLite3.
 *   **Architecture:** Single-container monolith for easy deployment (GitHub Actions -> GHCR).
 
