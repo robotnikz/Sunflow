@@ -48,6 +48,12 @@ Goal: Validate component interaction.
 Goal: Validate UI ↔ backend as a whole.
 
 - Playwright smoke: app loads, dashboard visible, settings open.
+- Playwright regression: settings persistence + critical UX guards.
+- Playwright mocked broad coverage: deterministic UI coverage with mocked `/api/*` and Open‑Meteo (runs without inverter/external network).
+
+Notes:
+- The mocked E2E suite uses Playwright request interception and synthetic fixtures only (no secrets, no real production data).
+- This keeps the repo CI/public-friendly while still providing high confidence UI coverage.
 
 ## 5) Non-functional Tests
 

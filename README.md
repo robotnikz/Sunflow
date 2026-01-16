@@ -223,6 +223,22 @@ Practical checklist for self-hosting: [SECURITY_CHECKLIST.md](SECURITY_CHECKLIST
 - E2E (Playwright): `npm run playwright:install` then `npm run test:e2e`
 - Load/Soak (manual): `npm run loadtest` / `npm run soaktest`
 
+### Playwright E2E suites
+
+SunFlow’s E2E tests are split into a few suites so you can choose the right trade-off between realism and determinism:
+
+- Smoke: basic app boot + settings modal
+- Regression: settings persistence + critical guards
+- Mocked broad coverage: UI flows with fully mocked `/api/*` + Open‑Meteo (no inverter, no network required)
+
+Run only the mocked suite:
+
+```bash
+npm run test:e2e -- e2e/everything-mocked.spec.ts
+```
+
+Note: the mocked suite uses Playwright request interception (in `e2e/helpers/mockApi.ts`) and intentionally uses synthetic fixture data, which is safe for a public repository.
+
 See [TESTPLAN.md](TESTPLAN.md) for the current regression strategy and operating scenarios.
 
 For day-2 operations (backup/restore, upgrades/rollbacks, monitoring), see [OPERATIONS.md](OPERATIONS.md).
