@@ -1190,6 +1190,44 @@ app.post('/api/config', requireAdmin, (req, res) => {
         }
     }
 
+    // Validate Solcast configuration to avoid using arbitrary user input in outbound request URLs.
+    // Allow clearing values via null/empty string; otherwise enforce a conservative character set.
+    const isValidSolcastToken = (v) => typeof v === 'string' && v.length > 0 && v.length <= 128 && /^[A-Za-z0-9_-]+$/.test(v);
+
+    if (patch.solcastApiKey !== undefined) {
+        if (patch.solcastApiKey === null) {
+            patch.solcastApiKey = '';
+        } else if (typeof patch.solcastApiKey !== 'string') {
+            return res.status(400).json({ error: 'Invalid Solcast API key' });
+        } else {
+            const trimmed = patch.solcastApiKey.trim();
+            if (trimmed === '') {
+                patch.solcastApiKey = '';
+            } else if (!isValidSolcastToken(trimmed)) {
+                return res.status(400).json({ error: 'Invalid Solcast API key' });
+            } else {
+                patch.solcastApiKey = trimmed;
+            }
+        }
+    }
+
+    if (patch.solcastSiteId !== undefined) {
+        if (patch.solcastSiteId === null) {
+            patch.solcastSiteId = '';
+        } else if (typeof patch.solcastSiteId !== 'string') {
+            return res.status(400).json({ error: 'Invalid Solcast site ID' });
+        } else {
+            const trimmed = patch.solcastSiteId.trim();
+            if (trimmed === '') {
+                patch.solcastSiteId = '';
+            } else if (!isValidSolcastToken(trimmed)) {
+                return res.status(400).json({ error: 'Invalid Solcast site ID' });
+            } else {
+                patch.solcastSiteId = trimmed;
+            }
+        }
+    }
+
     saveConfig(patch);
     res.json({ success: true });
 });
@@ -1439,8 +1477,19 @@ app.get('/api/forecast', async (req, res) => {
 
     // 3. Fetch new data
     try {
-        const url = `https://api.solcast.com.au/rooftop_sites/${config.solcastSiteId}/forecasts?format=json&api_key=${config.solcastApiKey}`;
-        const response = await axios.get(url, { timeout: 8000 });
+        // Inline, CodeQL-friendly validation at the sink: keep host fixed and constrain path/query tokens.
+        const siteId = typeof config.solcastSiteId === 'string' ? config.solcastSiteId.trim() : '';
+        const apiKey = typeof config.solcastApiKey === 'string' ? config.solcastApiKey.trim() : '';
+        if (!siteId || !apiKey || siteId.length > 128 || apiKey.length > 128 || !/^[A-Za-z0-9_-]+$/.test(siteId) || !/^[A-Za-z0-9_-]+$/.test(apiKey)) {
+            return res.status(400).json({ error: 'Invalid Solcast configuration' });
+        }
+
+        const u = new URL('https://api.solcast.com.au');
+        u.pathname = `/rooftop_sites/${encodeURIComponent(siteId)}/forecasts`;
+        u.searchParams.set('format', 'json');
+        u.searchParams.set('api_key', apiKey);
+
+        const response = await axios.get(u.toString(), { timeout: 8000 });
         
         solcastCache = {
             timestamp: now,
