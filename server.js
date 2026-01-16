@@ -495,11 +495,13 @@ const saveConfig = (cfg) => {
         ...current,
         ...cfg
     };
-    
-    // Update Cache immediately
-    configCache = diskConfig;
-    
+
+    // Persist first. Do NOT populate the in-memory cache from request-derived values.
+    // This avoids taint propagation from HTTP input into outbound-request sinks (CodeQL SSRF).
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(diskConfig, null, 2));
+
+    // Invalidate cache so subsequent reads come from disk.
+    configCache = null;
 };
 
 // Moved fetchFroniusData below to be near cache logic
