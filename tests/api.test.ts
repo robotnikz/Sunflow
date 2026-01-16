@@ -12,28 +12,49 @@ const require = createRequire(import.meta.url);
 const sqlite3 = require('sqlite3').verbose();
 
 vi.mock('axios', () => {
+  const get = vi.fn(async (url: string) => {
+    if (url.includes('api.awattar.de/v1/marketdata') || url.includes('api.awattar.at/v1/marketdata')) {
+      const u = new URL(url);
+      const start = Number(u.searchParams.get('start'));
+      // Return 2 hours starting at the requested start.
+      return {
+        data: {
+          data: [
+            { start_timestamp: start, end_timestamp: start + 3600000, marketprice: 50, unit: 'Eur/MWh' },
+            { start_timestamp: start + 3600000, end_timestamp: start + 7200000, marketprice: 100, unit: 'Eur/MWh' },
+          ],
+        },
+      };
+    }
+
+    throw new Error(`Unexpected axios.get in tests: ${url}`);
+  });
+  const post = vi.fn(async (url: string) => {
+    throw new Error(`Unexpected axios.post in tests: ${url}`);
+  });
+
   return {
     default: {
-      get: vi.fn(async (url: string) => {
-        if (url.includes('api.awattar.de/v1/marketdata') || url.includes('api.awattar.at/v1/marketdata')) {
-          const u = new URL(url);
-          const start = Number(u.searchParams.get('start'));
-          // Return 2 hours starting at the requested start.
-          return {
-            data: {
-              data: [
-                { start_timestamp: start, end_timestamp: start + 3600000, marketprice: 50, unit: 'Eur/MWh' },
-                { start_timestamp: start + 3600000, end_timestamp: start + 7200000, marketprice: 100, unit: 'Eur/MWh' },
-              ],
-            },
-          };
-        }
-
-        throw new Error(`Unexpected axios.get in tests: ${url}`);
-      }),
+      get,
+      post,
+      create: vi.fn(() => ({ get, post })),
     },
   };
 });
+
+const rmDirWithRetries = async (dir: string) => {
+  const attempts = 8;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+      return;
+    } catch (e: any) {
+      if (e?.code !== 'EPERM') throw e;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+  fs.rmSync(dir, { recursive: true, force: true });
+};
 
 describe('Backend API (integration)', () => {
   let dataDir: string;
@@ -62,18 +83,15 @@ describe('Backend API (integration)', () => {
     try {
       shutdown?.(false);
     } finally {
-      try {
-        fs.rmSync(dataDir, { recursive: true, force: true });
-      } catch {
-        // ignore cleanup issues on Windows file locks
-      }
+      delete process.env.DATA_DIR;
+      await rmDirWithRetries(dataDir);
     }
   });
 
   it('GET /api/config returns defaults with appliances + notifications', async () => {
     const res = await request(app).get('/api/config');
-    expect(res.status).toBe(200);
 
+    expect(res.status).toBe(200);
     expect(res.body).toBeTypeOf('object');
     expect(res.body.currency).toBeTruthy();
 
@@ -87,7 +105,7 @@ describe('Backend API (integration)', () => {
   it('POST /api/config persists config changes', async () => {
     const postRes = await request(app)
       .post('/api/config')
-      .send({ currency: 'USD', inverterIp: '1.2.3.4' })
+      .send({ currency: 'USD', inverterIp: '192.168.1.50' })
       .set('Content-Type', 'application/json');
 
     expect(postRes.status).toBe(200);
@@ -96,7 +114,18 @@ describe('Backend API (integration)', () => {
     const getRes = await request(app).get('/api/config');
     expect(getRes.status).toBe(200);
     expect(getRes.body.currency).toBe('USD');
-    expect(getRes.body.inverterIp).toBe('1.2.3.4');
+    expect(getRes.body.inverterIp).toBe('192.168.1.50');
+  });
+
+  it('POST /api/config rejects invalid inverterIp', async () => {
+    const res = await request(app)
+      .post('/api/config')
+      .send({ inverterIp: 'http://example.com/solar_api' })
+      .set('Content-Type', 'application/json');
+
+    // In default (no admin token) mode, endpoint is open but still validates.
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBeTruthy();
   });
 
   it('GET /api/info does not require network in tests', async () => {
@@ -116,6 +145,11 @@ describe('Backend API (integration)', () => {
     const run = (sql: string, params: any[] = []) =>
       new Promise<void>((resolve, reject) => {
         db.run(sql, params, (err: any) => (err ? reject(err) : resolve()));
+      });
+
+    const close = () =>
+      new Promise<void>((resolve, reject) => {
+        db.close((err: any) => (err ? reject(err) : resolve()));
       });
 
     await run(`CREATE TABLE IF NOT EXISTS energy_data (
@@ -138,7 +172,7 @@ describe('Backend API (integration)', () => {
       ['2021-01-01 01:00:00', 2000, 0]
     );
 
-    db.close();
+    await close();
 
     const res = await request(app).get(
       '/api/dynamic-pricing/awattar/compare?country=DE&from=2021-01-01&to=2021-01-02&surchargeCt=0&vatPercent=0'

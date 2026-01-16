@@ -3,12 +3,25 @@ node_modules/
 .pnp
 .pnp.js
 
+# Python (local tooling / accidental venv)
+.venv/
+
 # Testing
 coverage/
+.e2e-data/
+test-results/
+playwright-report/
 
 # Production Build Output
 dist/
 build/
+
+# Vite cache
+.vite/
+
+# Tooling caches
+.eslintcache
+.cache/
 
 # Environment Variables
 .env
@@ -26,9 +39,16 @@ logs/
 
 # Database & Local Data (WICHTIG: Damit deine echte DB nicht im Repo landet)
 sunflow-data/
+sunflow-data-*/
+sunflow-data.backup*/
+sunflow-data-backup*.tar*
+sunflow-data-*.tar*
 *.db
 *.sqlite
 *.sqlite3
+
+# TypeScript incremental build artifacts
+*.tsbuildinfo
 
 # Backend runtime data (default DATA_DIR)
 data/uploads/
@@ -40,6 +60,7 @@ data/*.sqlite*
 # OS Files
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Editor Configurations
 .idea/

@@ -8,6 +8,7 @@ import axios from 'axios';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -33,6 +34,18 @@ const multer = require('multer'); // New: File Uploads
 const Papa = require('papaparse'); // New: CSV Parsing
 const compression = require('compression'); // Performance: Gzip Compression
 
+// Fixed-origin HTTP client for Discord webhook calls (helps CodeQL SSRF detection).
+const DISCORD_WEBHOOK_CLIENT = axios.create({ baseURL: 'https://discord.com' });
+
+app.disable('x-powered-by');
+
+// If running behind a reverse proxy (Traefik/Nginx/Caddy), set TRUST_PROXY=1 (or "true")
+// so rate limiting and IP-based logic use the correct client IP.
+if (process.env.TRUST_PROXY) {
+    const v = process.env.TRUST_PROXY;
+    app.set('trust proxy', v === 'true' ? 1 : v);
+}
+
 const PORT = process.env.PORT || 3000;
 const REPO_OWNER = 'robotnikz';
 const REPO_NAME = 'Sunflow';
@@ -46,8 +59,35 @@ const IS_MAIN = (() => {
     }
 })();
 
+// Treat DATA_DIR as configuration, but validate any override so filesystem paths are not
+// derived from uncontrolled input (helps CodeQL and avoids accidental writes to unexpected locations).
+const resolveSafeDataDir = (maybeDir) => {
+    const defaultDir = path.join(__dirname, 'data');
+    if (!maybeDir || typeof maybeDir !== 'string' || maybeDir.includes('\0')) return defaultDir;
+
+    const resolved = path.resolve(process.cwd(), maybeDir);
+
+    // CodeQL-friendly containment check (no loops / no case transforms):
+    // allow only paths that are within one of a few safe roots.
+    const isWithin = (parent, child) => {
+        const rel = path.relative(parent, child);
+        return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+    };
+
+    if (
+        isWithin(__dirname, resolved) ||
+        isWithin(process.cwd(), resolved) ||
+        isWithin(os.tmpdir(), resolved)
+    ) {
+        return resolved;
+    }
+
+    console.warn(`Ignoring unsafe DATA_DIR override: ${maybeDir}`);
+    return defaultDir;
+};
+
 // Data Directory Setup (Crucial for Docker persistence)
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const DATA_DIR = resolveSafeDataDir(process.env.DATA_DIR);
 if (!fs.existsSync(DATA_DIR)){
     fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -57,11 +97,73 @@ if (!fs.existsSync(UPLOADS_DIR)){
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
+
+
 // Upload config for middleware
-const upload = multer({ dest: UPLOADS_DIR });
+const upload = multer({
+    dest: UPLOADS_DIR,
+    limits: {
+        files: 1,
+        fileSize: Number(process.env.UPLOAD_MAX_BYTES || 15 * 1024 * 1024), // 15MB default
+        fieldSize: Number(process.env.UPLOAD_FIELD_MAX_BYTES || 256 * 1024),
+    },
+    fileFilter: (req, file, cb) => {
+        const name = String(file?.originalname || '').toLowerCase();
+        const isCsvByName = name.endsWith('.csv');
+        const mime = String(file?.mimetype || '').toLowerCase();
+        const isCsvByMime = mime.includes('csv') || mime === 'text/plain' || mime === 'application/octet-stream';
+        if (!isCsvByName && !isCsvByMime) {
+            // Don't throw (can cause connection resets while client is still streaming).
+            // Instead, skip the file and let the route return a clean 400.
+            req.fileValidationError = 'Only CSV uploads are allowed';
+            return cb(null, false);
+        }
+        cb(null, true);
+    }
+});
 
 const DB_FILE = path.join(DATA_DIR, 'solar_data.db');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
+
+const canWritePath = (p) => {
+    try {
+        fs.accessSync(p, fs.constants.W_OK);
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+const explainReadonlyDbAndExit = (details) => {
+    console.error('');
+    console.error('FATAL: SunFlow cannot write to its data directory / database.');
+    console.error(`DATA_DIR: ${DATA_DIR}`);
+    console.error(`DB_FILE:  ${DB_FILE}`);
+    if (details) console.error(details);
+    console.error('');
+    console.error('This usually happens after upgrading to a non-root container when your bind-mounted data');
+    console.error('directory (or the existing solar_data.db file) is owned by root or marked read-only.');
+    console.error('');
+    console.error('Fix options:');
+    console.error('- Ensure the host folder is writable (recommended)');
+    console.error('- Linux: `sudo chown -R 1000:1000 ./sunflow-data && sudo chmod -R u+rwX ./sunflow-data`');
+    console.error('- Docker helper (Linux/WSL):');
+    console.error('  `docker run --rm -v "${PWD}/sunflow-data:/data" alpine sh -lc "chown -R 1000:1000 /data || true"`');
+    console.error('- Windows (PowerShell): remove read-only attribute if set: `attrib -R .\\sunflow-data\\* /S /D`');
+    console.error('');
+    process.exit(1);
+};
+
+// Fail fast with a clear message if the DB file or data dir is not writable.
+if (fs.existsSync(DB_FILE)) {
+    if (!canWritePath(DB_FILE)) {
+        explainReadonlyDbAndExit('The existing DB file is not writable by the current process.');
+    }
+} else {
+    if (!canWritePath(DATA_DIR)) {
+        explainReadonlyDbAndExit('The data directory is not writable and the DB file does not yet exist.');
+    }
+}
 
 // --- SECURITY MIDDLEWARE ---
 // 1. Helmet: Sets various HTTP headers to secure the app
@@ -71,7 +173,32 @@ app.use(helmet({
 }));
 
 // 2. CORS: Allow cross-origin requests (Dashboard usage)
-app.use(cors());
+const devCorsAllowlist = new Set([
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+]);
+const corsAllowlist = new Set(
+    String(process.env.CORS_ORIGIN || process.env.SUNFLOW_CORS_ORIGIN || '')
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+);
+const shouldEnableCors = process.env.CORS_DISABLED !== 'true' && process.env.SUNFLOW_CORS_DISABLED !== 'true';
+if (shouldEnableCors) {
+    // Secure-by-default: in production, only allow explicitly configured origins.
+    // In dev/test, allow common local dev origin to keep Vite proxy setups simple.
+    app.use(cors({
+        origin: (origin, cb) => {
+            if (!origin) return cb(null, true);
+            const isDev = process.env.NODE_ENV !== 'production';
+            if (corsAllowlist.size > 0) return cb(null, corsAllowlist.has(origin));
+            if (isDev) return cb(null, devCorsAllowlist.has(origin));
+            return cb(null, false);
+        },
+        methods: ['GET', 'POST', 'DELETE'],
+        maxAge: 600,
+    }));
+}
 
 // 3. Rate Limiting: Prevent brute-force or accidental DoS
 const apiLimiter = rateLimit({
@@ -85,7 +212,104 @@ app.use('/api/', apiLimiter);
 // 4. Compression (Gzip): Reduces JSON payload size significantly
 app.use(compression());
 
-app.use(express.json());
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '1mb' }));
+
+// Optional: protect write/admin routes via Bearer token.
+// If SUNFLOW_ADMIN_TOKEN is unset, everything remains open (backwards compatible).
+const requireAdmin = (req, res, next) => {
+    const token = process.env.SUNFLOW_ADMIN_TOKEN;
+    if (!token) return next();
+
+    const auth = String(req.headers.authorization || '');
+    if (auth === `Bearer ${token}`) return next();
+    return res.status(401).json({ error: 'Unauthorized' });
+};
+
+const isAdminRequest = (req) => {
+    const token = process.env.SUNFLOW_ADMIN_TOKEN;
+    if (!token) return true;
+    const auth = String(req.headers.authorization || '');
+    return auth === `Bearer ${token}`;
+};
+
+const sanitizeInverterHost = (host) => {
+    if (!host || typeof host !== 'string') return null;
+    const h = host.trim();
+
+    // Must be IPv4[:port] only. This keeps the inverter request constrained to typical LAN IPs.
+    const m = /^([0-9]{1,3}(?:\.[0-9]{1,3}){3})(?::([0-9]{1,5}))?$/.exec(h);
+    if (!m) return null;
+
+    const ip = m[1];
+    const parts = ip.split('.').map(n => Number(n));
+    if (parts.length !== 4 || parts.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+
+    const [a, b] = parts;
+    const isPrivate = (
+        a === 10 ||
+        (a === 172 && b >= 16 && b <= 31) ||
+        (a === 192 && b === 168)
+    );
+    if (!isPrivate) return null;
+
+    const portRaw = m[2];
+    if (portRaw !== undefined) {
+        const port = Number(portRaw);
+        if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
+        return `${ip}:${port}`;
+    }
+
+    return ip;
+};
+
+const canonicalizeDiscordWebhookUrl = (webhookUrl) => {
+    if (!webhookUrl || typeof webhookUrl !== 'string') return null;
+    let u;
+    try {
+        u = new URL(webhookUrl);
+    } catch {
+        return null;
+    }
+    if (u.protocol !== 'https:') return null;
+
+    const host = u.hostname.toLowerCase();
+    // Discord webhook hosts (new + legacy). Keep narrow to avoid SSRF.
+    const allowedHosts = new Set(['discord.com', 'discordapp.com', 'canary.discord.com', 'ptb.discord.com']);
+    if (!allowedHosts.has(host)) return null;
+
+    // Require strict webhook path structure and canonicalize the origin.
+    // Typical format: /api/webhooks/<id>/<token>
+    if (!/^\/api\/webhooks\/\d+\/[A-Za-z0-9_-]+$/.test(u.pathname)) return null;
+
+    const canonical = new URL('https://discord.com');
+    canonical.pathname = u.pathname;
+    return canonical.toString();
+};
+
+const isAllowedDiscordWebhook = (webhookUrl) => !!canonicalizeDiscordWebhookUrl(webhookUrl);
+
+const stripDangerousKeys = (value) => {
+    if (!value || typeof value !== 'object') return value;
+    if (Array.isArray(value)) return value.map(stripDangerousKeys);
+
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+        if (k === '__proto__' || k === 'prototype' || k === 'constructor') continue;
+        out[k] = stripDangerousKeys(v);
+    }
+    return out;
+};
+
+const redactConfigForClient = (config) => {
+    const tokenSet = !!process.env.SUNFLOW_ADMIN_TOKEN;
+    const protectSecrets = process.env.SUNFLOW_PROTECT_SECRETS !== 'false';
+    if (!tokenSet || !protectSecrets) return config;
+
+    const safe = stripDangerousKeys(config);
+    if (safe?.notifications?.discordWebhook) safe.notifications.discordWebhook = '';
+    if (safe?.solcastApiKey) safe.solcastApiKey = '';
+    return safe;
+};
 
 // 5. Serve static files with Aggressive Caching (Immutable assets)
 // Vite generates filenames with hashes (e.g. index.12ea.js), so we can cache them "forever"
@@ -125,7 +349,9 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
                 soc REAL,
                 energy_day_prod REAL,
                 status_code INTEGER DEFAULT 1
-            )`);
+            )`, (err) => {
+                if (err) console.error('DB init error (energy_log):', err.message);
+            });
             
             // Migration: Add status_code column if it doesn't exist
             db.run("ALTER TABLE energy_log ADD COLUMN status_code INTEGER DEFAULT 1", (err) => {
@@ -136,7 +362,9 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
                 }
             });
 
-            db.run(`CREATE INDEX IF NOT EXISTS idx_timestamp ON energy_log(timestamp)`);
+            db.run(`CREATE INDEX IF NOT EXISTS idx_timestamp ON energy_log(timestamp)`, (err) => {
+                if (err) console.error('DB init error (idx_timestamp):', err.message);
+            });
 
             // Tariffs Table
             db.run(`CREATE TABLE IF NOT EXISTS tariffs (
@@ -145,13 +373,23 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
                 cost_per_kwh REAL NOT NULL,
                 feed_in_tariff REAL NOT NULL
             )`, () => {
+                if (isShuttingDown) return;
                 db.get("SELECT count(*) as count FROM tariffs", (err, row) => {
-                    if (row.count === 0) {
+                    if (err) {
+                        console.error('Failed to seed initial tariff:', err.message);
+                        return;
+                    }
+                    if (!row || row.count === 0) {
+                        if (isShuttingDown) return;
                         const oldConfig = getConfig();
                         console.log("Seeding initial tariff from config...");
                         const stmt = db.prepare("INSERT INTO tariffs (valid_from, cost_per_kwh, feed_in_tariff) VALUES (?, ?, ?)");
-                        stmt.run("2000-01-01", oldConfig.costPerKwh || 0.30, oldConfig.feedInTariff || 0.08);
-                        stmt.finalize();
+                        stmt.run("2000-01-01", oldConfig.costPerKwh || 0.30, oldConfig.feedInTariff || 0.08, (sErr) => {
+                            if (sErr) console.error('Failed to seed initial tariff:', sErr.message);
+                        });
+                        stmt.finalize((fErr) => {
+                            if (fErr) console.error('Failed to finalize seed statement:', fErr.message);
+                        });
                     }
                 });
             });
@@ -163,7 +401,9 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
                 amount REAL NOT NULL,
                 type TEXT NOT NULL, -- 'one_time' or 'yearly'
                 date DATE NOT NULL
-            )`);
+            )`, (err) => {
+                if (err) console.error('DB init error (expenses):', err.message);
+            });
 
             // Main data table for long-term storage from imports
             db.run(`CREATE TABLE IF NOT EXISTS energy_data (
@@ -175,7 +415,9 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
                 battery_charge_wh REAL,
                 battery_discharge_wh REAL,
                 load_wh REAL
-            )`);
+            )`, (err) => {
+                if (err) console.error('DB init error (energy_data):', err.message);
+            });
         });
     }
 });
@@ -255,11 +497,13 @@ const saveConfig = (cfg) => {
         ...current,
         ...cfg
     };
-    
-    // Update Cache immediately
-    configCache = diskConfig;
-    
+
+    // Persist first. Do NOT populate the in-memory cache from request-derived values.
+    // This avoids taint propagation from HTTP input into outbound-request sinks (CodeQL SSRF).
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(diskConfig, null, 2));
+
+    // Invalidate cache so subsequent reads come from disk.
+    configCache = null;
 };
 
 // Moved fetchFroniusData below to be near cache logic
@@ -310,8 +554,15 @@ const getTodaySunTimes = async (config) => {
     }
 
     try {
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=sunrise,sunset&timezone=auto&forecast_days=1`;
-        const response = await axios.get(url, { timeout: 8000 });
+        // CodeQL-friendly SSRF hardening: fixed host + URLSearchParams encoding.
+        const u = new URL('https://api.open-meteo.com/v1/forecast');
+        u.searchParams.set('latitude', String(lat));
+        u.searchParams.set('longitude', String(lon));
+        u.searchParams.set('daily', 'sunrise,sunset');
+        u.searchParams.set('timezone', 'auto');
+        u.searchParams.set('forecast_days', '1');
+
+        const response = await axios.get(u.toString(), { timeout: 8000 });
 
         const sunriseIso = Array.isArray(response?.data?.daily?.sunrise) ? response.data.daily.sunrise[0] : null;
         const sunsetIso = Array.isArray(response?.data?.daily?.sunset) ? response.data.daily.sunset[0] : null;
@@ -378,6 +629,31 @@ let inverterCache = {
 };
 
 const fetchFroniusData = async (ip) => {
+    // Inline, CodeQL-friendly SSRF hardening:
+    // accept only private IPv4[:port] and build the URL from a fixed template.
+    const rawHost = typeof ip === 'string' ? ip.trim() : '';
+    const hostMatch = /^([0-9]{1,3}(?:\.[0-9]{1,3}){3})(?::([0-9]{1,5}))?$/.exec(rawHost);
+    if (!hostMatch) return null;
+    const host = hostMatch[1];
+    const portRaw = hostMatch[2];
+
+    const parts = host.split('.').map(n => Number(n));
+    if (parts.length !== 4 || parts.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+    const [a, b] = parts;
+    const isPrivate = (
+        a === 10 ||
+        (a === 172 && b >= 16 && b <= 31) ||
+        (a === 192 && b === 168)
+    );
+    if (!isPrivate) return null;
+
+    let port = '';
+    if (portRaw !== undefined) {
+        const p = Number(portRaw);
+        if (!Number.isInteger(p) || p < 1 || p > 65535) return null;
+        port = String(p);
+    }
+
     const now = Date.now();
     // Return cached data if request is within 1000ms (1 second) of the last one
     if (inverterCache.data && (now - inverterCache.timestamp < 1000)) {
@@ -385,8 +661,11 @@ const fetchFroniusData = async (ip) => {
     }
 
     try {
-        const url = `http://${ip}/solar_api/v1/GetPowerFlowRealtimeData.fcgi`;
-        const response = await axios.get(url, { timeout: 3000 });
+        const url = new URL('http://127.0.0.1/solar_api/v1/GetPowerFlowRealtimeData.fcgi');
+        url.hostname = host;
+        if (port) url.port = port;
+
+        const response = await axios.get(url.toString(), { timeout: 3000 });
         
         // Update Cache
         inverterCache = {
@@ -412,10 +691,26 @@ const notifyState = {
 };
 
 const sendDiscordNotification = async (webhookUrl, title, description, color, fields = []) => {
-    if (!webhookUrl || typeof webhookUrl !== 'string' || !webhookUrl.startsWith('http')) return;
+    // Inline, CodeQL-friendly SSRF hardening: allowlist Discord hosts + strict webhook path.
+    if (!webhookUrl || typeof webhookUrl !== 'string') return;
+    let u;
+    try {
+        u = new URL(webhookUrl);
+    } catch {
+        return;
+    }
+    if (u.protocol !== 'https:') return;
+
+    const host = u.hostname.toLowerCase();
+    const allowedHosts = new Set(['discord.com', 'discordapp.com', 'canary.discord.com', 'ptb.discord.com']);
+    if (!allowedHosts.has(host)) return;
+
+    const m = /^\/api\/webhooks\/(\d+)\/([A-Za-z0-9_-]+)$/.exec(u.pathname);
+    if (!m) return;
+    const safePath = `/api/webhooks/${m[1]}/${m[2]}`;
 
     try {
-        await axios.post(webhookUrl, {
+        await DISCORD_WEBHOOK_CLIENT.post(safePath, {
             embeds: [{
                 title: title,
                 description: description,
@@ -800,8 +1095,14 @@ if (!IS_TEST) setInterval(async () => {
     // Insert with Explicit LOCAL TIMESTAMP
     const timestamp = getLocalTimestamp();
     const stmt = db.prepare(`INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, energy_day_prod, status_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
-    stmt.run(timestamp, p_pv, p_load, p_grid, p_batt, soc, e_day, statusCode);
-    stmt.finalize();
+    stmt.run(timestamp, p_pv, p_load, p_grid, p_batt, soc, e_day, statusCode, (err) => {
+        if (err) {
+            console.error('Failed to insert energy_log row:', err.message);
+        }
+    });
+    stmt.finalize((err) => {
+        if (err) console.error('Failed to finalize energy_log insert statement:', err.message);
+    });
 
 }, 60 * 1000); // 1 Minute
 
@@ -863,19 +1164,99 @@ const getVersionInfo = async () => {
 
 // --- API ---
 
-app.get('/api/config', (req, res) => res.json(getConfig()));
+app.get('/api/config', (req, res) => {
+    const config = getConfig();
+    if (isAdminRequest(req)) return res.json(config);
+    return res.json(redactConfigForClient(config));
+});
 
-app.post('/api/config', (req, res) => {
-    saveConfig(req.body);
+app.post('/api/config', requireAdmin, (req, res) => {
+    // Basic input hardening to avoid prototype pollution and accidental huge payloads.
+    const patch = stripDangerousKeys(req.body);
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+        return res.status(400).json({ error: 'Invalid config payload' });
+    }
+
+    if (patch.inverterIp !== undefined) {
+        const safeHost = sanitizeInverterHost(patch.inverterIp);
+        if (!safeHost) return res.status(400).json({ error: 'Invalid inverterIp (expected host[:port])' });
+        patch.inverterIp = safeHost;
+    }
+    if (patch.notifications !== undefined) {
+        if (!patch.notifications || typeof patch.notifications !== 'object' || Array.isArray(patch.notifications)) {
+            return res.status(400).json({ error: 'Invalid notifications payload' });
+        }
+        if (patch.notifications.discordWebhook !== undefined) {
+            let w = patch.notifications.discordWebhook;
+            if (w === null) {
+                w = '';
+                patch.notifications.discordWebhook = '';
+            }
+            if (w !== '' && w !== undefined && typeof w !== 'string') {
+                return res.status(400).json({ error: 'Invalid Discord webhook URL' });
+            }
+            if (w && typeof w === 'string') {
+                const canonical = canonicalizeDiscordWebhookUrl(w);
+                if (!canonical) return res.status(400).json({ error: 'Invalid Discord webhook URL' });
+                patch.notifications.discordWebhook = canonical;
+            }
+        }
+    }
+
+    // Validate Solcast configuration to avoid using arbitrary user input in outbound request URLs.
+    // Allow clearing values via null/empty string; otherwise enforce a conservative character set.
+    const isValidSolcastToken = (v) => typeof v === 'string' && v.length > 0 && v.length <= 128 && /^[A-Za-z0-9_-]+$/.test(v);
+
+    if (patch.solcastApiKey !== undefined) {
+        if (patch.solcastApiKey === null) {
+            patch.solcastApiKey = '';
+        } else if (typeof patch.solcastApiKey !== 'string') {
+            return res.status(400).json({ error: 'Invalid Solcast API key' });
+        } else {
+            const trimmed = patch.solcastApiKey.trim();
+            if (trimmed === '') {
+                patch.solcastApiKey = '';
+            } else if (!isValidSolcastToken(trimmed)) {
+                return res.status(400).json({ error: 'Invalid Solcast API key' });
+            } else {
+                patch.solcastApiKey = trimmed;
+            }
+        }
+    }
+
+    if (patch.solcastSiteId !== undefined) {
+        if (patch.solcastSiteId === null) {
+            patch.solcastSiteId = '';
+        } else if (typeof patch.solcastSiteId !== 'string') {
+            return res.status(400).json({ error: 'Invalid Solcast site ID' });
+        } else {
+            const trimmed = patch.solcastSiteId.trim();
+            if (trimmed === '') {
+                patch.solcastSiteId = '';
+            } else if (!isValidSolcastToken(trimmed)) {
+                return res.status(400).json({ error: 'Invalid Solcast site ID' });
+            } else {
+                patch.solcastSiteId = trimmed;
+            }
+        }
+    }
+
+    saveConfig(patch);
     res.json({ success: true });
 });
 
-app.post('/api/test-notification', async (req, res) => {
-    const { webhookUrl } = req.body;
-    if (!webhookUrl || typeof webhookUrl !== 'string') return res.status(400).json({ error: "Missing or invalid webhook URL" });
-    
+app.post('/api/test-notification', requireAdmin, async (req, res) => {
+    // Important: do NOT accept arbitrary webhook URLs from the request body.
+    // This endpoint only tests the persisted config webhook (prevents SSRF via request input).
+    const config = getConfig();
+    const configuredWebhook = config?.notifications?.discordWebhook;
+    const safeWebhookUrl = canonicalizeDiscordWebhookUrl(configuredWebhook);
+    if (!safeWebhookUrl) {
+        return res.status(400).json({ error: 'Discord webhook not configured' });
+    }
+
     try {
-        await sendDiscordNotification(webhookUrl, "🔔 Test Notification", "SunFlow notifications are working correctly!", 16776960);
+        await sendDiscordNotification(safeWebhookUrl, "🔔 Test Notification", "SunFlow notifications are working correctly!", 16776960);
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -1091,22 +1472,27 @@ app.get('/api/forecast', async (req, res) => {
         return res.json(solcastCache.data);
     }
 
-                    // Only do this before sunset (hard boundary via Open-Meteo when possible).
+    // Outside daylight window: avoid calling Solcast at night. Serve cached data if present.
     if (!isDaytime) {
-                    const sunTimes = await getTodaySunTimes(config);
-                    const isDaylightNow = sunTimes ? isNowBetweenSunriseAndSunset(sunTimes) : null;
-                    const isBeforeSunsetWindow = (typeof isDaylightNow === 'boolean')
-                        ? isDaylightNow
-                        : (new Date().getHours() >= 6 && new Date().getHours() < 18);
-
-                    const canUseReserveNow = isBeforeSunsetWindow && soc > (reserveSocPct + 0.5) && aboveReserveKwh > 0;
-         return res.json({ forecasts: [] });
+        if (solcastCache.data) return res.json(solcastCache.data);
+        return res.json({ forecasts: [] });
     }
 
     // 3. Fetch new data
     try {
-        const url = `https://api.solcast.com.au/rooftop_sites/${config.solcastSiteId}/forecasts?format=json&api_key=${config.solcastApiKey}`;
-        const response = await axios.get(url, { timeout: 8000 });
+        // Inline, CodeQL-friendly validation at the sink: keep host fixed and constrain path/query tokens.
+        const siteId = typeof config.solcastSiteId === 'string' ? config.solcastSiteId.trim() : '';
+        const apiKey = typeof config.solcastApiKey === 'string' ? config.solcastApiKey.trim() : '';
+        if (!siteId || !apiKey || siteId.length > 128 || apiKey.length > 128 || !/^[A-Za-z0-9_-]+$/.test(siteId) || !/^[A-Za-z0-9_-]+$/.test(apiKey)) {
+            return res.status(400).json({ error: 'Invalid Solcast configuration' });
+        }
+
+        const u = new URL('https://api.solcast.com.au');
+        u.pathname = `/rooftop_sites/${encodeURIComponent(siteId)}/forecasts`;
+        u.searchParams.set('format', 'json');
+        u.searchParams.set('api_key', apiKey);
+
+        const response = await axios.get(u.toString(), { timeout: 8000 });
         
         solcastCache = {
             timestamp: now,
@@ -1125,6 +1511,16 @@ app.get('/api/forecast', async (req, res) => {
 });
 
 // TARIFFS
+const isFiniteNumber = (value) => typeof value === 'number' && Number.isFinite(value);
+
+const isValidDateOnly = (value) => {
+    if (typeof value !== 'string') return false;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const d = new Date(`${value}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return false;
+    return d.toISOString().startsWith(value);
+};
+
 app.get('/api/tariffs', (req, res) => {
     db.all("SELECT id, valid_from as validFrom, cost_per_kwh as costPerKwh, feed_in_tariff as feedInTariff FROM tariffs ORDER BY valid_from ASC", (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -1132,11 +1528,21 @@ app.get('/api/tariffs', (req, res) => {
     });
 });
 
-app.post('/api/tariffs', (req, res) => {
-    const { validFrom, costPerKwh, feedInTariff } = req.body;
+app.post('/api/tariffs', requireAdmin, (req, res) => {
+    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : null;
+    if (!body) return res.status(400).json({ error: 'Invalid JSON payload' });
+    const { validFrom, costPerKwh, feedInTariff } = body;
     
     // Strict Input Validation
     if (!validFrom || typeof costPerKwh !== 'number' || typeof feedInTariff !== 'number') {
+        return res.status(400).json({ error: "Invalid Input Types" });
+    }
+
+    if (!isValidDateOnly(validFrom)) {
+        return res.status(400).json({ error: "Invalid Input Types" });
+    }
+
+    if (!isFiniteNumber(costPerKwh) || !isFiniteNumber(feedInTariff) || costPerKwh < 0 || feedInTariff < 0) {
         return res.status(400).json({ error: "Invalid Input Types" });
     }
 
@@ -1148,9 +1554,9 @@ app.post('/api/tariffs', (req, res) => {
     stmt.finalize();
 });
 
-app.delete('/api/tariffs/:id', (req, res) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+app.delete('/api/tariffs/:id', requireAdmin, (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid ID" });
 
     db.serialize(() => {
         db.get("SELECT count(*) as count FROM tariffs", (err, row) => {
@@ -1174,11 +1580,21 @@ app.get('/api/expenses', (req, res) => {
     });
 });
 
-app.post('/api/expenses', (req, res) => {
-    const { name, amount, type, date } = req.body;
+app.post('/api/expenses', requireAdmin, (req, res) => {
+    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : null;
+    if (!body) return res.status(400).json({ error: 'Invalid JSON payload' });
+    const { name, amount, type, date } = body;
     
     // Strict Input Validation
-    if (!name || typeof amount !== 'number' || !date || (type !== 'one_time' && type !== 'yearly')) {
+    if (typeof name !== 'string' || name.trim().length === 0 || typeof amount !== 'number' || !date || (type !== 'one_time' && type !== 'yearly')) {
+        return res.status(400).json({ error: "Invalid Input Types" });
+    }
+
+    if (!isValidDateOnly(date)) {
+        return res.status(400).json({ error: "Invalid Input Types" });
+    }
+
+    if (!isFiniteNumber(amount) || amount < 0) {
         return res.status(400).json({ error: "Invalid Input Types" });
     }
 
@@ -1190,9 +1606,9 @@ app.post('/api/expenses', (req, res) => {
     stmt.finalize();
 });
 
-app.delete('/api/expenses/:id', (req, res) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+app.delete('/api/expenses/:id', requireAdmin, (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid ID" });
 
     db.run("DELETE FROM expenses WHERE id = ?", id, function(err) {
         if (err) return res.status(500).json({ error: err.message });
@@ -1426,13 +1842,17 @@ const getHourlyGridEnergyKwh = (startTs, endTs, callback) => {
 const awattarCache = new Map();
 
 const fetchAwattarMarketdata = async ({ country, startMs, endMs }) => {
-    const c = (country || 'DE').toUpperCase();
-    const baseUrl = c === 'AT' ? 'https://api.awattar.at/v1/marketdata' : 'https://api.awattar.de/v1/marketdata';
+    // CodeQL-friendly SSRF hardening: explicit allowlist + fixed origins.
+    const cRaw = String(country || 'DE').toUpperCase();
+    const c = cRaw === 'AT' ? 'AT' : 'DE';
     const cacheKey = `${c}:${startMs}:${endMs}`;
     if (awattarCache.has(cacheKey)) return awattarCache.get(cacheKey);
 
-    const url = `${baseUrl}?start=${startMs}&end=${endMs}`;
-    const response = await axios.get(url, { timeout: 10000 });
+    const u = new URL(c === 'AT' ? 'https://api.awattar.at/v1/marketdata' : 'https://api.awattar.de/v1/marketdata');
+    u.searchParams.set('start', String(startMs));
+    u.searchParams.set('end', String(endMs));
+
+    const response = await axios.get(u.toString(), { timeout: 10000 });
     const data = response.data?.data || [];
 
     // Map: local hour key -> €/kWh (marketprice is Eur/MWh)
@@ -1862,19 +2282,43 @@ app.get('/api/simulation-data', (req, res) => {
 
 // HISTORY
 app.get('/api/history', (req, res) => {
-    const range = req.query.range || 'day'; 
-    const startDate = req.query.start; 
-    const endDate = req.query.end;     
+    const range = String(req.query.range || 'day');
+    const startDate = req.query.start;
+    const endDate = req.query.end;
     let queryTimeClause = "";
     let groupBy = 1; 
 
     // Variable declaration for boundary checks
     let start, end;
 
-    if (range === 'custom' && startDate && endDate) {
-        start = new Date(startDate);
+    const allowedRanges = new Set(['hour', 'day', 'week', 'month', 'year', 'custom']);
+    if (!allowedRanges.has(range)) {
+        return res.status(400).json({ error: 'Invalid range' });
+    }
+
+    // Validate offset (only meaningful for non-custom ranges)
+    if (range !== 'custom' && req.query.offset !== undefined) {
+        const raw = Array.isArray(req.query.offset) ? req.query.offset[0] : req.query.offset;
+        const n = Number(raw);
+        if (!Number.isFinite(n) || !Number.isInteger(n)) {
+            return res.status(400).json({ error: 'Invalid offset' });
+        }
+    }
+
+    if (range === 'custom') {
+        if (!startDate || !endDate) {
+            return res.status(400).json({ error: 'Missing start/end for custom range' });
+        }
+
+        start = new Date(String(startDate));
         start.setHours(0,0,0,0);
-        end = new Date(endDate);
+        end = new Date(String(endDate));
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+            return res.status(400).json({ error: 'Invalid start/end date' });
+        }
+        if (end.getTime() < start.getTime()) {
+            return res.status(400).json({ error: 'End date must be >= start date' });
+        }
         end.setDate(end.getDate() + 1);
         end.setHours(0,0,0,0);
     } else {
@@ -1975,6 +2419,21 @@ app.get('/api/history', (req, res) => {
 
         db.all(query, [s, e, s, e], (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
+
+            // De-duplicate overlapping timestamps between energy_log (high-res) and energy_data (hourly).
+            // Prefer high-res rows when timestamps collide to avoid double-counting.
+            rows.sort((a, b) => {
+                const t = String(a.timestamp).localeCompare(String(b.timestamp));
+                if (t !== 0) return t;
+                return (Number(b.is_high_res) || 0) - (Number(a.is_high_res) || 0);
+            });
+            const seenTimestamps = new Set();
+            rows = rows.filter(r => {
+                const ts = String(r.timestamp);
+                if (seenTimestamps.has(ts)) return false;
+                seenTimestamps.add(ts);
+                return true;
+            });
             
             let stats = { production: 0, consumption: 0, imported: 0, exported: 0, batteryCharged: 0, batteryDischarged: 0, autonomy: 0, selfConsumption: 0, costSaved: 0, earnings: 0 };
 
@@ -2228,7 +2687,8 @@ app.get('/api/energy', (req, res) => {
                     power_pv as production,
                     power_load as consumption,
                     power_grid as grid,
-                    power_battery as battery
+                    power_battery as battery,
+                    1 as is_high_res
                 FROM energy_log
                 WHERE timestamp BETWEEN ? AND ?
                 
@@ -2239,10 +2699,11 @@ app.get('/api/energy', (req, res) => {
                     production_wh as production, 
                     load_wh as consumption,
                     (grid_consumption_wh - grid_feed_in_wh) as grid,
-                    (battery_discharge_wh - battery_charge_wh) as battery
+                    (battery_discharge_wh - battery_charge_wh) as battery,
+                    0 as is_high_res
                 FROM energy_data
                 WHERE timestamp BETWEEN ? AND ?
-                ORDER BY timestamp ASC
+                ORDER BY timestamp ASC, is_high_res DESC
             `;
             params = [start, end, start, end];
         }
@@ -2288,9 +2749,17 @@ app.get('/api/energy', (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!start) rows.reverse();
         
-        // De-duplicate timestamps if using UNION (prefer Log if exists, though overlap should be minimal due to cleanup)
-        // With UNION ALL, if we have overlap, we might get double points. 
-        // Simple distinct by timestamp:
+        // De-duplicate timestamps if using UNION ALL.
+        // Prefer energy_log rows on collisions.
+        const hasRank = rows.some(r => r && Object.prototype.hasOwnProperty.call(r, 'is_high_res'));
+        if (hasRank) {
+            rows.sort((a, b) => {
+                const t = String(a.timestamp).localeCompare(String(b.timestamp));
+                if (t !== 0) return t;
+                return (Number(b.is_high_res) || 0) - (Number(a.is_high_res) || 0);
+            });
+        }
+
         const seen = new Set();
         const cleanRows = [];
         for (const r of rows) {
@@ -2299,7 +2768,16 @@ app.get('/api/energy', (req, res) => {
                 cleanRows.push(r);
             }
         }
-        res.json(cleanRows);
+
+        const output = cleanRows.map(r => ({
+            timestamp: r.timestamp,
+            production: r.production,
+            consumption: r.consumption,
+            grid: r.grid,
+            battery: r.battery,
+        }));
+
+        res.json(output);
     });
 });
 
@@ -2307,13 +2785,53 @@ app.get('/api/energy', (req, res) => {
  * IMPORT CSV API
  * Handles file upload and parses CSV data into the database
  */
-app.post('/api/import-csv', upload.single('file'), (req, res) => {
+app.post('/api/import-csv', requireAdmin, upload.single('file'), (req, res) => {
+    if (req.fileValidationError) {
+        return res.status(400).json({ error: req.fileValidationError });
+    }
     if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const mapping = JSON.parse(req.body.mapping || '{}');
-    const filePath = req.file.path;
+    // Keep all filesystem operations confined to UPLOADS_DIR.
+    // Use path.basename() as a sanitizer that CodeQL recognizes.
+    const safeFileName = path.basename(String(req.file.path || '')).toLowerCase();
+    if (!safeFileName) {
+        return res.status(400).json({ error: 'Invalid upload path' });
+    }
+    // Multer's default filename is a 32-char hex string; enforce this to make path usage clearly safe.
+    if (!/^[0-9a-f]{32}$/.test(safeFileName)) {
+        return res.status(400).json({ error: 'Invalid upload path' });
+    }
+    const filePath = path.resolve(UPLOADS_DIR, safeFileName);
+    const uploadsRoot = path.resolve(UPLOADS_DIR) + path.sep;
+    if (!filePath.startsWith(uploadsRoot)) {
+        return res.status(400).json({ error: 'Invalid upload path' });
+    }
+
+    if (req.body?.mapping === undefined) {
+        try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+        return res.status(400).json({ error: 'Missing mapping' });
+    }
+
+    let mapping = null;
+    try {
+        mapping = JSON.parse(req.body.mapping);
+    } catch {
+        try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+        return res.status(400).json({ error: 'Invalid mapping JSON' });
+    }
+
+    if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping)) {
+        try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+        return res.status(400).json({ error: 'Invalid mapping' });
+    }
+
+    if (!mapping.timestamp || typeof mapping.timestamp !== 'string' || !mapping.timestamp.trim()) {
+        try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+        return res.status(400).json({ error: 'Invalid mapping (missing timestamp)' });
+    }
+
     const fileContent = fs.readFileSync(filePath, 'utf8');
 
     Papa.parse(fileContent, {
@@ -2322,7 +2840,7 @@ app.post('/api/import-csv', upload.single('file'), (req, res) => {
         complete: (results) => {
              const rows = results.data;
              if (rows.length === 0) {
-                 if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                 try { fs.unlinkSync(filePath); } catch { /* ignore */ }
                  return res.json({ success: true, imported: 0 });
              }
 
@@ -2331,7 +2849,7 @@ app.post('/api/import-csv', upload.single('file'), (req, res) => {
                                  .filter(r => !isNaN(r._d.getTime()));
                                  
              if (dateRows.length === 0) {
-                 if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                 try { fs.unlinkSync(filePath); } catch { /* ignore */ }
                  return res.json({ success: true, imported: 0 });
              }
 
@@ -2408,7 +2926,7 @@ app.post('/api/import-csv', upload.single('file'), (req, res) => {
                  stmtData.finalize();
                  
                  db.run("COMMIT", (err) => {
-                     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                     try { fs.unlinkSync(filePath); } catch { /* ignore */ }
                      if (err) return res.status(500).json({ error: "Commit failed: " + err.message });
                      
                      // Recalculate calibration values after every successful import
@@ -2420,7 +2938,7 @@ app.post('/api/import-csv', upload.single('file'), (req, res) => {
              });
         },
         error: (err) => {
-             if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+             try { fs.unlinkSync(filePath); } catch { /* ignore */ }
              res.status(500).json({ error: "CSV Parsing failed: " + err.message });
         }
     });
@@ -2430,13 +2948,36 @@ app.post('/api/import-csv', upload.single('file'), (req, res) => {
  * PREVIEW CSV API
  * Returns the headers and first 5 rows to help user map columns
  */
-app.post('/api/preview-csv', upload.single('file'), (req, res) => {
+app.post('/api/preview-csv', requireAdmin, upload.single('file'), (req, res) => {
+    if (req.fileValidationError) {
+        return res.status(400).json({ error: req.fileValidationError });
+    }
     if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const filePath = req.file.path;
-    const fileContent = fs.readFileSync(filePath, 'utf8');
+    // Keep all filesystem operations confined to UPLOADS_DIR.
+    // Use path.basename() as a sanitizer that CodeQL recognizes.
+    const safeFileName = path.basename(String(req.file.path || '')).toLowerCase();
+    if (!safeFileName) {
+        return res.status(400).json({ error: 'Invalid upload path' });
+    }
+    if (!/^[0-9a-f]{32}$/.test(safeFileName)) {
+        return res.status(400).json({ error: 'Invalid upload path' });
+    }
+    const filePath = path.resolve(UPLOADS_DIR, safeFileName);
+    const uploadsRoot = path.resolve(UPLOADS_DIR) + path.sep;
+    if (!filePath.startsWith(uploadsRoot)) {
+        return res.status(400).json({ error: 'Invalid upload path' });
+    }
+
+    let fileContent;
+    try {
+        fileContent = fs.readFileSync(filePath, 'utf8');
+    } catch (e) {
+        try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+        return res.status(400).json({ error: 'Failed to read uploaded file' });
+    }
     
     // Parse partial
     Papa.parse(fileContent, {
@@ -2444,14 +2985,55 @@ app.post('/api/preview-csv', upload.single('file'), (req, res) => {
         preview: 5,
         skipEmptyLines: true,
         complete: (results) => {
-            fs.unlinkSync(filePath); // Cleanup temp file immediately
+            try { fs.unlinkSync(filePath); } catch { /* ignore */ }
             res.json({ headers: results.meta.fields, preview: results.data });
         },
         error: (err) => {
-             fs.unlinkSync(filePath);
+             try { fs.unlinkSync(filePath); } catch { /* ignore */ }
              res.status(500).json({ error: err.message });
         }
     });
+});
+
+// Central error handler (important for multer upload limits and fileFilter errors)
+app.use((err, req, res, next) => {
+    if (!err) return next();
+    if (res.headersSent) return next(err);
+
+    const msg = String(err?.message || '');
+
+    // Body parser / JSON errors
+    if (err?.type === 'entity.parse.failed' || err instanceof SyntaxError) {
+        return res.status(400).json({ error: 'Invalid JSON payload' });
+    }
+
+    if (err?.type === 'entity.too.large') {
+        return res.status(413).json({ error: 'Request body too large' });
+    }
+
+    // Multer errors for uploads
+    const isMulterError = err?.name === 'MulterError' || (multer && err instanceof multer.MulterError);
+    if (isMulterError) {
+        const code = err.code;
+        if (code === 'LIMIT_FILE_SIZE') {
+            return res.status(413).json({ error: 'File too large' });
+        }
+        if (code === 'LIMIT_FILE_COUNT') {
+            return res.status(400).json({ error: 'Too many files' });
+        }
+        if (code === 'LIMIT_FIELD_SIZE') {
+            return res.status(413).json({ error: 'Request field too large' });
+        }
+        return res.status(400).json({ error: 'Upload failed' });
+    }
+
+    // fileFilter rejects
+    if (msg.includes('Only CSV uploads are allowed')) {
+        return res.status(400).json({ error: 'Only CSV uploads are allowed' });
+    }
+
+    // Default
+    return res.status(500).json({ error: msg || 'Internal Server Error' });
 });
 
 app.get(/.*/, (req, res) => {
@@ -2460,9 +3042,13 @@ app.get(/.*/, (req, res) => {
 
 let httpServer = null;
 
+let isShuttingDown = false;
+
 // Graceful Shutdown: Close DB connection ensures journal is flushed
 const shutdown = (exitProcess = true) => {
     console.log("Shutting down...");
+
+    isShuttingDown = true;
 
     if (httpServer) {
         try {

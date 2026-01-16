@@ -12,7 +12,7 @@
   <!-- Badges -->
   [![CI/CD Pipeline](https://github.com/robotnikz/Sunflow/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/robotnikz/Sunflow/actions/workflows/docker-publish.yml)
   [![GitHub Release](https://img.shields.io/github/v/release/robotnikz/Sunflow?logo=docker&label=ghcr.io)](https://github.com/robotnikz/Sunflow/pkgs/container/sunflow)
-  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENCE)
   [![Frontend](https://img.shields.io/badge/Stack-React%20%7C%20Node.js%20%7C%20SQLite-blue)](https://reactjs.org/)
   
 </div>
@@ -94,14 +94,16 @@ Solar is an investment. Track it like one.
 
 SunFlow is built as a lightweight Docker container. You can run it on a Raspberry Pi, a Synology NAS, or any server.
 
-### Prerequisites
+### Docker Prerequisites
 1.  **Fronius Gen24 Inverter** (Symo/Primo) with `Solar API` enabled.
     *   *Enable via Inverter Web Interface: Communication > Solar API > Enable.*
 2.  **Docker** installed on your machine.
 
 ### Method 1: Docker Compose (Recommended)
+> [!TIP]
+> For production, consider pinning a version tag (e.g. `ghcr.io/robotnikz/sunflow:<version>`) so updates/rollbacks are explicit.
 
-Create a `docker-compose.yml` file:
+Use the included `docker-compose.yml` in this repository (or create your own):
 
 ```yaml
 version: '3.8'
@@ -114,6 +116,8 @@ services:
     ports:
       - "3000:3000"
     volumes:
+      # Persist database and config
+      # Data will be stored in a 'sunflow-data' folder next to this file
       - ./sunflow-data:/app/data
     environment:
       - TZ=Europe/Berlin  # Set your Timezone!
@@ -121,15 +125,22 @@ services:
 
 Run it:
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
+
+> [!IMPORTANT]
+> **Upgrade safety (data/history):** keep your `./sunflow-data` directory when updating. If you delete or change this mount, SunFlow will start with an empty database.
+
+> [!TIP]
+> For upgrades, backups, rollback and troubleshooting, see [OPERATIONS.md](OPERATIONS.md).
 
 ### Method 2: Docker CLI
 
 ```bash
 docker run -d \
   -p 3000:3000 \
-  -v $(pwd)/sunflow-data:/app/data \
+  # Recommended (compat): bind mount to a host folder
+  -v "$(pwd)/sunflow-data:/app/data" \
   -e TZ=Europe/Berlin \
   --name sunflow \
   ghcr.io/robotnikz/sunflow:latest
@@ -148,23 +159,32 @@ Once running, access the dashboard at `http://localhost:3000`.
 5.  **Tariffs & Expenses:** Add your grid costs and installation expenses to activate the ROI widget.
 6.  **Appliances:** Configure your heavy consumers (Watts & Duration).
 
+For day-2 ops (backup/restore, upgrades, common issues), see [OPERATIONS.md](OPERATIONS.md).
+
 ---
 
-## 🛠 Tech Stack
+## 🔒 Security & Hardening
 
-*   **Frontend:** React 18, TypeScript, TailwindCSS, Recharts, Lucide Icons.
-*   **Backend:** Node.js (Express), SQLite3.
-*   **Architecture:** Single-container monolith for easy deployment (GitHub Actions -> GHCR).
+SunFlow is intended for self-hosting on a trusted network. If you expose it beyond your LAN, put it behind a reverse proxy with TLS and authentication.
+
+- **Optional admin token (recommended):** set `SUNFLOW_ADMIN_TOKEN` and call write endpoints with `Authorization: Bearer <token>`.
+- **CORS allowlist (recommended):** set `CORS_ORIGIN` to a comma-separated list of allowed browser origins (prod defaults to no cross-origin).
+- **Reverse proxy setups:** set `TRUST_PROXY=1` so rate limiting and IP logic work correctly.
+
+For details and additional recommendations see [AUDIT.md](AUDIT.md).
+
+Practical checklist for self-hosting: [SECURITY_CHECKLIST.md](SECURITY_CHECKLIST.md).
+
+Operations runbook (backup/restore, upgrades, troubleshooting): [OPERATIONS.md](OPERATIONS.md).
+
+---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Whether it's fixing a bug, adding a translation, or suggesting a new feature.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for developer setup, testing, and PR guidelines.
 
-1.  Fork the repository.
-2.  Create your feature branch (`git checkout -b feature/AmazingFeature`).
-3.  Commit your changes.
-4.  Push to the branch.
-5.  Open a Pull Request.
+- Test strategy & scenarios: [TESTPLAN.md](TESTPLAN.md)
+- Quick manual UI regression checklist: [UX_CHECKLIST.md](UX_CHECKLIST.md)
 
 ---
 

@@ -4,17 +4,18 @@ services:
   sunflow:
     # Uses the public image built by GitHub Actions
     image: ghcr.io/robotnikz/sunflow:latest
-    
+
     container_name: sunflow
     restart: unless-stopped
-    
+
     ports:
       - "3000:3000"
-      
+
     volumes:
       # Persist database and config
       # Data will be stored in a 'sunflow-data' folder next to this file
       - ./sunflow-data:/app/data
-      
+
     environment:
       - TZ=Europe/Berlin
+
