@@ -129,6 +129,11 @@ describe('Backend API (integration)', () => {
         db.run(sql, params, (err: any) => (err ? reject(err) : resolve()));
       });
 
+    const close = () =>
+      new Promise<void>((resolve, reject) => {
+        db.close((err: any) => (err ? reject(err) : resolve()));
+      });
+
     await run(`CREATE TABLE IF NOT EXISTS energy_data (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       timestamp DATETIME UNIQUE,
@@ -149,7 +154,7 @@ describe('Backend API (integration)', () => {
       ['2021-01-01 01:00:00', 2000, 0]
     );
 
-    db.close();
+    await close();
 
     const res = await request(app).get(
       '/api/dynamic-pricing/awattar/compare?country=DE&from=2021-01-01&to=2021-01-02&surchargeCt=0&vatPercent=0'
