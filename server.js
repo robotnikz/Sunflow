@@ -616,8 +616,30 @@ let inverterCache = {
 };
 
 const fetchFroniusData = async (ip) => {
-    const safeHost = sanitizeInverterHost(ip);
-    if (!safeHost) return null;
+    // Inline, CodeQL-friendly SSRF hardening:
+    // accept only private IPv4[:port] and build the URL from a fixed template.
+    const rawHost = typeof ip === 'string' ? ip.trim() : '';
+    const hostMatch = /^([0-9]{1,3}(?:\.[0-9]{1,3}){3})(?::([0-9]{1,5}))?$/.exec(rawHost);
+    if (!hostMatch) return null;
+    const host = hostMatch[1];
+    const portRaw = hostMatch[2];
+
+    const parts = host.split('.').map(n => Number(n));
+    if (parts.length !== 4 || parts.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+    const [a, b] = parts;
+    const isPrivate = (
+        a === 10 ||
+        (a === 172 && b >= 16 && b <= 31) ||
+        (a === 192 && b === 168)
+    );
+    if (!isPrivate) return null;
+
+    let port = '';
+    if (portRaw !== undefined) {
+        const p = Number(portRaw);
+        if (!Number.isInteger(p) || p < 1 || p > 65535) return null;
+        port = String(p);
+    }
 
     const now = Date.now();
     // Return cached data if request is within 1000ms (1 second) of the last one
@@ -626,7 +648,6 @@ const fetchFroniusData = async (ip) => {
     }
 
     try {
-        const [host, port] = safeHost.split(':');
         const url = new URL('http://127.0.0.1/solar_api/v1/GetPowerFlowRealtimeData.fcgi');
         url.hostname = host;
         if (port) url.port = port;
@@ -657,8 +678,23 @@ const notifyState = {
 };
 
 const sendDiscordNotification = async (webhookUrl, title, description, color, fields = []) => {
-    const safeWebhookUrl = canonicalizeDiscordWebhookUrl(webhookUrl);
-    if (!safeWebhookUrl) return;
+    // Inline, CodeQL-friendly SSRF hardening: allowlist Discord hosts + strict webhook path.
+    if (!webhookUrl || typeof webhookUrl !== 'string') return;
+    let u;
+    try {
+        u = new URL(webhookUrl);
+    } catch {
+        return;
+    }
+    if (u.protocol !== 'https:') return;
+
+    const host = u.hostname.toLowerCase();
+    const allowedHosts = new Set(['discord.com', 'discordapp.com', 'canary.discord.com', 'ptb.discord.com']);
+    if (!allowedHosts.has(host)) return;
+
+    const m = /^\/api\/webhooks\/(\d+)\/([A-Za-z0-9_-]+)$/.exec(u.pathname);
+    if (!m) return;
+    const safeWebhookUrl = `https://discord.com/api/webhooks/${m[1]}/${m[2]}`;
 
     try {
         await axios.post(safeWebhookUrl, {
@@ -1163,8 +1199,20 @@ app.post('/api/test-notification', requireAdmin, async (req, res) => {
     if (!body) return res.status(400).json({ error: 'Invalid JSON payload' });
     const { webhookUrl } = body;
     if (!webhookUrl || typeof webhookUrl !== 'string') return res.status(400).json({ error: "Missing or invalid webhook URL" });
-    const safeWebhookUrl = canonicalizeDiscordWebhookUrl(webhookUrl);
-    if (!safeWebhookUrl) return res.status(400).json({ error: "Invalid Discord webhook URL" });
+    // Inline, CodeQL-friendly SSRF hardening.
+    let u;
+    try {
+        u = new URL(webhookUrl);
+    } catch {
+        return res.status(400).json({ error: "Invalid Discord webhook URL" });
+    }
+    if (u.protocol !== 'https:') return res.status(400).json({ error: "Invalid Discord webhook URL" });
+    const host = u.hostname.toLowerCase();
+    const allowedHosts = new Set(['discord.com', 'discordapp.com', 'canary.discord.com', 'ptb.discord.com']);
+    if (!allowedHosts.has(host)) return res.status(400).json({ error: "Invalid Discord webhook URL" });
+    const m = /^\/api\/webhooks\/(\d+)\/([A-Za-z0-9_-]+)$/.exec(u.pathname);
+    if (!m) return res.status(400).json({ error: "Invalid Discord webhook URL" });
+    const safeWebhookUrl = `https://discord.com/api/webhooks/${m[1]}/${m[2]}`;
     
     try {
         await sendDiscordNotification(safeWebhookUrl, "🔔 Test Notification", "SunFlow notifications are working correctly!", 16776960);
@@ -2691,11 +2739,19 @@ app.post('/api/import-csv', requireAdmin, upload.single('file'), (req, res) => {
 
     // Keep all filesystem operations confined to UPLOADS_DIR.
     // Use path.basename() as a sanitizer that CodeQL recognizes.
-    const safeFileName = path.basename(String(req.file.path || ''));
+    const safeFileName = path.basename(String(req.file.path || '')).toLowerCase();
     if (!safeFileName) {
         return res.status(400).json({ error: 'Invalid upload path' });
     }
-    const filePath = path.join(UPLOADS_DIR, safeFileName);
+    // Multer's default filename is a 32-char hex string; enforce this to make path usage clearly safe.
+    if (!/^[0-9a-f]{32}$/.test(safeFileName)) {
+        return res.status(400).json({ error: 'Invalid upload path' });
+    }
+    const filePath = path.resolve(UPLOADS_DIR, safeFileName);
+    const uploadsRoot = path.resolve(UPLOADS_DIR) + path.sep;
+    if (!filePath.startsWith(uploadsRoot)) {
+        return res.status(400).json({ error: 'Invalid upload path' });
+    }
 
     if (req.body?.mapping === undefined) {
         try { fs.unlinkSync(filePath); } catch { /* ignore */ }
@@ -2846,12 +2902,26 @@ app.post('/api/preview-csv', requireAdmin, upload.single('file'), (req, res) => 
 
     // Keep all filesystem operations confined to UPLOADS_DIR.
     // Use path.basename() as a sanitizer that CodeQL recognizes.
-    const safeFileName = path.basename(String(req.file.path || ''));
+    const safeFileName = path.basename(String(req.file.path || '')).toLowerCase();
     if (!safeFileName) {
         return res.status(400).json({ error: 'Invalid upload path' });
     }
-    const filePath = path.join(UPLOADS_DIR, safeFileName);
-    const fileContent = fs.readFileSync(filePath, 'utf8');
+    if (!/^[0-9a-f]{32}$/.test(safeFileName)) {
+        return res.status(400).json({ error: 'Invalid upload path' });
+    }
+    const filePath = path.resolve(UPLOADS_DIR, safeFileName);
+    const uploadsRoot = path.resolve(UPLOADS_DIR) + path.sep;
+    if (!filePath.startsWith(uploadsRoot)) {
+        return res.status(400).json({ error: 'Invalid upload path' });
+    }
+
+    let fileContent;
+    try {
+        fileContent = fs.readFileSync(filePath, 'utf8');
+    } catch (e) {
+        try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+        return res.status(400).json({ error: 'Failed to read uploaded file' });
+    }
     
     // Parse partial
     Papa.parse(fileContent, {
