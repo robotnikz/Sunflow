@@ -1,3 +1,17 @@
+## [1.11.1](https://github.com/robotnikz/Sunflow/compare/v1.11.0...v1.11.1) (2026-01-16)
+
+
+### Bug Fixes
+
+* constrain uploaded file paths ([146fe61](https://github.com/robotnikz/Sunflow/commit/146fe61d5267adcfe84c1598854d63e240c98e53))
+* dedupe /api/energy overlaps ([db7cfbb](https://github.com/robotnikz/Sunflow/commit/db7cfbbd9098c6705d5456e9486171512cfb2095))
+* dedupe /api/history overlaps ([8da489f](https://github.com/robotnikz/Sunflow/commit/8da489f24702bc0becbf05ef74987cc148811e33))
+* **docker:** handle readonly DB permissions ([5151b54](https://github.com/robotnikz/Sunflow/commit/5151b54b066b2d3e7ab40239ff4222cf8e812da1))
+* **docker:** make /app/data writable out-of-box ([19e17ff](https://github.com/robotnikz/Sunflow/commit/19e17fff32822b651fee9c75ffd06abb82dc4d7c))
+* sanitize upload temp file paths ([9517666](https://github.com/robotnikz/Sunflow/commit/9517666de3f2421aaa08f2b29e41f99d985248fb))
+* **ui:** close settings modal on Escape ([165f2ef](https://github.com/robotnikz/Sunflow/commit/165f2ef46cd3f8c4fe276e8af56bb45d514e0f6a))
+* validate csv import mapping ([d889e7f](https://github.com/robotnikz/Sunflow/commit/d889e7f3469ea40816c7fe681766d0a8c00272bd))
+
 # [1.11.0](https://github.com/robotnikz/Sunflow/compare/v1.10.1...v1.11.0) (2026-01-15)
 
 
