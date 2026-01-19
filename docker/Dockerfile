@@ -32,7 +32,7 @@ RUN npm ci --omit=dev \
 # Copy built assets from builder stage
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server.js ./
-COPY --from=builder /app/entrypoint.sh ./entrypoint.sh
+COPY --from=builder /app/docker/entrypoint.sh ./entrypoint.sh
 
 # Create persistent data directory and drop root privileges
 RUN mkdir -p /app/data \

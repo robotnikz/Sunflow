@@ -132,7 +132,7 @@ docker compose up -d
 > **Upgrade safety (data/history):** keep your `./sunflow-data` directory when updating. If you delete or change this mount, SunFlow will start with an empty database.
 
 > [!TIP]
-> For upgrades, backups, rollback and troubleshooting, see [OPERATIONS.md](OPERATIONS.md).
+> For upgrades, backups, rollback and troubleshooting, see [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ### Method 2: Docker CLI
 
@@ -159,7 +159,7 @@ Once running, access the dashboard at `http://localhost:3000`.
 5.  **Tariffs & Expenses:** Add your grid costs and installation expenses to activate the ROI widget.
 6.  **Appliances:** Configure your heavy consumers (Watts & Duration).
 
-For day-2 ops (backup/restore, upgrades, common issues), see [OPERATIONS.md](OPERATIONS.md).
+For day-2 ops (backup/restore, upgrades, common issues), see [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ---
 
@@ -171,11 +171,11 @@ SunFlow is intended for self-hosting on a trusted network. If you expose it beyo
 - **CORS allowlist (recommended):** set `CORS_ORIGIN` to a comma-separated list of allowed browser origins (prod defaults to no cross-origin).
 - **Reverse proxy setups:** set `TRUST_PROXY=1` so rate limiting and IP logic work correctly.
 
-For details and additional recommendations see [AUDIT.md](AUDIT.md).
+For details and additional recommendations see [docs/AUDIT.md](docs/AUDIT.md).
 
-Practical checklist for self-hosting: [SECURITY_CHECKLIST.md](SECURITY_CHECKLIST.md).
+Practical checklist for self-hosting: [SECURITY.md](SECURITY.md).
 
-Operations runbook (backup/restore, upgrades, troubleshooting): [OPERATIONS.md](OPERATIONS.md).
+Operations runbook (backup/restore, upgrades, troubleshooting): [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ---
 
@@ -183,8 +183,8 @@ Operations runbook (backup/restore, upgrades, troubleshooting): [OPERATIONS.md](
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for developer setup, testing, and PR guidelines.
 
-- Test strategy & scenarios: [TESTPLAN.md](TESTPLAN.md)
-- Quick manual UI regression checklist: [UX_CHECKLIST.md](UX_CHECKLIST.md)
+- Test strategy & scenarios: [docs/TESTPLAN.md](docs/TESTPLAN.md)
+- Quick manual UI regression checklist: [docs/UX_CHECKLIST.md](docs/UX_CHECKLIST.md)
 
 ---
 

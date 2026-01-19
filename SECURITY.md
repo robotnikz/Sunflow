@@ -61,11 +61,11 @@ Notes:
 
 - Pin production to a version tag (or digest), not only `:latest`.
 - Keep the last known-good tag available for rollback.
-- Practice rollback once (see [OPERATIONS.md](OPERATIONS.md)).
+- Practice rollback once (see [docs/OPERATIONS.md](docs/OPERATIONS.md)).
 
 ## 6) Backups
 
 - Back up the whole data directory (config + DB + uploads).
 - Perform a restore drill at least once.
 
-See [OPERATIONS.md](OPERATIONS.md) for backup/restore commands.
+See [docs/OPERATIONS.md](docs/OPERATIONS.md) for backup/restore commands.

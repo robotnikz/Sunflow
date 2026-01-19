@@ -61,7 +61,7 @@ Because of that, the safest stance is: **do not expose SunFlow to the internet w
   - upload limits and robust cleanup
   - fixed a runtime issue in `/api/forecast` outside daylight window
 
-- Container hardening (see `Dockerfile`):
+- Container hardening (see `docker/Dockerfile`):
   - Node 22 LTS
   - reproducible installs via lockfile
   - non-root execution (`USER node`)
@@ -102,8 +102,8 @@ Notes:
 - Keep secrets out of config responses when possible; if you set `SUNFLOW_ADMIN_TOKEN`, secrets are redacted for non-admin requests.
 
 See also:
-- Practical self-hosting checklist: `SECURITY_CHECKLIST.md`
-- Day-2 operations runbook: `OPERATIONS.md`
+- Practical self-hosting checklist: [SECURITY.md](../SECURITY.md)
+- Day-2 operations runbook: [OPERATIONS.md](OPERATIONS.md)
 
 ## Env var reference (added/used)
 

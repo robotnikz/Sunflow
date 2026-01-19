@@ -18,11 +18,11 @@ These instructions are for developers. If you just want to run SunFlow, follow t
 - Unit/Integration: Vitest
 
 Related docs:
-- Test strategy & scenarios: [TESTPLAN.md](TESTPLAN.md)
-- Quick manual UI checklist: [UX_CHECKLIST.md](UX_CHECKLIST.md)
-- Day-2 operations: [OPERATIONS.md](OPERATIONS.md)
-- Self-hosting hardening: [SECURITY_CHECKLIST.md](SECURITY_CHECKLIST.md)
-- Security/architecture notes: [AUDIT.md](AUDIT.md)
+- Test strategy & scenarios: [docs/TESTPLAN.md](docs/TESTPLAN.md)
+- Quick manual UI checklist: [docs/UX_CHECKLIST.md](docs/UX_CHECKLIST.md)
+- Day-2 operations: [docs/OPERATIONS.md](docs/OPERATIONS.md)
+- Self-hosting hardening: [SECURITY.md](SECURITY.md)
+- Security/architecture notes: [docs/AUDIT.md](docs/AUDIT.md)
 
 ## Install & run (local dev)
 
@@ -50,7 +50,7 @@ This repo uses:
 - Unit/Integration tests: Vitest
 - E2E tests: Playwright
 
-For the overall regression strategy and scenarios, see [TESTPLAN.md](TESTPLAN.md). For a quick manual UI checklist, see [UX_CHECKLIST.md](UX_CHECKLIST.md).
+For the overall regression strategy and scenarios, see [docs/TESTPLAN.md](docs/TESTPLAN.md). For a quick manual UI checklist, see [docs/UX_CHECKLIST.md](docs/UX_CHECKLIST.md).
 
 ### Unit/Integration (Vitest)
 

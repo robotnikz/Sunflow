@@ -63,12 +63,12 @@ Notes:
 ### b) Stability & reliability
 - Long-run (24h): polling, retention, restart/resume, DB file growth.
 
-- Soak (lightweight, automatable): run the soak test script (see [CONTRIBUTING.md](CONTRIBUTING.md)).
+- Soak (lightweight, automatable): run the soak test script (see [CONTRIBUTING.md](../CONTRIBUTING.md)).
 	- Expected: no 5xx, no timeouts, stable status codes.
 	- For Docker: start the container via Compose, then run the soak test against the published port.
 	- Optional: restart the container during the soak and verify the service recovers cleanly.
 
-For a concrete 24h checklist (restart/resume, outage simulation, what to monitor), see `OPERATIONS.md`.
+For a concrete 24h checklist (restart/resume, outage simulation, what to monitor), see [OPERATIONS.md](OPERATIONS.md).
 
 ### c) Security
 - AuthN/Z: admin token enforced
@@ -76,13 +76,13 @@ For a concrete 24h checklist (restart/resume, outage simulation, what to monitor
 - Secrets: redaction when admin token is enabled
 - Automated regressions: see `tests/api.security.regression.test.ts` (CORS allowlist + webhook SSRF guard).
 
-Manual self-hosting checklist: `SECURITY_CHECKLIST.md`.
+Manual self-hosting checklist: [SECURITY.md](../SECURITY.md).
 
 ## 6) Usability & UX
 
 - Clear copy, consistent validation, actionable error messages.
 
-Checklist: `UX_CHECKLIST.md`.
+Checklist: [UX_CHECKLIST.md](UX_CHECKLIST.md).
 
 ## 7) Compatibility & environment
 
@@ -112,7 +112,7 @@ Note: E2E can run nightly to reduce CI flakiness impact.
 	- Rollback: switch back to the previous tag and restart.
 
 - DB persisted via bind mount (Docker Compose default): `./sunflow-data:/app/data`
-	- Backup: stop container, then copy the `sunflow-data/` directory (see `OPERATIONS.md`).
+	- Backup: stop container, then copy the `sunflow-data/` directory (see [OPERATIONS.md](OPERATIONS.md)).
 	- Monitoring: DB growth, CPU/RAM (especially during long polling/soak)
 
 Manual ops scenarios (short):
