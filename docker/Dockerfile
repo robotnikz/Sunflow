@@ -1,5 +1,5 @@
 # Build Stage
-FROM node:22-slim AS builder
+FROM node:25-slim AS builder
 WORKDIR /app
 
 # Copy package files first for better caching
@@ -15,7 +15,7 @@ COPY . .
 RUN npm run build
 
 # Production Stage
-FROM node:22-slim
+FROM node:25-slim
 WORKDIR /app
 
 # Ensure we can reliably drop privileges at runtime.
