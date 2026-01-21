@@ -94,6 +94,9 @@ Solar is an investment. Track it like one.
 
 SunFlow is built as a lightweight Docker container. You can run it on a Raspberry Pi, a Synology NAS, or any server.
 
+> [!TIP]
+> **Home Assistant Add-on (Standalone):** If you prefer running SunFlow as a Home Assistant Add-on, there is a standalone add-on repository available at https://github.com/robotnikz/sunflow-ha
+
 ### Docker Prerequisites
 1.  **Fronius Gen24 Inverter** (Symo/Primo) with `Solar API` enabled.
     *   *Enable via Inverter Web Interface: Communication > Solar API > Enable.*
