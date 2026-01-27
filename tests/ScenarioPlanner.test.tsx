@@ -24,6 +24,7 @@ describe('ScenarioPlanner Component', () => {
     ];
 
     beforeEach(() => {
+        window.localStorage.clear();
         (api.getSimulationData as any).mockResolvedValue([]);
         (api.getTariffs as any).mockResolvedValue([]);
     });
@@ -72,5 +73,65 @@ describe('ScenarioPlanner Component', () => {
         await waitFor(() => {
             expect(screen.queryByText(/Loading historical data/i)).not.toBeInTheDocument();
         });
+    });
+
+    it('zeigt Focus Toggle und ROI-Horizont Input', async () => {
+        // Provide a complete (hourly) day within the active timeframe so the simulator renders results.
+        const dayStart = new Date();
+        dayStart.setHours(0, 0, 0, 0);
+        dayStart.setDate(dayStart.getDate() - 1);
+        const fullDayData = Array.from({ length: 24 }).map((_, i) => ({
+            t: dayStart.getTime() + (i * 60 * 60 * 1000),
+            p: 1000,
+            l: 500,
+        }));
+
+        (api.getSimulationData as any).mockResolvedValue(fullDayData);
+        (api.getTariffs as any).mockResolvedValue([]);
+
+        render(<ScenarioPlanner config={mockConfig} />);
+        fireEvent.click(screen.getByText(/Scenario Planner/i));
+
+        await waitFor(() => {
+            expect(screen.queryByText(/Loading historical data/i)).not.toBeInTheDocument();
+        });
+
+        expect(screen.getByText(/Recommendation focus/i)).toBeInTheDocument();
+        const roiBtn = screen.getByRole('button', { name: /^ROI$/i });
+        const autonomyBtn = screen.getByRole('button', { name: /^Autonomy$/i });
+        expect(roiBtn).toBeInTheDocument();
+        expect(autonomyBtn).toBeInTheDocument();
+
+        const horizonInput = screen.getByLabelText(/ROI horizon/i) as HTMLInputElement;
+        expect(horizonInput).toBeInTheDocument();
+        expect(horizonInput.disabled).toBe(false);
+
+        fireEvent.click(autonomyBtn);
+        expect((screen.getByLabelText(/ROI horizon/i) as HTMLInputElement).disabled).toBe(true);
+    });
+
+    it('zeigt PV Suggestion bei ausreichenden Daten', async () => {
+        const dayStart = new Date();
+        dayStart.setHours(0, 0, 0, 0);
+        dayStart.setDate(dayStart.getDate() - 1);
+        const fullDayData = Array.from({ length: 24 }).map((_, i) => ({
+            t: dayStart.getTime() + (i * 60 * 60 * 1000),
+            p: 1000,
+            l: 500,
+        }));
+
+        (api.getSimulationData as any).mockResolvedValue(fullDayData);
+        (api.getTariffs as any).mockResolvedValue([]);
+
+        render(<ScenarioPlanner config={mockConfig} />);
+        fireEvent.click(screen.getByText(/Scenario Planner/i));
+
+        await waitFor(() => {
+            expect(screen.queryByText(/Loading historical data/i)).not.toBeInTheDocument();
+        });
+
+        // PV suggestion is shown inside the Details panel.
+        fireEvent.click(screen.getByText(/^Details$/i));
+        expect(screen.getByText(/PV Suggestion/i)).toBeInTheDocument();
     });
 });

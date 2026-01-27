@@ -57,9 +57,40 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
     const [costPerKwp, setCostPerKwp] = useState<number>(1000);
     const [costPerKwhBat, setCostPerKwhBat] = useState<number>(400);
 
+    type UpgradeFocus = 'roi' | 'autonomy';
+    const clampNumber = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+
+    const [upgradeFocus, setUpgradeFocus] = useState<UpgradeFocus>(() => {
+        try {
+            const v = window.localStorage.getItem('sunflow.scenarioPlanner.upgradeFocus');
+            return (v === 'autonomy' || v === 'roi') ? v : 'roi';
+        } catch {
+            return 'roi';
+        }
+    });
+
+    const [roiHorizonYears, setRoiHorizonYears] = useState<number>(() => {
+        try {
+            const raw = window.localStorage.getItem('sunflow.scenarioPlanner.roiHorizonYears');
+            const parsed = raw ? Number(raw) : 20;
+            return clampNumber(Number.isFinite(parsed) ? parsed : 20, 5, 30);
+        } catch {
+            return 20;
+        }
+    });
+
     const [simulationWindow, setSimulationWindow] = useState<SimulationWindow>('year');
 
     const [isOpen, setIsOpen] = useState(false);
+
+    useEffect(() => {
+        try {
+            window.localStorage.setItem('sunflow.scenarioPlanner.upgradeFocus', upgradeFocus);
+            window.localStorage.setItem('sunflow.scenarioPlanner.roiHorizonYears', String(clampNumber(roiHorizonYears, 5, 30)));
+        } catch {
+            // ignore
+        }
+    }, [upgradeFocus, roiHorizonYears]);
 
     const windowBounds = useMemo(() => getWindowBounds(simulationWindow), [simulationWindow]);
 
@@ -111,19 +142,20 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
     }, [windowedData]);
 
     useEffect(() => {
-        if (isOpen && data.length === 0) {
-            setLoading(true);
-            Promise.all([
-                getSimulationData(),
-                getTariffs()
-            ])
+        if (!isOpen) return;
+
+        // Fetch on every open so the simulator uses current data after imports/updates.
+        setLoading(true);
+        Promise.all([
+            getSimulationData(),
+            getTariffs()
+        ])
             .then(([simData, tariffData]) => {
                 setData(simData);
                 setTariffs(tariffData);
             })
             .catch(err => console.error("Sim data fail", err))
             .finally(() => setLoading(false));
-        }
     }, [isOpen]);
 
     // Helper to get active tariff
@@ -387,24 +419,131 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         const roiYearsPvOnly = safeRoiYears(investPv, yearlyBenefitPvOnly);
         const roiYearsBatteryIncremental = safeRoiYears(investBat, yearlyBenefitBatteryIncremental);
 
+        const horizonYears = clampNumber(roiHorizonYears, 5, 30);
+        const netGainOverHorizon = (yearlyBenefit: number, invest: number) => (yearlyBenefit * horizonYears) - invest;
+
         return {
             totalInvest,
             totalYearlyBenefit: yearlyBenefitCombined,
             roiYears: roiYearsCombined,
+            horizonYears,
+            netGainHorizon: netGainOverHorizon(yearlyBenefitCombined, totalInvest),
             pvOnly: {
                 invest: investPv,
                 yearlyBenefit: yearlyBenefitPvOnly,
                 roiYears: roiYearsPvOnly,
+                netGainHorizon: netGainOverHorizon(yearlyBenefitPvOnly, investPv),
             },
             batteryIncremental: {
                 invest: investBat,
                 yearlyBenefit: yearlyBenefitBatteryIncremental,
                 roiYears: roiYearsBatteryIncremental,
+                netGainHorizon: netGainOverHorizon(yearlyBenefitBatteryIncremental, investBat),
             },
             estimatedBaseKwp
         };
 
-    }, [simulations, costPerKwp, costPerKwhBat, addedPvPercent, addedBatteryKwh, windowedData, activeTariff, config.systemCapacity, dataCoverage.days]);
+    }, [simulations, costPerKwp, costPerKwhBat, addedPvPercent, addedBatteryKwh, windowedData, activeTariff, config.systemCapacity, dataCoverage.days, roiHorizonYears]);
+
+    // PV recommendation (variant 1: PV-only, independent from battery add-on)
+    const pvRecommendation = useMemo(() => {
+        if (!filteredHourlyData) return null;
+        if (!financials) return null;
+
+        const MIN_YEARLY_BENEFIT = 5; // {currency}/year
+        const horizonYears = clampNumber(roiHorizonYears, 5, 30);
+        const maxReasonableRoiYears = horizonYears;
+
+        const yearsCovered = Math.max(0.1, dataCoverage.days / 365);
+        const gridCost = activeTariff.costPerKwh;
+        const feedIn = activeTariff.feedInTariff;
+
+        const baseBatteryWh = (config.batteryCapacity || 5) * 1000;
+        const firstSocPct = filteredHourlyData.find(d => d.s !== null && d.s !== undefined)?.s;
+        const initialSocPct = (firstSocPct === null || firstSocPct === undefined) ? null : Math.max(0, Math.min(100, Number(firstSocPct)));
+        const inferredModel = inferBatteryModel(filteredHourlyData);
+        const baseModelNoInitial: Omit<BatteryModelParams, 'initialSocWh'> = {
+            chargeEff: inferredModel.chargeEff,
+            dischargeEff: inferredModel.dischargeEff,
+            maxChargeWhPerHour: inferredModel.maxChargeWhPerHour,
+            maxDischargeWhPerHour: inferredModel.maxDischargeWhPerHour,
+        };
+
+        // Baseline: prefer measured grid flows if present.
+        const measuredBase = measuredBaseFromData(filteredHourlyData);
+        const initialEnergyWhBaseMeasured = initialSocPct === null ? null : (initialSocPct / 100) * baseBatteryWh;
+        const initialEnergyWhForSweep = initialEnergyWhBaseMeasured ?? estimateCyclicInitialSocWh(filteredHourlyData, 0, baseBatteryWh, baseModelNoInitial);
+        const simulatedBase = simulate(filteredHourlyData, 0, baseBatteryWh, { ...baseModelNoInitial, initialSocWh: initialEnergyWhForSweep });
+        const base = measuredBase ?? simulatedBase;
+
+        const benefitOverDataset = (from: ScenarioSimResult, to: ScenarioSimResult) => {
+            const savedImportKwh = (from.importedWh - to.importedWh) / 1000;
+            const extraExportKwh = (to.exportedWh - from.exportedWh) / 1000;
+            return (savedImportKwh * gridCost) + (extraExportKwh * feedIn);
+        };
+
+        type Candidate = {
+            addedPvPercent: number;
+            addedKwp: number;
+            invest: number;
+            yearlyBenefit: number;
+            roiYears: number;
+            netGainHorizon: number;
+            autonomyPct: number;
+            autonomyDeltaPct: number;
+        };
+
+        const candidates: Candidate[] = [];
+        for (let pvPercent = 0; pvPercent <= 200; pvPercent += 10) {
+            const pvOnly = simulate(filteredHourlyData, pvPercent, baseBatteryWh, { ...baseModelNoInitial, initialSocWh: initialEnergyWhForSweep });
+            const totalBenefit = benefitOverDataset(base, pvOnly);
+            const yearlyBenefit = totalBenefit / yearsCovered;
+
+            const addedKwp = financials.estimatedBaseKwp * (pvPercent / 100);
+            const invest = addedKwp * costPerKwp;
+            const roiYears = invest <= 0 ? 0 : (yearlyBenefit > 0 ? invest / yearlyBenefit : Infinity);
+            const netGainHorizon = (yearlyBenefit * horizonYears) - invest;
+
+            const autonomyPct = pvOnly.autonomyPct;
+            const autonomyDeltaPct = autonomyPct - base.autonomyPct;
+
+            candidates.push({ addedPvPercent: pvPercent, addedKwp, invest, yearlyBenefit, roiYears, netGainHorizon, autonomyPct, autonomyDeltaPct });
+        }
+
+        const addOns = candidates.filter(c => c.addedPvPercent > 0);
+        if (addOns.length === 0) {
+            return { recommended: null as Candidate | null, bestYearly: null as Candidate | null, thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: maxReasonableRoiYears, focus: upgradeFocus as UpgradeFocus } };
+        }
+
+        const positive = addOns.filter(c => c.yearlyBenefit > 0);
+        const bestYearly = [...addOns].sort((a, b) => b.yearlyBenefit - a.yearlyBenefit)[0] || null;
+
+        if (upgradeFocus === 'autonomy') {
+            const improving = addOns.filter(c => c.autonomyDeltaPct > 0.01);
+            if (improving.length === 0) {
+                return { recommended: null as Candidate | null, bestYearly, thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: maxReasonableRoiYears, focus: upgradeFocus as UpgradeFocus } };
+            }
+            const recommended = [...improving].sort((a, b) => {
+                if (b.autonomyPct !== a.autonomyPct) return b.autonomyPct - a.autonomyPct;
+                return a.invest - b.invest;
+            })[0];
+
+            return { recommended, bestYearly, thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: maxReasonableRoiYears, focus: upgradeFocus as UpgradeFocus } };
+        }
+
+        // ROI focus: require economic meaning + break-even within horizon
+        const meaningful = positive.filter(c => (c.yearlyBenefit >= MIN_YEARLY_BENEFIT) && (c.roiYears <= maxReasonableRoiYears));
+        if (meaningful.length === 0) {
+            return { recommended: null as Candidate | null, bestYearly, thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: maxReasonableRoiYears, focus: upgradeFocus as UpgradeFocus } };
+        }
+
+        const recommended = [...meaningful].sort((a, b) => {
+            if (b.netGainHorizon !== a.netGainHorizon) return b.netGainHorizon - a.netGainHorizon;
+            return a.roiYears - b.roiYears;
+        })[0];
+
+        return { recommended, bestYearly, thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: maxReasonableRoiYears, focus: upgradeFocus as UpgradeFocus } };
+    }, [filteredHourlyData, financials, dataCoverage.days, activeTariff, config.batteryCapacity, costPerKwp, upgradeFocus, roiHorizonYears]);
 
     // Auto-recommend battery size (0..30 kWh) for the currently selected PV slider.
     const batteryRecommendation = useMemo(() => {
@@ -414,7 +553,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         // Guardrails to avoid recommending upgrades with negligible impact.
         // These are heuristics (not hard truths) to prevent misleading suggestions.
         const MIN_YEARLY_BENEFIT = 5; // {currency}/year
-        const MAX_REASONABLE_ROI_YEARS = 25;
+        const MAX_REASONABLE_ROI_YEARS = clampNumber(roiHorizonYears, 5, 30);
 
         const yearsCovered = Math.max(0.1, dataCoverage.days / 365);
         const gridCost = activeTariff.costPerKwh;
@@ -451,6 +590,9 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
             yearlyExportDeltaKwh: number;
             invest: number;
             roiYears: number;
+            autonomyPct: number;
+            autonomyDeltaPct: number;
+            netGainHorizon: number;
         };
 
         const candidates: Candidate[] = [];
@@ -465,35 +607,66 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
             const yearlyExportDeltaKwh = exportDeltaKwh / yearsCovered;
             const invest = kwh * costPerKwhBat;
             const roiYears = invest <= 0 ? 0 : (yearlyBenefit > 0 ? invest / yearlyBenefit : Infinity);
-            candidates.push({ addedBatteryKwh: kwh, yearlyBenefit, yearlySavedImportKwh, yearlyExportDeltaKwh, invest, roiYears });
+            const autonomyPct = sim.autonomyPct;
+            const autonomyDeltaPct = autonomyPct - pvOnly.autonomyPct;
+            const netGainHorizon = (yearlyBenefit * clampNumber(roiHorizonYears, 5, 30)) - invest;
+            candidates.push({ addedBatteryKwh: kwh, yearlyBenefit, yearlySavedImportKwh, yearlyExportDeltaKwh, invest, roiYears, autonomyPct, autonomyDeltaPct, netGainHorizon });
         }
 
         const addOns = candidates.filter(c => c.addedBatteryKwh > 0);
         const positive = addOns.filter(c => c.yearlyBenefit > 0);
         const bestYearlyAny = [...addOns].sort((a, b) => b.yearlyBenefit - a.yearlyBenefit)[0] || null;
 
-        // Only recommend if it is economically meaningful.
-        const meaningful = positive.filter(c => (c.yearlyBenefit >= MIN_YEARLY_BENEFIT) && (c.roiYears <= MAX_REASONABLE_ROI_YEARS));
+        const focus = upgradeFocus;
 
-        if (positive.length === 0) {
+        // Only recommend if it is economically meaningful (ROI mode).
+        const meaningfulRoi = positive.filter(c => (c.yearlyBenefit >= MIN_YEARLY_BENEFIT) && (c.roiYears <= MAX_REASONABLE_ROI_YEARS));
+
+        const autonomyImproving = addOns.filter(c => c.autonomyDeltaPct > 0.01);
+
+        if (addOns.length === 0) {
             return {
                 recommended: null as Candidate | null,
                 bestYearly: bestYearlyAny,
-                thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: MAX_REASONABLE_ROI_YEARS },
+                thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: MAX_REASONABLE_ROI_YEARS, focus },
             };
         }
 
-        if (meaningful.length === 0) {
+        if (focus === 'autonomy') {
+            if (autonomyImproving.length === 0) {
+                return {
+                    recommended: null as Candidate | null,
+                    bestYearly: bestYearlyAny,
+                    thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: MAX_REASONABLE_ROI_YEARS, focus },
+                };
+            }
+
+            // Max autonomy (tie-break: cheaper)
+            const recommended = [...autonomyImproving].sort((a, b) => {
+                if (b.autonomyPct !== a.autonomyPct) return b.autonomyPct - a.autonomyPct;
+                return a.invest - b.invest;
+            })[0];
+
+            return { recommended, bestYearly: bestYearlyAny, thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: MAX_REASONABLE_ROI_YEARS, focus } };
+        }
+
+        // ROI focus: recommend only if it breaks even within the selected horizon.
+        if (meaningfulRoi.length === 0) {
             return {
                 recommended: null as Candidate | null,
                 bestYearly: bestYearlyAny,
-                thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: MAX_REASONABLE_ROI_YEARS },
+                thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: MAX_REASONABLE_ROI_YEARS, focus },
             };
         }
 
-        const recommended = [...meaningful].sort((a, b) => a.roiYears - b.roiYears)[0];
-        return { recommended, bestYearly: bestYearlyAny, thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: MAX_REASONABLE_ROI_YEARS } };
-    }, [filteredHourlyData, financials, dataCoverage.days, activeTariff, config.batteryCapacity, addedPvPercent, costPerKwhBat]);
+        // Prefer best net gain over horizon, then fastest payback.
+        const recommended = [...meaningfulRoi].sort((a, b) => {
+            if (b.netGainHorizon !== a.netGainHorizon) return b.netGainHorizon - a.netGainHorizon;
+            return a.roiYears - b.roiYears;
+        })[0];
+
+        return { recommended, bestYearly: bestYearlyAny, thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: MAX_REASONABLE_ROI_YEARS, focus } };
+    }, [filteredHourlyData, financials, dataCoverage.days, activeTariff, config.batteryCapacity, addedPvPercent, costPerKwhBat, upgradeFocus, roiHorizonYears]);
 
     const dataBasis = useMemo(() => {
         if (!filteredHourlyData) return null;
@@ -605,6 +778,62 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                         {/* LEFT COL: CONTROLS */}
                         <div className="space-y-8 bg-slate-900/50 p-6 rounded-xl border border-slate-700/50">
+
+                            {/* Recommendation focus */}
+                            <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-700">
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="text-xs font-bold uppercase text-slate-400">Recommendation focus</div>
+                                    <div className="text-[10px] text-slate-500">Affects battery suggestion + horizon net gain</div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setUpgradeFocus('roi')}
+                                        className={`flex-1 px-3 py-2 rounded-lg border text-xs font-semibold transition-colors ${
+                                            upgradeFocus === 'roi'
+                                                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-200'
+                                                : 'bg-slate-900/40 border-slate-700 text-slate-300 hover:bg-slate-900/60'
+                                        }`}
+                                    >
+                                        ROI
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setUpgradeFocus('autonomy')}
+                                        className={`flex-1 px-3 py-2 rounded-lg border text-xs font-semibold transition-colors ${
+                                            upgradeFocus === 'autonomy'
+                                                ? 'bg-blue-500/15 border-blue-500/30 text-blue-200'
+                                                : 'bg-slate-900/40 border-slate-700 text-slate-300 hover:bg-slate-900/60'
+                                        }`}
+                                    >
+                                        Autonomy
+                                    </button>
+                                </div>
+
+                                <div className="mt-3 flex items-center justify-between gap-3">
+                                    <label htmlFor="roiHorizonYears" className={`text-xs ${upgradeFocus === 'roi' ? 'text-slate-300' : 'text-slate-500'}`}>
+                                        ROI horizon
+                                    </label>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            id="roiHorizonYears"
+                                            type="number"
+                                            min={5}
+                                            max={30}
+                                            step={1}
+                                            disabled={upgradeFocus !== 'roi'}
+                                            value={roiHorizonYears}
+                                            onChange={(e) => setRoiHorizonYears(clampNumber(Number(e.target.value), 5, 30))}
+                                            className={`w-16 px-2 py-1 rounded border bg-slate-950/40 text-right text-xs ${
+                                                upgradeFocus === 'roi'
+                                                    ? 'border-slate-700 text-slate-200'
+                                                    : 'border-slate-800 text-slate-600'
+                                            }`}
+                                        />
+                                        <span className={`text-xs ${upgradeFocus === 'roi' ? 'text-slate-400' : 'text-slate-600'}`}>years</span>
+                                    </div>
+                                </div>
+                            </div>
                             
                             {/* PV Slider */}
                             <div>
@@ -809,6 +1038,13 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                         </div>
                                     </div>
                                 </div>
+
+                                <div className="mt-3 text-xs text-slate-400 flex items-center justify-between">
+                                    <span>Net gain over {financials.horizonYears}y</span>
+                                    <span className={`${financials.netGainHorizon >= 0 ? 'text-emerald-300' : 'text-red-300'} font-semibold`}>
+                                        {financials.netGainHorizon >= 0 ? '+' : ''}{financials.netGainHorizon.toLocaleString(undefined, { maximumFractionDigits: 0 })} {config.currency}
+                                    </span>
+                                </div>
                             </div>
 
                             {/* Details: ROI breakdown + battery suggestion (collapsed to reduce UI noise) */}
@@ -861,9 +1097,22 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                             <span className="text-emerald-400 font-semibold">{batteryRecommendation.recommended.roiYears.toFixed(1)}y</span>
                                                         </div>
                                                         <div className="flex items-center justify-between mt-1">
+                                                            <span className="text-slate-400">Net gain ({financials.horizonYears}y)</span>
+                                                            <span className={`${batteryRecommendation.recommended.netGainHorizon >= 0 ? 'text-emerald-300' : 'text-red-300'} font-semibold`}>
+                                                                {batteryRecommendation.recommended.netGainHorizon >= 0 ? '+' : ''}{batteryRecommendation.recommended.netGainHorizon.toLocaleString(undefined, { maximumFractionDigits: 0 })} {config.currency}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between mt-1">
                                                             <span className="text-slate-400">Yearly benefit (battery)</span>
                                                             <span className="text-emerald-300 font-semibold">+{batteryRecommendation.recommended.yearlyBenefit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {config.currency}</span>
                                                         </div>
+
+                                                        {batteryRecommendation.thresholds?.focus === 'autonomy' && (
+                                                            <div className="flex items-center justify-between mt-1">
+                                                                <span className="text-slate-400">Autonomy Δ (PV → PV+Battery)</span>
+                                                                <span className="text-blue-300 font-semibold">+{batteryRecommendation.recommended.autonomyDeltaPct.toFixed(2)}%</span>
+                                                            </div>
+                                                        )}
                                                         {batteryRecommendation.bestYearly && batteryRecommendation.bestYearly.addedBatteryKwh !== batteryRecommendation.recommended.addedBatteryKwh && (
                                                             <div className="mt-2 text-[10px] text-slate-500">
                                                                 Max yearly benefit at +{batteryRecommendation.bestYearly.addedBatteryKwh} kWh.
@@ -875,7 +1124,11 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                         <div>
                                                             No worthwhile battery recommendation for this PV setting in the selected timeframe.
                                                             {batteryRecommendation.thresholds && (
-                                                                <span> (Needs ≥ {batteryRecommendation.thresholds.minYearlyBenefit} {config.currency}/yr and ROI ≤ {batteryRecommendation.thresholds.maxRoiYears}y.)</span>
+                                                                <span>
+                                                                    {batteryRecommendation.thresholds.focus === 'roi'
+                                                                        ? ` (ROI focus: needs ≥ ${batteryRecommendation.thresholds.minYearlyBenefit} ${config.currency}/yr and payback ≤ ${batteryRecommendation.thresholds.maxRoiYears}y.)`
+                                                                        : ' (Autonomy focus: no battery size improves autonomy in this timeframe.)'}
+                                                                </span>
                                                             )}
                                                         </div>
                                                         {batteryRecommendation.bestYearly && (
@@ -885,6 +1138,68 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                                 export Δ ~{batteryRecommendation.bestYearly.yearlyExportDeltaKwh.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh/yr.
                                                             </div>
                                                         )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {pvRecommendation && (
+                                            <div>
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <div className="text-xs font-bold uppercase text-slate-400">PV Suggestion</div>
+                                                    <div className="text-[10px] text-slate-500">PV-only (base → PV), same timeframe</div>
+                                                </div>
+
+                                                {pvRecommendation.recommended ? (
+                                                    <div className="text-sm text-slate-200">
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-slate-400">Recommended add-on</span>
+                                                            <span className="text-white font-bold">+{pvRecommendation.recommended.addedPvPercent}%</span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between mt-1">
+                                                            <span className="text-slate-400">Added PV</span>
+                                                            <span className="text-yellow-300 font-semibold">+{pvRecommendation.recommended.addedKwp.toFixed(1)} kWp</span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between mt-1">
+                                                            <span className="text-slate-400">PV ROI (PV-only)</span>
+                                                            <span className="text-emerald-400 font-semibold">{pvRecommendation.recommended.roiYears.toFixed(1)}y</span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between mt-1">
+                                                            <span className="text-slate-400">Net gain ({financials.horizonYears}y)</span>
+                                                            <span className={`${pvRecommendation.recommended.netGainHorizon >= 0 ? 'text-emerald-300' : 'text-red-300'} font-semibold`}>
+                                                                {pvRecommendation.recommended.netGainHorizon >= 0 ? '+' : ''}{pvRecommendation.recommended.netGainHorizon.toLocaleString(undefined, { maximumFractionDigits: 0 })} {config.currency}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between mt-1">
+                                                            <span className="text-slate-400">Yearly benefit (PV)</span>
+                                                            <span className="text-emerald-300 font-semibold">+{pvRecommendation.recommended.yearlyBenefit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {config.currency}</span>
+                                                        </div>
+
+                                                        {pvRecommendation.thresholds?.focus === 'autonomy' && (
+                                                            <div className="flex items-center justify-between mt-1">
+                                                                <span className="text-slate-400">Autonomy Δ (base → PV)</span>
+                                                                <span className="text-blue-300 font-semibold">+{pvRecommendation.recommended.autonomyDeltaPct.toFixed(2)}%</span>
+                                                            </div>
+                                                        )}
+
+                                                        {pvRecommendation.bestYearly && pvRecommendation.bestYearly.addedPvPercent !== pvRecommendation.recommended.addedPvPercent && (
+                                                            <div className="mt-2 text-[10px] text-slate-500">
+                                                                Max yearly benefit at +{pvRecommendation.bestYearly.addedPvPercent}%.
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-xs text-slate-400">
+                                                        <div>
+                                                            No worthwhile PV recommendation for this timeframe.
+                                                            {pvRecommendation.thresholds && (
+                                                                <span>
+                                                                    {pvRecommendation.thresholds.focus === 'roi'
+                                                                        ? ` (ROI focus: needs ≥ ${pvRecommendation.thresholds.minYearlyBenefit} ${config.currency}/yr and payback ≤ ${pvRecommendation.thresholds.maxRoiYears}y.)`
+                                                                        : ' (Autonomy focus: no PV size improves autonomy in this timeframe.)'}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 )}
                                             </div>
