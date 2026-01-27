@@ -1,3 +1,10 @@
+# [1.12.0](https://github.com/robotnikz/Sunflow/compare/v1.11.1...v1.12.0) (2026-01-27)
+
+
+### Features
+
+* **scenario-planner:** add focus mode and PV suggestion ([cc869d7](https://github.com/robotnikz/Sunflow/commit/cc869d7ba027d4bd983fc71f6b7db28e678905b8))
+
 ## [1.11.1](https://github.com/robotnikz/Sunflow/compare/v1.11.0...v1.11.1) (2026-01-16)
 
 
