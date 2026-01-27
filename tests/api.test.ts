@@ -49,7 +49,7 @@ const rmDirWithRetries = async (dir: string) => {
       fs.rmSync(dir, { recursive: true, force: true });
       return;
     } catch (e: any) {
-      if (e?.code !== 'EPERM') throw e;
+      if (!['EPERM', 'ENOTEMPTY', 'EBUSY'].includes(e?.code)) throw e;
       await new Promise((r) => setTimeout(r, 50));
     }
   }
@@ -59,7 +59,7 @@ const rmDirWithRetries = async (dir: string) => {
 describe('Backend API (integration)', () => {
   let dataDir: string;
   let app: any;
-  let shutdown: (exitProcess?: boolean) => void;
+  let shutdown: (exitProcess?: boolean) => void | Promise<void>;
 
   beforeAll(async () => {
     // Ensure server.js behaves deterministically in tests.
@@ -74,14 +74,14 @@ describe('Backend API (integration)', () => {
     // @ts-ignore importing JS module without types for this dynamic import
     const mod = (await import('../server.js')) as unknown as {
       app: any;
-      shutdown: (exitProcess?: boolean) => void;
+      shutdown: (exitProcess?: boolean) => void | Promise<void>;
     };
     ({ app, shutdown } = mod);
   });
 
   afterAll(async () => {
     try {
-      shutdown?.(false);
+      await Promise.resolve(shutdown?.(false));
     } finally {
       delete process.env.DATA_DIR;
       await rmDirWithRetries(dataDir);

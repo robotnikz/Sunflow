@@ -10,7 +10,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 type ServerModule = {
   app: any;
-  shutdown: (exitProcess?: boolean) => void;
+  shutdown: (exitProcess?: boolean) => void | Promise<void>;
 };
 
 vi.mock('axios', () => {
@@ -41,7 +41,7 @@ const rmDirWithRetries = async (dir: string) => {
       return;
     } catch (e: any) {
       // On Windows, sqlite can keep a handle briefly after shutdown.
-      if (e?.code !== 'EPERM') throw e;
+      if (!['EPERM', 'ENOTEMPTY', 'EBUSY'].includes(e?.code)) throw e;
       await new Promise((r) => setTimeout(r, 50));
     }
   }
@@ -52,7 +52,7 @@ const rmDirWithRetries = async (dir: string) => {
 describe('Backend API (forecast integration)', () => {
   let dataDir: string;
   let app: any;
-  let shutdown: (exitProcess?: boolean) => void;
+  let shutdown: (exitProcess?: boolean) => void | Promise<void>;
 
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
@@ -73,7 +73,7 @@ describe('Backend API (forecast integration)', () => {
 
   afterAll(async () => {
     try {
-      shutdown?.(false);
+      await Promise.resolve(shutdown?.(false));
     } finally {
       vi.useRealTimers();
       delete process.env.DATA_DIR;

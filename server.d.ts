@@ -1,2 +1,2 @@
 export const app: import('express').Express;
-export const shutdown: (exitProcess?: boolean) => void;
+export const shutdown: (exitProcess?: boolean) => void | Promise<void>;
