@@ -27,7 +27,7 @@ vi.mock('axios', () => {
 describe('Backend API (security regressions)', () => {
   let dataDir: string;
   let app: any;
-  let shutdown: (exitProcess?: boolean) => void;
+  let shutdown: (exitProcess?: boolean) => void | Promise<void>;
 
   const token = 'test-admin-token';
 
@@ -49,14 +49,14 @@ describe('Backend API (security regressions)', () => {
     // @ts-ignore importing JS module without types for this dynamic import
     const mod = (await import('../server.js')) as unknown as {
       app: any;
-      shutdown: (exitProcess?: boolean) => void;
+      shutdown: (exitProcess?: boolean) => void | Promise<void>;
     };
     ({ app, shutdown } = mod);
   });
 
   afterAll(async () => {
     try {
-      shutdown?.(false);
+      await Promise.resolve(shutdown?.(false));
     } finally {
       try {
         fs.rmSync(dataDir, { recursive: true, force: true });

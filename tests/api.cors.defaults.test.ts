@@ -29,7 +29,7 @@ vi.mock('axios', () => {
 
 type ServerModule = {
   app: any;
-  shutdown: (exitProcess?: boolean) => void;
+  shutdown: (exitProcess?: boolean) => void | Promise<void>;
 };
 
 const rmDirWithRetries = async (dir: string) => {
@@ -39,7 +39,7 @@ const rmDirWithRetries = async (dir: string) => {
       fs.rmSync(dir, { recursive: true, force: true });
       return;
     } catch (e: any) {
-      if (e?.code !== 'EPERM') throw e;
+      if (!['EPERM', 'ENOTEMPTY', 'EBUSY'].includes(e?.code)) throw e;
       await new Promise((r) => setTimeout(r, 50));
     }
   }
@@ -95,12 +95,12 @@ const loadServer = async (env: Record<string, string | undefined>) => {
 
 describe('Backend API (CORS defaults)', () => {
   let app: any;
-  let shutdown: (exitProcess?: boolean) => void;
+  let shutdown: (exitProcess?: boolean) => void | Promise<void>;
   let dataDir: string;
 
   afterEach(async () => {
     try {
-      shutdown?.(false);
+      await Promise.resolve(shutdown?.(false));
     } finally {
       delete process.env.DATA_DIR;
       if (dataDir) await rmDirWithRetries(dataDir);

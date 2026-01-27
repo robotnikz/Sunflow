@@ -3044,26 +3044,34 @@ let httpServer = null;
 
 let isShuttingDown = false;
 
+let shutdownPromise = null;
+
 // Graceful Shutdown: Close DB connection ensures journal is flushed
 const shutdown = (exitProcess = true) => {
+    if (shutdownPromise) return shutdownPromise;
     console.log("Shutting down...");
 
     isShuttingDown = true;
 
-    if (httpServer) {
-        try {
-            httpServer.close();
-        } catch {
-            // ignore
+    shutdownPromise = new Promise((resolve) => {
+        if (httpServer) {
+            try {
+                httpServer.close();
+            } catch {
+                // ignore
+            }
+            httpServer = null;
         }
-        httpServer = null;
-    }
 
-    db.close((err) => {
-        if (err) console.error("Error closing DB:", err.message);
-        else console.log("Database connection closed.");
-        if (exitProcess) process.exit(0);
+        db.close((err) => {
+            if (err) console.error("Error closing DB:", err.message);
+            else console.log("Database connection closed.");
+            resolve();
+            if (exitProcess) process.exit(0);
+        });
     });
+
+    return shutdownPromise;
 };
 
 if (!IS_TEST && IS_MAIN) {

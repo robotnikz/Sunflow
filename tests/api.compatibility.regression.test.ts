@@ -27,7 +27,7 @@ vi.mock('axios', () => {
 
 type ServerModule = {
   app: any;
-  shutdown: (exitProcess?: boolean) => void;
+  shutdown: (exitProcess?: boolean) => void | Promise<void>;
 };
 
 const rmDirWithRetries = async (dir: string) => {
@@ -47,7 +47,7 @@ const rmDirWithRetries = async (dir: string) => {
 describe('Backend API (compatibility / default mode)', () => {
   let dataDir: string;
   let app: any;
-  let shutdown: (exitProcess?: boolean) => void;
+    let shutdown: (exitProcess?: boolean) => void | Promise<void>;
 
   beforeAll(async () => {
     vi.resetModules();
@@ -71,7 +71,7 @@ describe('Backend API (compatibility / default mode)', () => {
 
   afterAll(async () => {
     try {
-      shutdown?.(false);
+        await Promise.resolve(shutdown?.(false));
     } finally {
       delete process.env.DATA_DIR;
       await rmDirWithRetries(dataDir);
