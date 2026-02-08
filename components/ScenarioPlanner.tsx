@@ -180,6 +180,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         totalPvWh: number;
         importedWh: number;
         exportedWh: number;
+        curtailedWh: number;
         autonomyPct: number;
         endSocWh: number;
     };
@@ -190,6 +191,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         dischargeEff: number;
         maxChargeWhPerHour: number; // Wh/h (numerically equivalent to W avg over the hour)
         maxDischargeWhPerHour: number;
+        maxExportWhPerHour?: number; // Optional export cap (Wh/h or W avg over the hour)
     };
 
     const simulate = (dataPoints: SimulationDataPoint[], pvPercent: number, batteryCapacityWh: number, model: BatteryModelParams): ScenarioSimResult => {
@@ -198,10 +200,13 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         let totalPvWh = 0;
         let importedWh = 0;
         let exportedWh = 0;
+        let curtailedWh = 0;
 
         // Conservative fallback when we cannot infer real power limits from measured battery flows.
-        // If the model uses non-finite limits (Infinity), assume ~0.5C charge/discharge.
-        const defaultMaxWhPerHour = Math.max(0, batteryCapacityWh * 0.5);
+        // If the model uses non-finite limits (Infinity), assume ~0.5C but cap at a typical
+        // residential charge/discharge inverter power (≈5kW). This avoids over-promising
+        // benefits for very large (simulated) batteries.
+        const defaultMaxWhPerHour = Math.max(0, Math.min(batteryCapacityWh * 0.5, 5000));
         const maxChargeWhPerHour = Number.isFinite(model.maxChargeWhPerHour) ? Math.max(0, model.maxChargeWhPerHour) : defaultMaxWhPerHour;
         const maxDischargeWhPerHour = Number.isFinite(model.maxDischargeWhPerHour) ? Math.max(0, model.maxDischargeWhPerHour) : defaultMaxWhPerHour;
 
@@ -222,7 +227,13 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                 );
                 const stored = chargeInput * model.chargeEff;
                 currentSocWh += stored;
-                exportedWh += (net - chargeInput);
+                const remainingExport = net - chargeInput;
+                const exportCap = (model.maxExportWhPerHour !== null && model.maxExportWhPerHour !== undefined && Number.isFinite(model.maxExportWhPerHour))
+                    ? Math.max(0, Number(model.maxExportWhPerHour))
+                    : Infinity;
+                const exported = Math.min(remainingExport, exportCap);
+                exportedWh += exported;
+                curtailedWh += Math.max(0, remainingExport - exported);
             } else {
                 const deficit = Math.abs(net);
 
@@ -240,7 +251,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         });
 
         const autonomyPct = totalLoadWh > 0 ? 100 * (1 - (importedWh / totalLoadWh)) : 0;
-        return { totalLoadWh, totalPvWh, importedWh, exportedWh, autonomyPct, endSocWh: currentSocWh };
+        return { totalLoadWh, totalPvWh, importedWh, exportedWh, curtailedWh, autonomyPct, endSocWh: currentSocWh };
     };
 
     const percentile = (values: number[], p: number): number | null => {
@@ -283,6 +294,22 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
             maxChargeWhPerHour: (hasMeasured && maxCharge !== null) ? Math.max(0, maxCharge) : Infinity,
             maxDischargeWhPerHour: (hasMeasured && maxDischarge !== null) ? Math.max(0, maxDischarge) : Infinity,
         };
+    };
+
+    const inferExportCapWhPerHour = (dataPoints: SimulationDataPoint[]) => {
+        const exports = dataPoints
+            .map(d => d.ge)
+            .filter((v): v is number => v !== null && v !== undefined)
+            .filter(v => v > 0);
+
+        // Only infer when we have a meaningful amount of measured export data.
+        if (exports.length < 24) return null as number | null;
+
+        const p95 = percentile(exports, 95);
+        if (p95 === null) return null;
+        // Round to a stable value to avoid flickering in the UI.
+        const rounded = Math.round(p95 / 50) * 50;
+        return rounded > 0 ? rounded : null;
     };
 
     const estimateCyclicInitialSocWh = (
@@ -336,11 +363,13 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         const baseBatteryWh = (config.batteryCapacity || 0) * 1000;
 
         const inferredModel = inferBatteryModel(filteredHourlyData);
+        const inferredExportCap = inferExportCapWhPerHour(filteredHourlyData);
         const baseModelNoInitial: Omit<BatteryModelParams, 'initialSocWh'> = {
             chargeEff: inferredModel.chargeEff,
             dischargeEff: inferredModel.dischargeEff,
             maxChargeWhPerHour: inferredModel.maxChargeWhPerHour,
             maxDischargeWhPerHour: inferredModel.maxDischargeWhPerHour,
+            maxExportWhPerHour: inferredExportCap ?? undefined,
         };
 
         // Try to initialize SoC from historical data (when available).
@@ -737,6 +766,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         const hasGridFlows = filteredHourlyData.some(d => (d.gi !== null && d.gi !== undefined) || (d.ge !== null && d.ge !== undefined));
 
         const inferred = inferBatteryModel(filteredHourlyData);
+        const inferredExportCap = inferExportCapWhPerHour(filteredHourlyData);
 
         // We use measured SoC if present. Otherwise: cyclic estimate (steady-state) to avoid boundary artifacts.
         const startSocMethod = hasSoc ? 'Measured SoC' : 'Estimated (steady-state)';
@@ -752,6 +782,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
             startSocMethod,
             inferred,
             roundTripEffPct,
+            inferredExportCap,
         };
     }, [filteredHourlyData]);
 
@@ -817,6 +848,107 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
 
         return mk('veryLow', 'Very low', 'Too few complete days in this window.');
     }, [dataBasis, dataCoverage.days, dataCoverage.quality, windowBounds.expectedDays]);
+
+    const loadProfileInsight = useMemo(() => {
+        if (!filteredHourlyData) return null;
+
+        let loadTotalWh = 0;
+        let loadEveningWh = 0;
+        let loadDayWh = 0;
+
+        filteredHourlyData.forEach(p => {
+            const h = new Date(p.t).getHours();
+            loadTotalWh += p.l;
+            if (h >= 17 && h <= 23) loadEveningWh += p.l;
+            if (h >= 10 && h <= 15) loadDayWh += p.l;
+        });
+
+        if (loadTotalWh <= 0) return null;
+
+        const eveningPct = (loadEveningWh / loadTotalWh) * 100;
+        const dayPct = (loadDayWh / loadTotalWh) * 100;
+
+        // Heuristic categories for explainability (not for sizing decisions).
+        let hint: string | null = null;
+        if (eveningPct >= 45) {
+            hint = `Your consumption is evening-heavy (~${Math.round(eveningPct)}% between 17–23h). Batteries usually help most by shifting midday PV surplus into the evening.`;
+        } else if (dayPct >= 45) {
+            hint = `Your consumption is daytime-heavy (~${Math.round(dayPct)}% between 10–15h). PV upgrades often deliver more direct self-consumption than batteries in this profile.`;
+        }
+
+        return {
+            eveningPct,
+            dayPct,
+            hint,
+        };
+    }, [filteredHourlyData]);
+
+    const plannerWarnings = useMemo(() => {
+        if (!financials) return [] as Array<{ type: 'info' | 'warn'; text: string }>;
+
+        const warnings: Array<{ type: 'info' | 'warn'; text: string }> = [];
+
+        // 1) Plausibility: PV-to-battery ratio (rule-of-thumb)
+        const baseKwp = financials.estimatedBaseKwp;
+        const pvTotalKwp = baseKwp * (1 + (addedPvPercent / 100));
+        const batTotalKwh = (config.batteryCapacity || 0) + addedBatteryKwh;
+
+        if (pvTotalKwp > 0 && batTotalKwh > 0) {
+            const ratio = batTotalKwh / pvTotalKwp; // kWh per kWp
+            if (ratio >= 3) {
+                warnings.push({
+                    type: 'warn',
+                    text: `Battery seems large vs PV (${ratio.toFixed(1)} kWh per kWp). In winter/low-sun periods it often won't fill, and ROI can look better in simulation than in reality.`,
+                });
+            } else if (ratio >= 2.2) {
+                warnings.push({
+                    type: 'info',
+                    text: `Battery-to-PV ratio is on the high side (${ratio.toFixed(1)} kWh per kWp). Consider sizing storage to evening/night usage rather than winter charging.`,
+                });
+            }
+        }
+
+        // 2) Seasonal reality: annualization from a short/partial window
+        const expected = windowBounds.expectedDays;
+        const completeDays = dataCoverage.days;
+        const coveragePct = expected > 0 ? (completeDays / expected) * 100 : 0;
+        const annualizedFromShortWindow = simulationWindow !== 'year';
+        const weakCoverage = coveragePct < 80;
+        if (annualizedFromShortWindow) {
+            warnings.push({
+                type: 'warn',
+                text: `Yearly return is annualized from ${WINDOW_LABEL[simulationWindow].toLowerCase()}. This can be very seasonal (summer vs winter).`,
+            });
+        } else if (weakCoverage) {
+            warnings.push({
+                type: 'warn',
+                text: `Yearly return is annualized from incomplete data coverage (${Math.round(coveragePct)}%). Missing periods can skew ROI (especially seasonality).`,
+            });
+        }
+
+        // 3) Economic optimism guardrail: very fast payback
+        if ((addedPvPercent > 0 || addedBatteryKwh > 0) && Number.isFinite(financials.roiYears) && financials.roiYears > 0 && financials.roiYears < 5) {
+            warnings.push({
+                type: 'warn',
+                text: `Payback < 5 years is unusually fast. Double-check costs (€/kWp, €/kWh) and note: export limits, inverter clipping and O&M are not modeled here.`,
+            });
+        }
+
+        // 4) Technical constraints not modeled
+        if ((addedPvPercent > 0 || addedBatteryKwh > 0)) {
+            warnings.push({
+                type: 'info',
+                text: 'This planner does not model roof limits, inverter AC clipping, export caps, or battery power limits specific to your hardware (unless inferred from measured battery flows).',
+            });
+        }
+
+        // 5) Explainability hint from load profile
+        if (loadProfileInsight?.hint) {
+            warnings.push({ type: 'info', text: loadProfileInsight.hint });
+        }
+
+        return warnings;
+    }, [financials, addedPvPercent, addedBatteryKwh, config.batteryCapacity, dataCoverage.days, simulationWindow, windowBounds.expectedDays, loadProfileInsight, dataBasis]);
 
 
     if (!isOpen) {
@@ -1013,6 +1145,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                     <span className="text-yellow-400 font-bold">+{addedPvPercent}%</span>
                                 </div>
                                 <input 
+                                    aria-label="ADD PV Power"
                                     type="range" 
                                     min="0" 
                                     max="200" 
@@ -1046,6 +1179,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                     <span className="text-green-400 font-bold">+{addedBatteryKwh} kWh</span>
                                 </div>
                                 <input 
+                                    aria-label="ADD Storage"
                                     type="range" 
                                     min="0" 
                                     max="30" 
@@ -1126,6 +1260,11 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                     {dataBasis.roundTripEffPct !== null && (
                                                         <span className="px-2 py-0.5 rounded-full border text-[10px] border-slate-500/30 text-slate-300">
                                                             RTE (est.): {dataBasis.roundTripEffPct}%
+                                                        </span>
+                                                    )}
+                                                    {dataBasis.inferredExportCap !== null && dataBasis.inferredExportCap !== undefined && (
+                                                        <span className="px-2 py-0.5 rounded-full border text-[10px] border-slate-500/30 text-slate-300">
+                                                            Export cap (est.): {Math.round(dataBasis.inferredExportCap)} W
                                                         </span>
                                                     )}
                                                     {dataBasis.inferred.hasMeasured && (
@@ -1238,6 +1377,29 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                         Details
                                     </summary>
                                     <div className="mt-3 text-xs text-slate-300 space-y-3">
+                                        {plannerWarnings.length > 0 && (
+                                            <div className="space-y-2">
+                                                {plannerWarnings.slice(0, 4).map((w, idx) => (
+                                                    <div
+                                                        key={idx}
+                                                        className={`rounded-lg border px-3 py-2 text-[11px] leading-relaxed ${
+                                                            w.type === 'warn'
+                                                                ? 'bg-yellow-500/10 border-yellow-500/20 text-yellow-200'
+                                                                : 'bg-slate-900/50 border-slate-700 text-slate-300'
+                                                        }`}
+                                                    >
+                                                        {w.text}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {(addedPvPercent > 0 || addedBatteryKwh > 0 || pvRecommendation?.recommended || batteryRecommendation?.recommended) && (
+                                            <div className="text-[10px] text-slate-500 leading-relaxed">
+                                                <strong>Next steps:</strong> sanity-check roof space + inverter/export limits, then request real quotes (€/kWp, €/kWh). If your goal is evening coverage, compare suggested battery size to your typical evening/night consumption.
+                                            </div>
+                                        )}
+
                                         {(addedPvPercent > 0 || addedBatteryKwh > 0) && (
                                             <div>
                                                 <div className="font-bold uppercase text-slate-400 mb-2">ROI Breakdown</div>
