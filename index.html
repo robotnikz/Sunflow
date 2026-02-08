@@ -48,6 +48,28 @@
       .animate-fade-in {
         animation: fade-in 0.5s ease-out forwards;
       }
+
+      /* Keyboard focus visibility (fallback for elements using focus:outline-none) */
+      a:focus-visible,
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      textarea:focus-visible {
+        outline: 2px solid Highlight;
+        outline-offset: 2px;
+      }
+
+      /* Older browsers without :focus-visible */
+      @supports not selector(:focus-visible) {
+        a:focus,
+        button:focus,
+        input:focus,
+        select:focus,
+        textarea:focus {
+          outline: 2px solid Highlight;
+          outline-offset: 2px;
+        }
+      }
     </style>
 </head>
   <body>

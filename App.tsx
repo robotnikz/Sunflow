@@ -3,16 +3,21 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Settings, RefreshCw, AlertCircle, Sun, Battery, Zap, Home, Download } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import SettingsModal from './components/SettingsModal';
+import { useToast } from './components/Toaster';
 import { InverterData, SystemConfig, SystemInfo } from './types';
 import { getRealtimeData, getConfig, saveConfig, getSystemInfo } from './services/api';
 
 const App: React.FC = () => {
+  const { push } = useToast();
   const [data, setData] = useState<InverterData | null>(null);
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<
+    'general' | 'notifications' | 'tariffs' | 'expenses' | 'appliances' | 'history' | 'import' | undefined
+  >(undefined);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   
   // Trigger to force dashboard refresh after settings change
@@ -87,8 +92,13 @@ const App: React.FC = () => {
       setRefreshTrigger(prev => prev + 1);
     } catch (e) {
       console.error(e);
-      alert("Failed to save settings");
+      push({ type: 'error', title: 'Save failed', message: 'Failed to save settings. Please try again.' });
     }
+  };
+
+  const openSettings = (tab?: 'general' | 'notifications' | 'tariffs' | 'expenses' | 'appliances' | 'history' | 'import') => {
+    setSettingsInitialTab(tab);
+    setIsSettingsOpen(true);
   };
 
   return (
@@ -142,7 +152,7 @@ const App: React.FC = () => {
               </button>
               
               <button 
-                onClick={() => setIsSettingsOpen(true)}
+                onClick={() => openSettings()}
                 className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
                 title="Settings"
               >
@@ -165,7 +175,7 @@ const App: React.FC = () => {
             <Settings size={48} />
             <p className="text-lg">Please configure your Inverter IP in settings.</p>
             <button 
-              onClick={() => setIsSettingsOpen(true)}
+              onClick={() => openSettings('general')}
               className="px-4 py-2 bg-yellow-500 text-slate-900 font-bold rounded hover:bg-yellow-400 transition"
             >
               Open Settings
@@ -177,6 +187,7 @@ const App: React.FC = () => {
             config={config} 
             error={error} 
             refreshTrigger={refreshTrigger}
+            onOpenSettings={openSettings}
           />
         )}
       </main>
@@ -187,6 +198,7 @@ const App: React.FC = () => {
           currentConfig={config || { inverterIp: '', currency: 'EUR', systemStartDate: new Date().toISOString().split('T')[0] }} 
           onSave={handleSaveConfig} 
           onClose={() => setIsSettingsOpen(false)} 
+          initialTab={settingsInitialTab}
         />
       )}
     </div>

@@ -16,13 +16,16 @@ import BatteryHealthWidget from './BatteryHealthWidget';
 import ScenarioPlanner from './ScenarioPlanner';
 import DynamicTariffComparison from './DynamicTariffComparison';
 import { getHistory, getRoiData, getForecast, getBatteryHealth, getTariffs } from '../services/api';
-import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp, ShieldCheck, Download, ChevronLeft, ChevronRight, History } from 'lucide-react';
+import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp, ShieldCheck, Download, ChevronLeft, ChevronRight, History, CheckCircle2, AlertTriangle, Settings as SettingsIcon, Bell, Plug, CloudSun, X } from 'lucide-react';
+
+const SETUP_CHECKLIST_DISMISS_KEY = 'sunflow.setupChecklist.dismissed';
 
 interface DashboardProps {
   data: InverterData | null;
   config: SystemConfig;
   error: string | null;
   refreshTrigger: number; // Increment this to force reload of historical/ROI data
+    onOpenSettings?: (tab?: 'general' | 'notifications' | 'tariffs' | 'expenses' | 'appliances' | 'history' | 'import') => void;
 }
 
 export interface WeatherData {
@@ -45,9 +48,17 @@ const SkeletonCard = ({ height = "h-64" }: { height?: string }) => (
   </div>
 );
 
-const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigger }) => {
+const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigger, onOpenSettings }) => {
   const [timeRange, setTimeRange] = useState<TimeRange>('day');
   const [timeOffset, setTimeOffset] = useState(0);
+
+    const [setupChecklistDismissed, setSetupChecklistDismissed] = useState(() => {
+        try {
+            return window.localStorage.getItem(SETUP_CHECKLIST_DISMISS_KEY) === '1';
+        } catch {
+            return false;
+        }
+    });
   
   // Main History State (for Charts & Stats) - Controlled by TimeRange selector
   const [history, setHistory] = useState<HistoryData | null>(null);
@@ -300,6 +311,79 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
 
   if (!data) return null;
 
+    const setup = (() => {
+        const connected = !!config.inverterIp;
+        const hasStartDate = !!config.systemStartDate;
+        const hasTariffs = (tariffs || []).length > 0;
+        const hasExpenses = (roiData?.expenses || []).length > 0;
+        const roiEnabled = hasStartDate && hasTariffs && hasExpenses;
+
+        const hasAppliances = (config.appliances || []).length > 0;
+        const hasLocation = !!config.latitude && !!config.longitude;
+        const hasForecast = hasLocation && !!config.solcastApiKey;
+
+        const notifEnabled = !!config.notifications?.enabled;
+        const hasWebhook = !!(config.notifications?.discordWebhook || '').trim();
+        const notificationsReady = notifEnabled && hasWebhook;
+
+        const items = [
+            {
+                key: 'connected' as const,
+                label: 'Connected to inverter',
+                description: 'Required for live data',
+                done: connected,
+                tab: 'general' as const,
+                icon: SettingsIcon,
+                required: true,
+            },
+            {
+                key: 'roi' as const,
+                label: 'ROI tracking enabled',
+                description: 'Tariffs + expenses + commissioning date',
+                done: roiEnabled,
+                tab: (!hasTariffs ? 'tariffs' : !hasExpenses ? 'expenses' : 'general') as const,
+                icon: PiggyBank,
+                required: true,
+            },
+            {
+                key: 'appliances' as const,
+                label: 'Appliances configured',
+                description: 'Improves smart recommendations',
+                done: hasAppliances,
+                tab: 'appliances' as const,
+                icon: Plug,
+                required: false,
+            },
+            {
+                key: 'forecast' as const,
+                label: 'Forecast & location enabled',
+                description: 'Location + Solcast API key',
+                done: hasForecast,
+                tab: 'general' as const,
+                icon: CloudSun,
+                required: false,
+            },
+            {
+                key: 'notifications' as const,
+                label: 'Notifications enabled',
+                description: 'Discord webhook + triggers',
+                done: notificationsReady,
+                tab: 'notifications' as const,
+                icon: Bell,
+                required: false,
+            },
+        ];
+
+        const requiredIncomplete = items.filter(i => i.required && !i.done);
+        const next = (requiredIncomplete[0] || items.find(i => !i.done))?.tab;
+        const doneCount = items.filter(i => i.done).length;
+        const total = items.length;
+        const requiredTotal = items.filter(i => i.required).length;
+        const requiredDone = items.filter(i => i.required && i.done).length;
+
+        return { items, next, doneCount, total, requiredDone, requiredTotal };
+    })();
+
     const activeGridCostPerKwh = (() => {
         const list = tariffs || [];
         if (list.length === 0) return 0;
@@ -319,6 +403,100 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
           {error}
         </div>
       )}
+
+            {/* --- GUIDED SETUP / ACTIVATION --- */}
+            {!setupChecklistDismissed && (
+            <div className="bg-slate-800/60 backdrop-blur rounded-2xl border border-slate-700/50 shadow-lg overflow-hidden">
+                <div className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-700/50 bg-slate-900/30">
+                    <div className="flex items-start gap-3">
+                        <div className="p-2 rounded-lg bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+                            <CheckCircle2 size={18} />
+                        </div>
+                        <div>
+                            <div className="text-slate-100 font-semibold">Setup checklist</div>
+                            <div className="text-xs text-slate-400">
+                                {setup.requiredDone}/{setup.requiredTotal} required complete · {setup.doneCount}/{setup.total} total
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        {onOpenSettings && (
+                            <button
+                                type="button"
+                                onClick={() => onOpenSettings(setup.next)}
+                                className="px-3 py-2 rounded-lg bg-slate-900/50 hover:bg-slate-900/70 border border-slate-700 text-slate-200 text-sm font-medium transition-colors"
+                            >
+                                Open settings
+                            </button>
+                        )}
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setSetupChecklistDismissed(true);
+                                try {
+                                    window.localStorage.setItem(SETUP_CHECKLIST_DISMISS_KEY, '1');
+                                } catch {
+                                    // ignore
+                                }
+                            }}
+                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-900/30 hover:bg-slate-900/50 border border-slate-700 text-slate-400 hover:text-slate-200 text-sm font-medium transition-colors"
+                            aria-label="Dismiss setup checklist"
+                            title="Dismiss"
+                        >
+                            <X size={16} />
+                            <span className="hidden sm:inline">Dismiss</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {setup.items.map(item => {
+                        const Icon = item.icon;
+                        const status = item.done ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-300 text-xs font-semibold">
+                                <CheckCircle2 size={14} className="text-emerald-400" /> Done
+                            </span>
+                        ) : (
+                            <span className="inline-flex items-center gap-1 text-yellow-200 text-xs font-semibold">
+                                <AlertTriangle size={14} className="text-yellow-400" /> Missing{item.required ? '' : ' (optional)'}
+                            </span>
+                        );
+
+                        return (
+                            <div
+                                key={item.key}
+                                className="flex items-center justify-between gap-3 bg-slate-900/30 border border-slate-700/50 rounded-xl px-4 py-3"
+                            >
+                                <div className="flex items-start gap-3">
+                                    <div className={`p-2 rounded-lg border ${item.done ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' : 'bg-slate-900/40 text-slate-300 border-slate-700'}`}>
+                                        <Icon size={16} />
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="text-sm font-medium text-slate-200">{item.label}</div>
+                                            {status}
+                                        </div>
+                                        <div className="text-xs text-slate-400">{item.description}</div>
+                                    </div>
+                                </div>
+
+                                {onOpenSettings && !item.done && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onOpenSettings(item.tab)}
+                                        className="shrink-0 inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-slate-700 bg-slate-900/40 hover:bg-slate-900/60 text-slate-200 text-sm font-medium transition-colors"
+                                    >
+                                        Fix
+                                        <ArrowRight size={14} className="opacity-70" />
+                                    </button>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+            )}
 
       {/* --- SECTION 1: LIVE MONITORING --- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -398,7 +576,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                         </div>
                         <span className="text-slate-300 font-bold text-sm tracking-wide">AUTONOMY</span>
                     </div>
-                    <div className="text-xs text-slate-500 pl-1">Grid Independence</div>
+                    <div className="text-xs text-slate-400 pl-1">Grid Independence</div>
                 </div>
                 <div className="h-24 w-24 mr-2">
                     <EnergyDonut percentage={data.autonomy} color="#3b82f6" />
@@ -414,7 +592,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                         </div>
                         <span className="text-slate-300 font-bold text-sm tracking-wide">USAGE</span>
                     </div>
-                    <div className="text-xs text-slate-500 pl-1">Solar Utilization</div>
+                    <div className="text-xs text-slate-400 pl-1">Solar Utilization</div>
                 </div>
                 <div className="h-24 w-24 mr-2">
                     <EnergyDonut percentage={data.selfConsumption} color="#22c55e" />
@@ -455,23 +633,40 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
             </div>
             <div className="flex flex-wrap items-center gap-2">
                 {timeRange !== 'custom' && (
-                  <div className="flex items-center bg-slate-900 rounded-lg p-1 border border-slate-700">
-                      <button 
-                        onClick={() => setTimeOffset(prev => prev - 1)}
-                        className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
-                        title="Previous Period"
-                      >
-                         <ChevronLeft size={18} />
-                      </button>
-                      <button 
-                        onClick={() => setTimeOffset(prev => prev + 1)}
-                        disabled={timeOffset >= 0}
-                        className={`p-1.5 rounded-md transition-colors ${timeOffset >= 0 ? 'text-slate-600 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                        title="Next Period"
-                      >
-                         <ChevronRight size={18} />
-                      </button>
-                  </div>
+                                    <div className="flex items-center gap-2">
+                                            <div className="flex items-center bg-slate-900 rounded-lg p-1 border border-slate-700">
+                                                    <button 
+                                                        onClick={() => setTimeOffset(prev => prev - 1)}
+                                                        className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+                                                        title="Previous Period"
+                                                    >
+                                                         <ChevronLeft size={18} />
+                                                    </button>
+
+                                                    {/* Disabled buttons typically don't show the title tooltip. Wrap to keep a hint available. */}
+                                                    <span
+                                                        title={timeOffset >= 0 ? 'You are already viewing the latest available period.' : 'Next Period'}
+                                                    >
+                                                            <button 
+                                                                onClick={() => setTimeOffset(prev => prev + 1)}
+                                                                disabled={timeOffset >= 0}
+                                                                aria-describedby={timeOffset >= 0 ? 'time-nav-latest-hint' : undefined}
+                                                                className={`p-1.5 rounded-md transition-colors ${timeOffset >= 0 ? 'text-slate-600 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                                                                title="Next Period"
+                                                            >
+                                                                 <ChevronRight size={18} />
+                                                            </button>
+                                                    </span>
+                                            </div>
+                                            {timeOffset >= 0 && (
+                                                <span
+                                                    id="time-nav-latest-hint"
+                                                    className="text-xs text-slate-400"
+                                                >
+                                                    Latest period
+                                                </span>
+                                            )}
+                                    </div>
                 )}
                 <div className="flex flex-wrap bg-slate-900 rounded-lg p-1 border border-slate-700">
                     {(['hour', 'day', 'week', 'month', 'year', 'custom'] as TimeRange[]).map((range) => (
@@ -491,10 +686,12 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                 {/* Export Button */}
                 <button 
                     onClick={handleDownloadCSV}
-                    className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg border border-slate-700 transition-colors"
+                    className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg border border-slate-700 transition-colors"
                     title="Export CSV"
+                    aria-label="Export CSV"
                 >
                     <Download size={18} />
+                    <span className="text-sm font-medium sm:hidden">Export</span>
                 </button>
             </div>
         </div>
@@ -509,7 +706,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                     onChange={(e) => setStartDate(e.target.value)}
                     className="bg-slate-800 border border-slate-600 text-white text-sm rounded px-3 py-1.5 focus:border-yellow-500 focus:outline-none"
                 />
-                <ArrowRight size={16} className="text-slate-500" />
+                <ArrowRight size={16} className="text-slate-400" />
                 <input 
                     type="date" 
                     value={endDate}
@@ -542,19 +739,19 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                         </h3>
                         <div className="flex flex-col gap-6 relative z-10">
                             <div>
-                                <span className="text-slate-500 text-xs uppercase tracking-wider font-bold">Total Benefit</span>
+                                <span className="text-slate-400 text-xs uppercase tracking-wider font-bold">Total Benefit</span>
                                 <div className="text-4xl font-bold text-green-400 tracking-tight">
                                     {currencySymbol} {(history.stats.costSaved + history.stats.earnings).toFixed(2)}
                                 </div>
-                                <div className="text-xs text-slate-500 mt-1">Saved Grid Costs + Feed-in Reward</div>
+                                <div className="text-xs text-slate-400 mt-1">Saved Grid Costs + Feed-in Reward</div>
                             </div>
                             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-700">
                                 <div>
-                                    <span className="text-slate-500 text-xs block mb-0.5">Direct Savings</span>
+                                    <span className="text-slate-400 text-xs block mb-0.5">Direct Savings</span>
                                     <div className="text-lg font-semibold text-slate-200">{currencySymbol} {history.stats.costSaved.toFixed(2)}</div>
                                 </div>
                                 <div>
-                                    <span className="text-slate-500 text-xs block mb-0.5">Export Earnings</span>
+                                    <span className="text-slate-400 text-xs block mb-0.5">Export Earnings</span>
                                     <div className="text-lg font-semibold text-slate-200">{currencySymbol} {history.stats.earnings.toFixed(2)}</div>
                                 </div>
                             </div>
@@ -568,7 +765,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                                 <Leaf size={16} /> <span className="text-xs font-bold uppercase">CO₂ Saved</span>
                             </div>
                             <div className="text-2xl font-bold text-slate-100">
-                                {calculateCO2(history.stats.production)} <span className="text-sm font-normal text-slate-500">kg</span>
+                                {calculateCO2(history.stats.production)} <span className="text-sm font-normal text-slate-400">kg</span>
                             </div>
                         </div>
                         <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-lg">
@@ -576,7 +773,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                                 <TrendingUp size={16} /> <span className="text-xs font-bold uppercase">Peak PV</span>
                             </div>
                             <div className="text-2xl font-bold text-slate-100">
-                                {(peaks.maxPv / 1000).toFixed(1)} <span className="text-sm font-normal text-slate-500">kW</span>
+                                {(peaks.maxPv / 1000).toFixed(1)} <span className="text-sm font-normal text-slate-400">kW</span>
                             </div>
                         </div>
                     </div>
@@ -588,20 +785,20 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                         </h3>
                         <div className="grid grid-cols-2 gap-y-6 gap-x-4">
                             <div>
-                                <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Sun size={12}/> Solar Yield</div>
-                                <div className="text-xl font-bold text-yellow-400">{history.stats.production.toFixed(2)} <span className="text-xs text-slate-500">kWh</span></div>
+                                <div className="text-xs text-slate-400 mb-1 flex items-center gap-1"><Sun size={12}/> Solar Yield</div>
+                                <div className="text-xl font-bold text-yellow-400">{history.stats.production.toFixed(2)} <span className="text-xs text-slate-400">kWh</span></div>
                             </div>
                             <div>
-                                <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Home size={12}/> Consumption</div>
-                                <div className="text-xl font-bold text-blue-400">{history.stats.consumption.toFixed(2)} <span className="text-xs text-slate-500">kWh</span></div>
+                                <div className="text-xs text-slate-400 mb-1 flex items-center gap-1"><Home size={12}/> Consumption</div>
+                                <div className="text-xl font-bold text-blue-400">{history.stats.consumption.toFixed(2)} <span className="text-xs text-slate-400">kWh</span></div>
                             </div>
                             <div>
-                                <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Zap size={12}/> Imported</div>
-                                <div className="text-xl font-bold text-red-400">{history.stats.imported.toFixed(2)} <span className="text-xs text-slate-500">kWh</span></div>
+                                <div className="text-xs text-slate-400 mb-1 flex items-center gap-1"><Zap size={12}/> Imported</div>
+                                <div className="text-xl font-bold text-red-400">{history.stats.imported.toFixed(2)} <span className="text-xs text-slate-400">kWh</span></div>
                             </div>
                             <div>
-                                <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Zap size={12}/> Exported</div>
-                                <div className="text-xl font-bold text-green-400">{history.stats.exported.toFixed(2)} <span className="text-xs text-slate-500">kWh</span></div>
+                                <div className="text-xs text-slate-400 mb-1 flex items-center gap-1"><Zap size={12}/> Exported</div>
+                                <div className="text-xl font-bold text-green-400">{history.stats.exported.toFixed(2)} <span className="text-xs text-slate-400">kWh</span></div>
                             </div>
                         </div>
                     </div>

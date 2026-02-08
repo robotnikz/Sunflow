@@ -1,6 +1,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import Dashboard from '../components/Dashboard';
 import * as api from '../services/api';
 import React from 'react';
@@ -27,6 +27,11 @@ describe('Dashboard Component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    try {
+      window.localStorage.removeItem('sunflow.setupChecklist.dismissed');
+    } catch {
+      // ignore
+    }
     (api.getHistory as any).mockResolvedValue({ chart: [], stats: { production: 0, consumption: 0, imported: 0, exported: 0, costSaved: 0, earnings: 0 } });
     (api.getRoiData as any).mockResolvedValue({ totalInvested: 1000, totalReturned: 100, netValue: -900, roiPercent: 10, breakEvenDate: null, expenses: [] });
     (api.getForecast as any).mockResolvedValue({ forecasts: [] });
@@ -80,6 +85,32 @@ describe('Dashboard Component', () => {
     render(<Dashboard data={mockData} config={mockConfig} error="Connection Lost" refreshTrigger={0} />);
     await waitFor(() => {
       expect(screen.getByText('Connection Lost')).toBeInTheDocument();
+    });
+  });
+
+  it('allows dismissing the setup checklist persistently', async () => {
+    const { unmount } = render(<Dashboard data={mockData} config={mockConfig} error={null} refreshTrigger={0} />);
+
+    // Let initial async effects settle to avoid act() warnings
+    await waitFor(() => {
+      expect(screen.getByText(/Return on Investment/i)).toBeInTheDocument();
+    });
+
+    // Checklist should be visible initially
+    expect(screen.getByText(/Setup checklist/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Dismiss setup checklist/i }));
+    await waitFor(() => {
+      expect(screen.queryByText(/Setup checklist/i)).not.toBeInTheDocument();
+    });
+
+    // Remount: should stay dismissed via localStorage
+    unmount();
+    render(<Dashboard data={mockData} config={mockConfig} error={null} refreshTrigger={0} />);
+    expect(screen.queryByText(/Setup checklist/i)).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Return on Investment/i)).toBeInTheDocument();
     });
   });
 });

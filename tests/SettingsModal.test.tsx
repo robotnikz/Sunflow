@@ -1,6 +1,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import SettingsModal from '../components/SettingsModal';
 import { SystemConfig } from '../types';
 import * as api from '../services/api';
@@ -37,15 +37,16 @@ describe('SettingsModal Interaction', () => {
     await waitFor(() => {
       expect(screen.getByDisplayValue('1.2.3.4')).toBeInTheDocument();
     });
-    expect(screen.getByText(/Notifications/i)).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Notifications/i })).toBeInTheDocument();
   });
 
   it('wechselt Tabs korrekt', async () => {
     render(<SettingsModal currentConfig={mockConfig} onSave={onSaveMock} onClose={onCloseMock} />);
-    const notifTab = screen.getByText(/Notifications/i);
+    const notifTab = screen.getByRole('tab', { name: /Notifications/i });
     fireEvent.click(notifTab);
     await waitFor(() => {
-        expect(screen.getByText(/Discord Integration/i)).toBeInTheDocument();
+      const notifPanel = screen.getByRole('tabpanel', { name: /Notifications/i });
+      expect(within(notifPanel).getByText(/Discord Integration/i)).toBeInTheDocument();
     });
   });
 
@@ -66,26 +67,25 @@ describe('SettingsModal Interaction', () => {
     render(<SettingsModal currentConfig={mockConfig} onSave={onSaveMock} onClose={onCloseMock} />);
     
     // 1. Zu Notifications wechseln
-    fireEvent.click(screen.getByText(/Notifications/i));
+    fireEvent.click(screen.getByRole('tab', { name: /Notifications/i }));
+
+    const notifPanel = await screen.findByRole('tabpanel', { name: /Notifications/i });
 
     // 2. Checkbox für Battery Health finden und aktivieren
-    const checkboxes = screen.getAllByRole('checkbox');
-    // Die Battery Health Checkbox ist die 4. in der Liste (Errors, Full, Empty, Health, Smart)
-    const healthCheckbox = checkboxes[3]; 
-    
+    const healthCheckbox = within(notifPanel).getByRole('checkbox', { name: /Battery Health/i });
     fireEvent.click(healthCheckbox);
 
     // 3. Prüfen ob die Zusatzfelder erscheinen (Alert Threshold)
     await waitFor(() => {
-        expect(screen.getByText(/Alert Threshold/i)).toBeInTheDocument();
+      expect(within(notifPanel).getByText(/Alert Threshold/i)).toBeInTheDocument();
     });
 
     // 4. Werte ändern
-    const thresholdInput = screen.getByDisplayValue('75');
+    const thresholdInput = within(notifPanel).getByDisplayValue('75');
     fireEvent.change(thresholdInput, { target: { value: '80' } });
 
     // 5. Speichern
-    fireEvent.click(screen.getByRole('button', { name: /Save Notifications/i }));
+    fireEvent.click(within(notifPanel).getByRole('button', { name: /Save Notifications/i }));
 
     // 6. Validierung
     expect(onSaveMock).toHaveBeenCalled();
@@ -106,11 +106,12 @@ describe('SettingsModal Interaction', () => {
       
       // Suche den Tab für History/Calibration. 
       // Der Text im Button ist "Calibration" (Zeile 413), nicht "History" (Icon)!
-      const calibTab = screen.getAllByRole('button', { name: /Calibration/i })[0]; 
+      const calibTab = screen.getByRole('tab', { name: /Calibration/i });
       fireEvent.click(calibTab);
 
       await waitFor(() => {
-          expect(screen.getByText(/Pre-App History/i)).toBeInTheDocument();
+        const calibPanel = screen.getByRole('tabpanel', { name: /Calibration/i });
+        expect(within(calibPanel).getByText(/Pre-App History/i)).toBeInTheDocument();
       });
 
       // Prüfen ob Summen korrekt angezeigt werden (Initial + DB)
@@ -126,7 +127,8 @@ describe('SettingsModal Interaction', () => {
       
       if(offsetInput) {
           fireEvent.change(offsetInput, { target: { value: '2000' } });
-          fireEvent.click(screen.queryAllByRole('button', { name: /Save Calibration/i })[0]); // Manchmal mehrfach gematcht
+          const calibPanel = screen.getByRole('tabpanel', { name: /Calibration/i });
+          fireEvent.click(within(calibPanel).getByRole('button', { name: /Save Calibration/i }));
           
           await waitFor(() => {
               expect(onSaveMock).toHaveBeenCalled();
@@ -141,12 +143,13 @@ describe('SettingsModal Interaction', () => {
 
   it('navigiert zum Import Tab', async () => {
       render(<SettingsModal currentConfig={mockConfig} onSave={onSaveMock} onClose={onCloseMock} />);
-      const importTab = screen.getByRole('button', { name: /Data Import/i });
+      const importTab = screen.getByRole('tab', { name: /Data Import/i });
       fireEvent.click(importTab);
       
       await waitFor(() => {
+        const importPanel = screen.getByRole('tabpanel', { name: /Data Import/i });
           // Prüft ob CsvImporter gerendert wird (Key Text)
-          expect(screen.getAllByText(/Click to upload/i).length).toBeGreaterThan(0);
+        expect(within(importPanel).getAllByText(/Click to upload/i).length).toBeGreaterThan(0);
       });
   });
 });
