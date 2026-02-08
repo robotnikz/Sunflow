@@ -71,6 +71,7 @@ describe('Backend API (integration)', () => {
     process.env.DATA_DIR = dataDir;
 
     // Import after env vars are set so server.js picks them up.
+    vi.resetModules();
     // @ts-ignore importing JS module without types for this dynamic import
     const mod = (await import('../server.js')) as unknown as {
       app: any;

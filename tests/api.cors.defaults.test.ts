@@ -83,6 +83,7 @@ const loadServer = async (env: Record<string, string | undefined>) => {
     });
   });
 
+  vi.resetModules();
   // @ts-ignore importing JS module without types
   const mod = (await import('../server.js')) as unknown as ServerModule;
 

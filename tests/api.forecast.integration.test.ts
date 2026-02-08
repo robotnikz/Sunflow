@@ -66,6 +66,7 @@ describe('Backend API (forecast integration)', () => {
     // Start with no Solcast config.
     writeConfig(dataDir, { currency: 'EUR' });
 
+    vi.resetModules();
     // @ts-ignore importing JS module without types
     const mod = (await import('../server.js')) as unknown as ServerModule;
     ({ app, shutdown } = mod);

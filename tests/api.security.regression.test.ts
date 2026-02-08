@@ -46,6 +46,7 @@ describe('Backend API (security regressions)', () => {
     dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sunflow-test-'));
     process.env.DATA_DIR = dataDir;
 
+    vi.resetModules();
     // @ts-ignore importing JS module without types for this dynamic import
     const mod = (await import('../server.js')) as unknown as {
       app: any;
