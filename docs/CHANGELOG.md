@@ -1,3 +1,10 @@
+## [1.13.6](https://github.com/robotnikz/Sunflow/compare/v1.13.5...v1.13.6) (2026-02-08)
+
+
+### Bug Fixes
+
+* activation checklist + settings accessibility ([#65](https://github.com/robotnikz/Sunflow/issues/65)) ([211e216](https://github.com/robotnikz/Sunflow/commit/211e2164461e4b95bcb68f15b0efd635d9629f07))
+
 ## [1.13.5](https://github.com/robotnikz/Sunflow/compare/v1.13.4...v1.13.5) (2026-02-08)
 
 
