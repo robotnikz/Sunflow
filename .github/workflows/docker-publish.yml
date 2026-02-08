@@ -25,10 +25,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
@@ -61,13 +61,13 @@ jobs:
       new_release_version: ${{ steps.semantic.outputs.new_release_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: 'npm'
@@ -77,7 +77,7 @@ jobs:
 
       - name: Semantic Release
         id: semantic
-        uses: cycjimmy/semantic-release-action@v6
+        uses: cycjimmy/semantic-release-action@v4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -101,7 +101,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           ref: ${{ format('refs/tags/v{0}', needs.release.outputs.new_release_version) }}
 
@@ -133,7 +133,7 @@ jobs:
             type=raw,value=latest
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v5
         with:
           context: .
           file: docker/Dockerfile

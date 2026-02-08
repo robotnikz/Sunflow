@@ -2272,7 +2272,8 @@ app.get('/api/simulation-data', (req, res) => {
         FROM hours h
         LEFT JOIN log_hourly l ON l.ts = h.ts
         LEFT JOIN data_hourly d ON d.ts = h.ts
-        WHERE p_pv IS NOT NULL AND p_load IS NOT NULL
+        WHERE COALESCE(l.p_pv, d.p_pv) IS NOT NULL
+          AND COALESCE(l.p_load, d.p_load) IS NOT NULL
         ORDER BY h.ts ASC
     `;
 

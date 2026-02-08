@@ -52,6 +52,7 @@ sunflow-data-*.tar*
 
 # Backend runtime data (default DATA_DIR)
 data/uploads/
+data/config.json
 data/*.db
 data/*.db-*
 data/*.sqlite
