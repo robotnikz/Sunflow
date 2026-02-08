@@ -1303,7 +1303,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                     ? 'border-yellow-500/30 text-yellow-300 bg-yellow-500/10'
                                                     : 'border-red-500/30 text-red-300 bg-red-500/10'
                                         }`}>
-                                            ROI: {Number.isFinite(financials.roiYears) ? `${financials.roiYears.toFixed(1)}y` : '∞'}
+                                            ROI (sliders): {Number.isFinite(financials.roiYears) ? `${financials.roiYears.toFixed(1)}y` : '∞'}
                                         </div>
                                     )}
                                 </div>
@@ -1402,94 +1402,39 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
 
                                         {(addedPvPercent > 0 || addedBatteryKwh > 0) && (
                                             <div>
-                                                <div className="font-bold uppercase text-slate-400 mb-2">ROI Breakdown</div>
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <div className="text-xs font-bold uppercase text-slate-400">ROI (Current Sliders)</div>
+                                                    <div className="text-[10px] text-slate-500">PV +{addedPvPercent}% · Storage +{addedBatteryKwh} kWh</div>
+                                                </div>
+
                                                 <div className="flex items-center justify-between">
-                                                    <span className="text-slate-400">PV-only (base → PV)</span>
+                                                    <span className="text-slate-400">Combined ROI (PV + Storage sliders)</span>
+                                                    <span className="text-emerald-400 font-semibold">
+                                                        {Number.isFinite(financials.roiYears) ? `${financials.roiYears.toFixed(1)}y` : '∞'}
+                                                    </span>
+                                                </div>
+
+                                                <div className="flex items-center justify-between mt-1">
+                                                    <span className="text-slate-400">PV-only ROI (base → PV slider)</span>
                                                     <span className="text-yellow-300 font-semibold">
                                                         {financials.pvOnly.invest > 0
                                                             ? (Number.isFinite(financials.pvOnly.roiYears) ? `${financials.pvOnly.roiYears.toFixed(1)}y` : '∞')
                                                             : '—'}
                                                     </span>
                                                 </div>
+
                                                 <div className="flex items-center justify-between mt-1">
-                                                    <span className="text-slate-400">Battery incremental (PV → PV+Battery)</span>
+                                                    <span className="text-slate-400">Battery ROI (incremental, PV slider → PV+Battery sliders)</span>
                                                     <span className="text-green-300 font-semibold">
                                                         {financials.batteryIncremental.invest > 0
                                                             ? (Number.isFinite(financials.batteryIncremental.roiYears) ? `${financials.batteryIncremental.roiYears.toFixed(1)}y` : '∞')
                                                             : '—'}
                                                     </span>
                                                 </div>
+
                                                 <div className="mt-2 text-[10px] text-slate-500">
-                                                    Battery ROI uses PV-only → PV+Battery (captures PV→Battery coupling).
+                                                    Battery ROI is incremental (PV-only → PV+Battery), not “battery-only”.
                                                 </div>
-                                            </div>
-                                        )}
-
-                                        {batteryRecommendation && (
-                                            <div>
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <div className="text-xs font-bold uppercase text-slate-400">Battery Suggestion</div>
-                                                    <div className="text-[10px] text-slate-500">Current PV slider + timeframe</div>
-                                                </div>
-
-                                                {batteryRecommendation.recommended ? (
-                                                    <div className="text-sm text-slate-200">
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="text-slate-400">Recommended add-on</span>
-                                                            <span className="text-white font-bold">+{batteryRecommendation.recommended.addedBatteryKwh} kWh</span>
-                                                        </div>
-                                                        <div className="flex items-center justify-between mt-1">
-                                                            <span className="text-slate-400">Battery ROI (incremental)</span>
-                                                            <span className="text-emerald-400 font-semibold">{batteryRecommendation.recommended.roiYears.toFixed(1)}y</span>
-                                                        </div>
-                                                        <div className="flex items-center justify-between mt-1">
-                                                            <span className="text-slate-400">Combined ROI (PV + Battery)</span>
-                                                            <span className="text-emerald-400 font-semibold">{batteryRecommendation.recommended.combinedRoiYears.toFixed(1)}y</span>
-                                                        </div>
-                                                        <div className="flex items-center justify-between mt-1">
-                                                            <span className="text-slate-400">Net gain ({financials.horizonYears}y)</span>
-                                                            <span className={`${batteryRecommendation.recommended.netGainHorizon >= 0 ? 'text-emerald-300' : 'text-red-300'} font-semibold`}>
-                                                                {batteryRecommendation.recommended.netGainHorizon >= 0 ? '+' : ''}{batteryRecommendation.recommended.netGainHorizon.toLocaleString(undefined, { maximumFractionDigits: 0 })} {config.currency}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center justify-between mt-1">
-                                                            <span className="text-slate-400">Yearly benefit (battery)</span>
-                                                            <span className="text-emerald-300 font-semibold">+{batteryRecommendation.recommended.yearlyBenefit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {config.currency}</span>
-                                                        </div>
-
-                                                        {batteryRecommendation.thresholds?.focus === 'autonomy' && (
-                                                            <div className="flex items-center justify-between mt-1">
-                                                                <span className="text-slate-400">Autonomy Δ (PV → PV+Battery)</span>
-                                                                <span className="text-blue-300 font-semibold">+{batteryRecommendation.recommended.autonomyDeltaPct.toFixed(2)}%</span>
-                                                            </div>
-                                                        )}
-                                                        {batteryRecommendation.bestYearly && batteryRecommendation.bestYearly.addedBatteryKwh !== batteryRecommendation.recommended.addedBatteryKwh && (
-                                                            <div className="mt-2 text-[10px] text-slate-500">
-                                                                Max yearly benefit at +{batteryRecommendation.bestYearly.addedBatteryKwh} kWh.
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    <div className="text-xs text-slate-400">
-                                                        <div>
-                                                            No worthwhile battery recommendation for this PV setting in the selected timeframe.
-                                                            {batteryRecommendation.thresholds && (
-                                                                <span>
-                                                                    {batteryRecommendation.thresholds.focus === 'roi'
-                                                                        ? ` (ROI focus: needs ≥ ${batteryRecommendation.thresholds.minYearlyBenefit} ${config.currency}/yr and payback ≤ ${batteryRecommendation.thresholds.maxRoiYears}y; also combined PV+Battery payback must be ≤ ${batteryRecommendation.thresholds.maxRoiYears}y.)`
-                                                                        : ' (Autonomy focus: no battery size improves autonomy in this timeframe.)'}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        {batteryRecommendation.bestYearly && (
-                                                            <div className="mt-2 text-[10px] text-slate-500">
-                                                                Best-case add-on: +{batteryRecommendation.bestYearly.addedBatteryKwh} kWh → {batteryRecommendation.bestYearly.yearlyBenefit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {config.currency}/yr,
-                                                                saves ~{batteryRecommendation.bestYearly.yearlySavedImportKwh.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh import/yr,
-                                                                export Δ ~{batteryRecommendation.bestYearly.yearlyExportDeltaKwh.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh/yr.
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
                                             </div>
                                         )}
 
@@ -1497,7 +1442,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                             <div>
                                                 <div className="flex items-center justify-between mb-2">
                                                     <div className="text-xs font-bold uppercase text-slate-400">PV Suggestion</div>
-                                                    <div className="text-[10px] text-slate-500">PV-only (base → PV), same timeframe</div>
+                                                    <div className="text-[10px] text-slate-500">PV-only (base → PV) · ignores storage slider</div>
                                                 </div>
 
                                                 {pvRecommendation.recommended ? (
@@ -1550,6 +1495,79 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                                 </span>
                                                             )}
                                                         </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {batteryRecommendation && (
+                                            <div>
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <div className="text-xs font-bold uppercase text-slate-400">Battery Suggestion</div>
+                                                    <div className="text-[10px] text-slate-500">Uses current PV slider · same timeframe</div>
+                                                </div>
+
+                                                {batteryRecommendation.recommended ? (
+                                                    <div className="text-sm text-slate-200">
+                                                        {(addedPvPercent > 0 || addedBatteryKwh > 0) && (
+                                                            <div className="mb-2 text-[10px] text-slate-500">
+                                                                Current sliders combined ROI: {Number.isFinite(financials.roiYears) ? `${financials.roiYears.toFixed(1)}y` : '∞'}
+                                                            </div>
+                                                        )}
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-slate-400">Recommended add-on</span>
+                                                            <span className="text-white font-bold">+{batteryRecommendation.recommended.addedBatteryKwh} kWh</span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between mt-1">
+                                                            <span className="text-slate-400">Battery ROI (incremental)</span>
+                                                            <span className="text-emerald-400 font-semibold">{batteryRecommendation.recommended.roiYears.toFixed(1)}y</span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between mt-1">
+                                                            <span className="text-slate-400">Combined ROI (PV slider + recommended battery)</span>
+                                                            <span className="text-emerald-400 font-semibold">{batteryRecommendation.recommended.combinedRoiYears.toFixed(1)}y</span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between mt-1">
+                                                            <span className="text-slate-400">Net gain ({financials.horizonYears}y)</span>
+                                                            <span className={`${batteryRecommendation.recommended.netGainHorizon >= 0 ? 'text-emerald-300' : 'text-red-300'} font-semibold`}>
+                                                                {batteryRecommendation.recommended.netGainHorizon >= 0 ? '+' : ''}{batteryRecommendation.recommended.netGainHorizon.toLocaleString(undefined, { maximumFractionDigits: 0 })} {config.currency}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between mt-1">
+                                                            <span className="text-slate-400">Yearly benefit (battery)</span>
+                                                            <span className="text-emerald-300 font-semibold">+{batteryRecommendation.recommended.yearlyBenefit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {config.currency}</span>
+                                                        </div>
+
+                                                        {batteryRecommendation.thresholds?.focus === 'autonomy' && (
+                                                            <div className="flex items-center justify-between mt-1">
+                                                                <span className="text-slate-400">Autonomy Δ (PV → PV+Battery)</span>
+                                                                <span className="text-blue-300 font-semibold">+{batteryRecommendation.recommended.autonomyDeltaPct.toFixed(2)}%</span>
+                                                            </div>
+                                                        )}
+                                                        {batteryRecommendation.bestYearly && batteryRecommendation.bestYearly.addedBatteryKwh !== batteryRecommendation.recommended.addedBatteryKwh && (
+                                                            <div className="mt-2 text-[10px] text-slate-500">
+                                                                Max yearly benefit at +{batteryRecommendation.bestYearly.addedBatteryKwh} kWh.
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-xs text-slate-400">
+                                                        <div>
+                                                            No worthwhile battery recommendation for this PV setting in the selected timeframe.
+                                                            {batteryRecommendation.thresholds && (
+                                                                <span>
+                                                                    {batteryRecommendation.thresholds.focus === 'roi'
+                                                                        ? ` (ROI focus: needs ≥ ${batteryRecommendation.thresholds.minYearlyBenefit} ${config.currency}/yr and payback ≤ ${batteryRecommendation.thresholds.maxRoiYears}y; also combined PV+Battery payback must be ≤ ${batteryRecommendation.thresholds.maxRoiYears}y.)`
+                                                                        : ' (Autonomy focus: no battery size improves autonomy in this timeframe.)'}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {batteryRecommendation.bestYearly && (
+                                                            <div className="mt-2 text-[10px] text-slate-500">
+                                                                Best-case add-on: +{batteryRecommendation.bestYearly.addedBatteryKwh} kWh → {batteryRecommendation.bestYearly.yearlyBenefit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {config.currency}/yr,
+                                                                saves ~{batteryRecommendation.bestYearly.yearlySavedImportKwh.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh import/yr,
+                                                                export Δ ~{batteryRecommendation.bestYearly.yearlyExportDeltaKwh.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh/yr.
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
