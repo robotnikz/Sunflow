@@ -353,7 +353,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         });
 
         const autonomyPct = totalLoadWh > 0 ? 100 * (1 - (importedWh / totalLoadWh)) : 0;
-        return { totalLoadWh, totalPvWh, importedWh, exportedWh, autonomyPct, endSocWh: 0 };
+        return { totalLoadWh, totalPvWh, importedWh, exportedWh, curtailedWh: 0, autonomyPct, endSocWh: 0 };
     };
 
     const simulations = useMemo(() => {
