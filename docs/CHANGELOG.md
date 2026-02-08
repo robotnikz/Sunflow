@@ -1,3 +1,10 @@
+## [1.13.5](https://github.com/robotnikz/Sunflow/compare/v1.13.4...v1.13.5) (2026-02-08)
+
+
+### Bug Fixes
+
+* **scenario-planner:** clarify ROI presentation ([#64](https://github.com/robotnikz/Sunflow/issues/64)) ([7ada755](https://github.com/robotnikz/Sunflow/commit/7ada755766264b3fff820c8bcf97fac55d12115f))
+
 ## [1.13.4](https://github.com/robotnikz/Sunflow/compare/v1.13.3...v1.13.4) (2026-02-08)
 
 
