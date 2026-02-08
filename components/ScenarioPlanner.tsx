@@ -48,6 +48,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
     const [data, setData] = useState<SimulationDataPoint[]>([]);
     const [tariffs, setTariffs] = useState<Tariff[]>([]);
     const [loading, setLoading] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
     
     // Scenarios
     const [addedPvPercent, setAddedPvPercent] = useState<number>(0); // 0 to 200%
@@ -146,6 +147,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
 
         // Fetch on every open so the simulator uses current data after imports/updates.
         setLoading(true);
+        setLoadError(null);
         Promise.all([
             getSimulationData(),
             getTariffs()
@@ -154,7 +156,11 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                 setData(simData);
                 setTariffs(tariffData);
             })
-            .catch(err => console.error("Sim data fail", err))
+            .catch(err => {
+                console.error("Sim data fail", err);
+                setLoadError('Failed to load historical data. Please try again.');
+                setData([]);
+            })
             .finally(() => setLoading(false));
     }, [isOpen]);
 
@@ -819,6 +825,24 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
 
              {loading && (
                  <div className="text-center py-10 text-slate-400">Loading historical data...</div>
+             )}
+
+             {!loading && loadError && (
+                 <div className="text-center py-10 bg-slate-900/50 rounded-xl border border-dashed border-slate-700">
+                     <AlertTriangle className="text-red-400 mx-auto mb-3" size={48} />
+                     <h3 className="text-white font-bold text-lg">Could not load data</h3>
+                     <p className="text-slate-400 text-sm max-w-md mx-auto mt-2">{loadError}</p>
+                 </div>
+             )}
+
+             {!loading && !loadError && data.length === 0 && (
+                 <div className="text-center py-10 bg-slate-900/50 rounded-xl border border-dashed border-slate-700">
+                     <Info className="text-blue-400 mx-auto mb-3" size={48} />
+                     <h3 className="text-white font-bold text-lg">No historical data available</h3>
+                     <p className="text-slate-400 text-sm max-w-md mx-auto mt-2">
+                         Import or collect some history first, then reopen the simulator. The planner needs hourly data to simulate upgrades.
+                     </p>
+                 </div>
              )}
 
              {!loading && !results && data.length > 0 && (
