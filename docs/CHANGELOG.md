@@ -1,3 +1,10 @@
+## [1.13.4](https://github.com/robotnikz/Sunflow/compare/v1.13.3...v1.13.4) (2026-02-08)
+
+
+### Bug Fixes
+
+* **scenario-planner:** realistic guardrails + export cap inference ([#63](https://github.com/robotnikz/Sunflow/issues/63)) ([fba1462](https://github.com/robotnikz/Sunflow/commit/fba146294d33ecac747a82e2fdb90a1ef613951a))
+
 ## [1.13.3](https://github.com/robotnikz/Sunflow/compare/v1.13.2...v1.13.3) (2026-02-08)
 
 
