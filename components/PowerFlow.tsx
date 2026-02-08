@@ -140,7 +140,7 @@ const PowerFlow: React.FC<PowerFlowProps> = memo(({ power, soc }) => {
              <Sun className="text-yellow-500" size={36} fill={power.pv > 0 ? "currentColor" : "none"} fillOpacity={0.2} />
         </div>
         <div className="flex flex-col items-center gap-1 mb-1">
-             <span className="text-xs text-slate-500 font-medium tracking-wide">SOLAR</span>
+             <span className="text-xs text-slate-400 font-medium tracking-wide">SOLAR</span>
              <span className="text-xl font-bold text-yellow-400 drop-shadow-md leading-none whitespace-nowrap">{Math.round(power.pv)} W</span>
         </div>
       </div>
@@ -155,7 +155,7 @@ const PowerFlow: React.FC<PowerFlowProps> = memo(({ power, soc }) => {
         </div>
         <div className="flex flex-col items-center gap-1 mt-1">
              <span className="text-xl font-bold text-blue-400 drop-shadow-md leading-none whitespace-nowrap">{Math.round(power.load)} W</span>
-             <span className="text-xs text-slate-500 font-medium tracking-wide">HOME LOAD</span>
+             <span className="text-xs text-slate-400 font-medium tracking-wide">HOME LOAD</span>
         </div>
       </div>
 
@@ -169,7 +169,7 @@ const PowerFlow: React.FC<PowerFlowProps> = memo(({ power, soc }) => {
         </div>
         <div className="flex flex-col items-center gap-1 w-full mt-1">
              <span className="text-xl font-bold text-purple-400 drop-shadow-md leading-none whitespace-nowrap">{Math.round(batPowerAbs)} W</span>
-             <span className="text-xs text-slate-500 font-medium flex justify-center items-center gap-1">
+             <span className="text-xs text-slate-400 font-medium flex justify-center items-center gap-1">
                 {isCharging ? 'CHARGING' : isDischarging ? 'DRAINING' : 'IDLE'}
              </span>
         </div>

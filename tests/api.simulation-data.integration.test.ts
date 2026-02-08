@@ -111,6 +111,7 @@ describe('Backend API (simulation-data integration)', () => {
 
     dbPath = path.join(dataDir, 'solar_data.db');
 
+      vi.resetModules();
     // @ts-ignore importing JS module without types
     const mod = (await import('../server.js')) as unknown as ServerModule;
     ({ app, shutdown } = mod);

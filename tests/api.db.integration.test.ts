@@ -105,6 +105,7 @@ describe('Backend API (DB integration)', () => {
       JSON.stringify({ currency: 'EUR', costPerKwh: 0.42, feedInTariff: 0.09 }, null, 2),
     );
 
+    vi.resetModules();
     // @ts-ignore importing JS module without types
     const mod = (await import('../server.js')) as unknown as ServerModule;
     ({ app, shutdown } = mod);

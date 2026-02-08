@@ -64,6 +64,7 @@ describe('Backend API (compatibility / default mode)', () => {
     dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sunflow-test-'));
     process.env.DATA_DIR = dataDir;
 
+    vi.resetModules();
     // @ts-ignore importing JS module without types
     const mod = (await import('../server.js')) as unknown as ServerModule;
     ({ app, shutdown } = mod);

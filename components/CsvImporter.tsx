@@ -440,9 +440,9 @@ const CsvImporter: React.FC<CsvImporterProps> = ({ onSuccess }) => {
                         className="absolute inset-0 opacity-0 cursor-pointer"
                         onChange={handleFileSelect}
                     />
-                    <Upload size={48} className="text-slate-500 mb-4" />
+                    <Upload size={48} className="text-slate-400 mb-4" />
                     <p className="text-slate-300 font-medium">Click to upload CSV</p>
-                    <p className="text-slate-500 text-sm mt-2">Support for Home Assistant (Energy Panel), Fronius, InfluxDB</p>
+                    <p className="text-slate-400 text-sm mt-2">Support for Home Assistant (Energy Panel), Fronius, InfluxDB</p>
                     {loading && <Loader2 className="animate-spin text-blue-400 mt-4" />}
                 </div>
             )}
@@ -504,7 +504,7 @@ const CsvImporter: React.FC<CsvImporterProps> = ({ onSuccess }) => {
                             ].map((field) => (
                                 <div key={field.key} className="bg-slate-800 p-3 rounded-lg border border-slate-700">
                                     <label className="block text-xs font-bold text-slate-400 uppercase mb-2">{field.label}</label>
-                                    <p className="text-[10px] text-slate-500 mb-2">{field.desc}</p>
+                                    <p className="text-xs text-slate-400 mb-2">{field.desc}</p>
                                     <select 
                                         className="w-full bg-slate-900 border border-slate-600 text-white rounded p-2 text-sm focus:border-blue-500 outline-none"
                                         value={mapping[field.key as keyof typeof mapping]}
@@ -541,7 +541,7 @@ const CsvImporter: React.FC<CsvImporterProps> = ({ onSuccess }) => {
                              <div className="overflow-x-auto max-h-64">
                                  <table className="w-full text-xs text-left">
                                      <thead>
-                                         <tr className="text-slate-500 border-b border-slate-700">
+                                         <tr className="text-slate-400 border-b border-slate-700">
                                              <th className="py-2 px-2 sticky left-0 bg-slate-800">{previewMode === 'daily' ? 'Date' : 'Month'}</th>
                                              <th className="py-2 px-2">Solar</th>
                                              <th className="py-2 px-2">Home Consumption</th>
@@ -559,30 +559,30 @@ const CsvImporter: React.FC<CsvImporterProps> = ({ onSuccess }) => {
                                                  <td className="py-2 px-2 sticky left-0 bg-slate-800 font-medium text-slate-400">{row.date}</td>
                                                  <td className="py-2 px-2">
                                                      <div className="text-yellow-400">{row.solarProduction.sourceKwh.toFixed(2)} kWh</div>
-                                                     <div className="text-[10px] text-slate-500">~{row.solarProduction.avgWatts.toFixed(0)} W avg</div>
+                                                     <div className="text-xs text-slate-400">~{row.solarProduction.avgWatts.toFixed(0)} W avg</div>
                                                  </td>
                                                  <td className="py-2 px-2">
                                                      <div className="text-blue-400">{row.homeConsumption.sourceKwh.toFixed(2)} kWh</div>
-                                                     <div className="text-[10px] text-slate-500">~{row.homeConsumption.avgWatts.toFixed(0)} W avg</div>
+                                                     <div className="text-xs text-slate-400">~{row.homeConsumption.avgWatts.toFixed(0)} W avg</div>
                                                  </td>
                                                  <td className="py-2 px-2">
                                                      <div className="text-red-400">{row.gridImport.sourceKwh.toFixed(2)} kWh</div>
-                                                     <div className="text-[10px] text-slate-500">~{row.gridImport.avgWatts.toFixed(0)} W avg</div>
+                                                     <div className="text-xs text-slate-400">~{row.gridImport.avgWatts.toFixed(0)} W avg</div>
                                                  </td>
                                                  <td className="py-2 px-2">
                                                      <div className="text-emerald-400">{row.gridExport.sourceKwh.toFixed(2)} kWh</div>
-                                                     <div className="text-[10px] text-slate-500">~{row.gridExport.avgWatts.toFixed(0)} W avg</div>
+                                                     <div className="text-xs text-slate-400">~{row.gridExport.avgWatts.toFixed(0)} W avg</div>
                                                  </td>
                                                   <td className="py-2 px-2">
                                                      <div className={`font-bold ${row.netGridWatts >= 0 ? 'text-red-400' : 'text-emerald-400'}`}>{row.netGridWatts.toFixed(0)} W</div>
                                                  </td>
                                                  <td className="py-2 px-2">
                                                      <div className="text-emerald-400">{row.batteryCharge.sourceKwh.toFixed(2)} kWh</div>
-                                                     <div className="text-[10px] text-slate-500">~{row.batteryCharge.avgWatts.toFixed(0)} W avg</div>
+                                                     <div className="text-xs text-slate-400">~{row.batteryCharge.avgWatts.toFixed(0)} W avg</div>
                                                  </td>
                                                  <td className="py-2 px-2">
                                                      <div className="text-yellow-400">{row.batteryDischarge.sourceKwh.toFixed(2)} kWh</div>
-                                                     <div className="text-[10px] text-slate-500">~{row.batteryDischarge.avgWatts.toFixed(0)} W avg</div>
+                                                     <div className="text-xs text-slate-400">~{row.batteryDischarge.avgWatts.toFixed(0)} W avg</div>
                                                  </td>
                                                  <td className="py-2 px-2">
                                                      <div className={`font-bold ${row.netBatteryWatts >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{row.netBatteryWatts.toFixed(0)} W</div>

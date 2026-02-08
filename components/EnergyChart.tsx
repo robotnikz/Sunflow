@@ -16,7 +16,7 @@ interface EnergyChartProps {
 
 const EnergyChart: React.FC<EnergyChartProps> = ({ history, timeRange }) => {
   if (history.length === 0) {
-    return <div className="flex items-center justify-center h-full text-slate-500">No historical data available yet.</div>;
+    return <div className="flex items-center justify-center h-full text-slate-400">No historical data available yet.</div>;
   }
 
   const isAggregated = history[0]?.is_aggregated || ['week', 'month', 'year'].includes(timeRange);

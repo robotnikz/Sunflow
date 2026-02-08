@@ -46,13 +46,13 @@ const StatsCard: React.FC<StatsCardProps> = ({
           <div className="mb-1.5 p-0.5 rounded-full bg-slate-900/50">
              {trend === 'up' && <ArrowUpRight className="text-emerald-400" size={16} />}
              {trend === 'down' && <ArrowDownRight className="text-red-400" size={16} />}
-             {trend === 'neutral' && <Minus className="text-slate-500" size={16} />}
+             {trend === 'neutral' && <Minus className="text-slate-400" size={16} />}
           </div>
         )}
       </div>
       
       {subValue && (
-        <p className="text-sm text-slate-500 mt-2 font-medium relative z-10">
+        <p className="text-sm text-slate-400 mt-2 font-medium relative z-10">
           {subValue}
         </p>
       )}

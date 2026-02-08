@@ -72,7 +72,7 @@ const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state, capaci
              <h3 className="text-slate-400 text-sm font-medium flex items-center gap-2">
                 <Battery size={16} /> Storage
             </h3>
-             <div className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded border ${
+             <div className={`text-xs font-bold uppercase px-2 py-0.5 rounded border ${
                  isCharging ? 'bg-emerald-900/30 border-emerald-500/30 text-emerald-400' :
                  isDischarging ? 'bg-amber-900/30 border-amber-500/30 text-amber-400' :
                  'bg-slate-700/30 border-slate-600 text-slate-400'
@@ -141,7 +141,7 @@ const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state, capaci
                     <span className={`text-5xl font-bold tracking-tighter ${colors.text} drop-shadow-lg`}>
                         {Math.round(soc)}
                     </span>
-                    <span className="text-xl text-slate-500 font-medium">%</span>
+                    <span className="text-xl text-slate-400 font-medium">%</span>
                 </div>
 
                 {/* Power Flow Value */}
@@ -172,7 +172,7 @@ const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state, capaci
                 </div>
             )}
             {!timeString && soc < 100 && soc > 0 && (
-                <div className="text-[10px] text-slate-600">Calculated based on current load</div>
+                <div className="text-xs text-slate-400">Calculated based on current load</div>
             )}
         </div>
 
