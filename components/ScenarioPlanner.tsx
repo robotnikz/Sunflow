@@ -193,6 +193,12 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         let importedWh = 0;
         let exportedWh = 0;
 
+        // Conservative fallback when we cannot infer real power limits from measured battery flows.
+        // If the model uses non-finite limits (Infinity), assume ~0.5C charge/discharge.
+        const defaultMaxWhPerHour = Math.max(0, batteryCapacityWh * 0.5);
+        const maxChargeWhPerHour = Number.isFinite(model.maxChargeWhPerHour) ? Math.max(0, model.maxChargeWhPerHour) : defaultMaxWhPerHour;
+        const maxDischargeWhPerHour = Number.isFinite(model.maxDischargeWhPerHour) ? Math.max(0, model.maxDischargeWhPerHour) : defaultMaxWhPerHour;
+
         dataPoints.forEach(point => {
             const loadWh = point.l;
             const pvWh = point.p * (1 + (pvPercent / 100));
@@ -203,10 +209,9 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
             const net = pvWh - loadWh;
             if (net > 0) {
                 const space = batteryCapacityWh - currentSocWh;
-                const maxChargeInput = Math.max(0, model.maxChargeWhPerHour);
                 const chargeInput = Math.min(
                     net,
-                    maxChargeInput === Infinity ? net : maxChargeInput,
+                    maxChargeWhPerHour,
                     model.chargeEff > 0 ? (space / model.chargeEff) : 0
                 );
                 const stored = chargeInput * model.chargeEff;
@@ -214,13 +219,12 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                 exportedWh += (net - chargeInput);
             } else {
                 const deficit = Math.abs(net);
-                const maxDischargeOut = Math.max(0, model.maxDischargeWhPerHour);
 
                 // Battery can only deliver up to (stored * dischargeEff) to the load.
                 const availableOut = currentSocWh * model.dischargeEff;
                 const dischargeOut = Math.min(
                     deficit,
-                    maxDischargeOut === Infinity ? deficit : maxDischargeOut,
+                    maxDischargeWhPerHour,
                     availableOut
                 );
                 const drawnFromBattery = model.dischargeEff > 0 ? (dischargeOut / model.dischargeEff) : 0;
@@ -262,10 +266,14 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         const maxCharge = percentile(charge, 95);
         const maxDischarge = percentile(discharge, 95);
 
+        // Conservative defaults if we cannot infer from measured flows.
+        // Typical round-trip efficiency is ~0.88..0.93. We use ~0.92 (0.96^2).
+        const defaultEta = 0.96;
+
         return {
             hasMeasured,
-            chargeEff: hasMeasured ? eta : 1,
-            dischargeEff: hasMeasured ? eta : 1,
+            chargeEff: hasMeasured ? eta : defaultEta,
+            dischargeEff: hasMeasured ? eta : defaultEta,
             maxChargeWhPerHour: (hasMeasured && maxCharge !== null) ? Math.max(0, maxCharge) : Infinity,
             maxDischargeWhPerHour: (hasMeasured && maxDischarge !== null) ? Math.max(0, maxDischarge) : Infinity,
         };
@@ -318,7 +326,8 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
     const simulations = useMemo(() => {
         if (!filteredHourlyData) return null;
 
-        const baseBatteryWh = (config.batteryCapacity || 5) * 1000;
+        // Use configured battery capacity only. Avoid simulating a “phantom” battery when the user has none.
+        const baseBatteryWh = (config.batteryCapacity || 0) * 1000;
 
         const inferredModel = inferBatteryModel(filteredHourlyData);
         const baseModelNoInitial: Omit<BatteryModelParams, 'initialSocWh'> = {
@@ -458,7 +467,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         const gridCost = activeTariff.costPerKwh;
         const feedIn = activeTariff.feedInTariff;
 
-        const baseBatteryWh = (config.batteryCapacity || 5) * 1000;
+        const baseBatteryWh = (config.batteryCapacity || 0) * 1000;
         const firstSocPct = filteredHourlyData.find(d => d.s !== null && d.s !== undefined)?.s;
         const initialSocPct = (firstSocPct === null || firstSocPct === undefined) ? null : Math.max(0, Math.min(100, Number(firstSocPct)));
         const inferredModel = inferBatteryModel(filteredHourlyData);
@@ -559,7 +568,17 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         const gridCost = activeTariff.costPerKwh;
         const feedIn = activeTariff.feedInTariff;
 
-        const baseBatteryWh = (config.batteryCapacity || 5) * 1000;
+        const baseBatteryWh = (config.batteryCapacity || 0) * 1000;
+
+        // If the user did not select a PV upgrade manually (slider at 0), but we have a PV suggestion,
+        // base the battery recommendation on that PV upgrade so the combined plan is consistent.
+        const pvBasisPercent = (addedPvPercent > 0)
+            ? addedPvPercent
+            : (pvRecommendation?.recommended?.addedPvPercent ?? 0);
+
+        // For ROI guardrails we also consider the combined plan (PV basis + battery add-on)
+        // and only recommend batteries that keep the total payback within the selected horizon.
+        const investPvBasis = (financials.estimatedBaseKwp * (pvBasisPercent / 100)) * costPerKwp;
         const firstSocPct = filteredHourlyData.find(d => d.s !== null && d.s !== undefined)?.s;
         const initialSocPct = (firstSocPct === null || firstSocPct === undefined) ? null : Math.max(0, Math.min(100, Number(firstSocPct)));
         const inferredModel = inferBatteryModel(filteredHourlyData);
@@ -573,9 +592,14 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         const initialEnergyWhBaseMeasured = initialSocPct === null ? null : (initialSocPct / 100) * baseBatteryWh;
         // For the recommendation sweep, keep the same absolute starting energy for all candidates
         // to make them comparable and avoid extra cyclic estimation work.
-        const initialEnergyWhForSweep = initialEnergyWhBaseMeasured ?? estimateCyclicInitialSocWh(filteredHourlyData, addedPvPercent, baseBatteryWh, baseModelNoInitial);
+        const initialEnergyWhForSweep = initialEnergyWhBaseMeasured ?? estimateCyclicInitialSocWh(filteredHourlyData, pvBasisPercent, baseBatteryWh, baseModelNoInitial);
 
-        const pvOnly = simulate(filteredHourlyData, addedPvPercent, baseBatteryWh, { ...baseModelNoInitial, initialSocWh: initialEnergyWhForSweep });
+        // Baseline for combined ROI: prefer measured grid flows if present.
+        const measuredBase = measuredBaseFromData(filteredHourlyData);
+        const simulatedBase = simulate(filteredHourlyData, 0, baseBatteryWh, { ...baseModelNoInitial, initialSocWh: initialEnergyWhForSweep });
+        const base = measuredBase ?? simulatedBase;
+
+        const pvOnly = simulate(filteredHourlyData, pvBasisPercent, baseBatteryWh, { ...baseModelNoInitial, initialSocWh: initialEnergyWhForSweep });
 
         const benefitOverDataset = (from: ScenarioSimResult, to: ScenarioSimResult) => {
             const savedImportKwh = (from.importedWh - to.importedWh) / 1000;
@@ -590,6 +614,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
             yearlyExportDeltaKwh: number;
             invest: number;
             roiYears: number;
+            combinedRoiYears: number;
             autonomyPct: number;
             autonomyDeltaPct: number;
             netGainHorizon: number;
@@ -597,7 +622,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
 
         const candidates: Candidate[] = [];
         for (let kwh = 0; kwh <= 30; kwh += 1) {
-            const sim = simulate(filteredHourlyData, addedPvPercent, baseBatteryWh + (kwh * 1000), { ...baseModelNoInitial, initialSocWh: initialEnergyWhForSweep });
+            const sim = simulate(filteredHourlyData, pvBasisPercent, baseBatteryWh + (kwh * 1000), { ...baseModelNoInitial, initialSocWh: initialEnergyWhForSweep });
             const savedImportKwh = (pvOnly.importedWh - sim.importedWh) / 1000;
             const exportDeltaKwh = (sim.exportedWh - pvOnly.exportedWh) / 1000;
 
@@ -607,10 +632,16 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
             const yearlyExportDeltaKwh = exportDeltaKwh / yearsCovered;
             const invest = kwh * costPerKwhBat;
             const roiYears = invest <= 0 ? 0 : (yearlyBenefit > 0 ? invest / yearlyBenefit : Infinity);
+
+            const totalBenefitCombined = benefitOverDataset(base, sim);
+            const yearlyBenefitCombined = totalBenefitCombined / yearsCovered;
+            const totalInvestCombined = investPvBasis + invest;
+            const combinedRoiYears = totalInvestCombined <= 0 ? 0 : (yearlyBenefitCombined > 0 ? totalInvestCombined / yearlyBenefitCombined : Infinity);
+
             const autonomyPct = sim.autonomyPct;
             const autonomyDeltaPct = autonomyPct - pvOnly.autonomyPct;
             const netGainHorizon = (yearlyBenefit * clampNumber(roiHorizonYears, 5, 30)) - invest;
-            candidates.push({ addedBatteryKwh: kwh, yearlyBenefit, yearlySavedImportKwh, yearlyExportDeltaKwh, invest, roiYears, autonomyPct, autonomyDeltaPct, netGainHorizon });
+            candidates.push({ addedBatteryKwh: kwh, yearlyBenefit, yearlySavedImportKwh, yearlyExportDeltaKwh, invest, roiYears, combinedRoiYears, autonomyPct, autonomyDeltaPct, netGainHorizon });
         }
 
         const addOns = candidates.filter(c => c.addedBatteryKwh > 0);
@@ -620,7 +651,12 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         const focus = upgradeFocus;
 
         // Only recommend if it is economically meaningful (ROI mode).
-        const meaningfulRoi = positive.filter(c => (c.yearlyBenefit >= MIN_YEARLY_BENEFIT) && (c.roiYears <= MAX_REASONABLE_ROI_YEARS));
+        const meaningfulRoi = positive.filter(c =>
+            (c.yearlyBenefit >= MIN_YEARLY_BENEFIT) &&
+            (c.roiYears <= MAX_REASONABLE_ROI_YEARS) &&
+            // Combined plan guardrail: PV basis + battery must also pay back within the selected horizon.
+            (c.combinedRoiYears <= MAX_REASONABLE_ROI_YEARS)
+        );
 
         const autonomyImproving = addOns.filter(c => c.autonomyDeltaPct > 0.01);
 
@@ -666,7 +702,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         })[0];
 
         return { recommended, bestYearly: bestYearlyAny, thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: MAX_REASONABLE_ROI_YEARS, focus } };
-    }, [filteredHourlyData, financials, dataCoverage.days, activeTariff, config.batteryCapacity, addedPvPercent, costPerKwhBat, upgradeFocus, roiHorizonYears]);
+    }, [filteredHourlyData, financials, dataCoverage.days, activeTariff, config.batteryCapacity, addedPvPercent, costPerKwp, costPerKwhBat, upgradeFocus, roiHorizonYears, pvRecommendation]);
 
     const dataBasis = useMemo(() => {
         if (!filteredHourlyData) return null;
@@ -693,6 +729,30 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
             roundTripEffPct,
         };
     }, [filteredHourlyData]);
+
+    const recommendationConfidence = useMemo(() => {
+        if (!dataBasis) {
+            return { level: 'none' as const, label: 'No data', detail: 'No usable hourly data.' };
+        }
+
+        // Data volume heuristic: more complete days -> more trustworthy.
+        // We keep this conservative and easy to explain.
+        const days = dataCoverage.days;
+        const hasGrid = dataBasis.hasGridFlows;
+        const hasBatteryFlows = dataBasis.hasBatteryFlows;
+
+        if (days >= 180 && hasGrid) {
+            return { level: 'high' as const, label: 'High', detail: hasBatteryFlows ? 'Long history + measured grid & battery flows.' : 'Long history + measured grid flows.' };
+        }
+        if (days >= 60 && hasGrid) {
+            return { level: 'medium' as const, label: 'Medium', detail: hasBatteryFlows ? 'Good history + measured grid & battery flows.' : 'Good history + measured grid flows.' };
+        }
+        if (days >= 30) {
+            return { level: 'low' as const, label: 'Low', detail: hasGrid ? 'Limited history.' : 'Limited history and no measured grid flows.' };
+        }
+
+        return { level: 'veryLow' as const, label: 'Very low', detail: 'Too few complete days for a reliable recommendation.' };
+    }, [dataBasis, dataCoverage.days]);
 
 
     if (!isOpen) {
@@ -923,6 +983,22 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
 
                                         {dataBasis && (
                                             <div className="mt-3 pt-3 border-t border-blue-500/20">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <div className="text-[10px] uppercase tracking-wide text-blue-300/80">Recommendation confidence</div>
+                                                    <div className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                                                        recommendationConfidence.level === 'high'
+                                                            ? 'border-emerald-400/40 text-emerald-300'
+                                                            : recommendationConfidence.level === 'medium'
+                                                                ? 'border-blue-400/40 text-blue-300'
+                                                                : recommendationConfidence.level === 'low'
+                                                                    ? 'border-yellow-400/40 text-yellow-300'
+                                                                    : 'border-red-400/40 text-red-300'
+                                                    }`}>
+                                                        {recommendationConfidence.label}
+                                                    </div>
+                                                </div>
+                                                <div className="text-[10px] text-slate-500 mb-2">{recommendationConfidence.detail}</div>
+
                                                 <div className="text-[10px] uppercase tracking-wide text-blue-300/80 mb-2">
                                                     Data used
                                                 </div>
@@ -1049,7 +1125,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
 
                             {/* Details: ROI breakdown + battery suggestion (collapsed to reduce UI noise) */}
                             {(batteryRecommendation || addedPvPercent > 0 || addedBatteryKwh > 0) && (
-                                <details className="bg-slate-900/40 p-4 rounded-xl border border-slate-700">
+                                <details open className="bg-slate-900/40 p-4 rounded-xl border border-slate-700">
                                     <summary className="cursor-pointer select-none text-xs font-bold uppercase text-slate-400">
                                         Details
                                     </summary>
@@ -1097,6 +1173,10 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                             <span className="text-emerald-400 font-semibold">{batteryRecommendation.recommended.roiYears.toFixed(1)}y</span>
                                                         </div>
                                                         <div className="flex items-center justify-between mt-1">
+                                                            <span className="text-slate-400">Combined ROI (PV + Battery)</span>
+                                                            <span className="text-emerald-400 font-semibold">{batteryRecommendation.recommended.combinedRoiYears.toFixed(1)}y</span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between mt-1">
                                                             <span className="text-slate-400">Net gain ({financials.horizonYears}y)</span>
                                                             <span className={`${batteryRecommendation.recommended.netGainHorizon >= 0 ? 'text-emerald-300' : 'text-red-300'} font-semibold`}>
                                                                 {batteryRecommendation.recommended.netGainHorizon >= 0 ? '+' : ''}{batteryRecommendation.recommended.netGainHorizon.toLocaleString(undefined, { maximumFractionDigits: 0 })} {config.currency}
@@ -1126,7 +1206,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                             {batteryRecommendation.thresholds && (
                                                                 <span>
                                                                     {batteryRecommendation.thresholds.focus === 'roi'
-                                                                        ? ` (ROI focus: needs ≥ ${batteryRecommendation.thresholds.minYearlyBenefit} ${config.currency}/yr and payback ≤ ${batteryRecommendation.thresholds.maxRoiYears}y.)`
+                                                                        ? ` (ROI focus: needs ≥ ${batteryRecommendation.thresholds.minYearlyBenefit} ${config.currency}/yr and payback ≤ ${batteryRecommendation.thresholds.maxRoiYears}y; also combined PV+Battery payback must be ≤ ${batteryRecommendation.thresholds.maxRoiYears}y.)`
                                                                         : ' (Autonomy focus: no battery size improves autonomy in this timeframe.)'}
                                                                 </span>
                                                             )}

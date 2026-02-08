@@ -2218,46 +2218,62 @@ app.get('/api/roi', (req, res) => {
  * Returns hourly aggregated data for efficient client-side simulation
  */
 app.get('/api/simulation-data', (req, res) => {
-    // We combine high-resolution logs and low-resolution energy summaries.
-    // Grouping by hour is the common denominator for battery simulation.
-    // We remove the 1-year limit from the subqueries to allow the planner 
-    // to analyze the full available history.
+    // We return hourly aggregated data for client-side simulation.
+    // IMPORTANT: energy_log and energy_data may overlap in time.
+    // The previous implementation UNIONed both and then AVG()'d them, which
+    // can dilute/warp results when both sources exist for the same hour.
+    //
+    // Policy:
+    // - Prefer energy_log when present for an hour (higher fidelity).
+    // - Otherwise fall back to energy_data (imported / summarized).
+    // - Aggregate energy_data with SUM() to support sub-hourly imports.
     const query = `
-        SELECT 
-            ts,
-            AVG(pv) as p_pv,
-            AVG(load) as p_load,
-            AVG(soc) as soc,
-            AVG(grid_in) as grid_in,
-            AVG(grid_out) as grid_out,
-            AVG(batt_charge) as batt_charge,
-            AVG(batt_discharge) as batt_discharge
-        FROM (
-            SELECT 
-                strftime('%Y-%m-%d %H:00:00', timestamp) as ts,
-                power_pv as pv,
-                power_load as load,
-                soc as soc,
-                CASE WHEN power_grid > 0 THEN power_grid ELSE 0 END as grid_in,
-                CASE WHEN power_grid < 0 THEN -power_grid ELSE 0 END as grid_out,
-                CASE WHEN power_battery < 0 THEN -power_battery ELSE 0 END as batt_charge,
-                CASE WHEN power_battery > 0 THEN power_battery ELSE 0 END as batt_discharge
+        WITH
+        log_hourly AS (
+            SELECT
+                strftime('%Y-%m-%d %H:00:00', timestamp) AS ts,
+                AVG(power_pv) AS p_pv,
+                AVG(power_load) AS p_load,
+                AVG(soc) AS soc,
+                AVG(CASE WHEN power_grid > 0 THEN power_grid ELSE 0 END) AS grid_in,
+                AVG(CASE WHEN power_grid < 0 THEN -power_grid ELSE 0 END) AS grid_out,
+                AVG(CASE WHEN power_battery < 0 THEN -power_battery ELSE 0 END) AS batt_charge,
+                AVG(CASE WHEN power_battery > 0 THEN power_battery ELSE 0 END) AS batt_discharge
             FROM energy_log
-            UNION ALL
-            SELECT 
-                strftime('%Y-%m-%d %H:00:00', timestamp) as ts,
-                production_wh as pv,
-                load_wh as load,
-                NULL as soc,
-                grid_consumption_wh as grid_in,
-                grid_feed_in_wh as grid_out,
-                battery_charge_wh as batt_charge,
-                battery_discharge_wh as batt_discharge
+            GROUP BY ts
+        ),
+        data_hourly AS (
+            SELECT
+                strftime('%Y-%m-%d %H:00:00', timestamp) AS ts,
+                SUM(production_wh) AS p_pv,
+                SUM(load_wh) AS p_load,
+                NULL AS soc,
+                SUM(grid_consumption_wh) AS grid_in,
+                SUM(grid_feed_in_wh) AS grid_out,
+                SUM(battery_charge_wh) AS batt_charge,
+                SUM(battery_discharge_wh) AS batt_discharge
             FROM energy_data
+            GROUP BY ts
+        ),
+        hours AS (
+            SELECT ts FROM log_hourly
+            UNION
+            SELECT ts FROM data_hourly
         )
-        WHERE pv IS NOT NULL AND load IS NOT NULL
-        GROUP BY ts
-        ORDER BY ts ASC
+        SELECT
+            h.ts AS ts,
+            COALESCE(l.p_pv, d.p_pv) AS p_pv,
+            COALESCE(l.p_load, d.p_load) AS p_load,
+            l.soc AS soc,
+            COALESCE(l.grid_in, d.grid_in) AS grid_in,
+            COALESCE(l.grid_out, d.grid_out) AS grid_out,
+            COALESCE(l.batt_charge, d.batt_charge) AS batt_charge,
+            COALESCE(l.batt_discharge, d.batt_discharge) AS batt_discharge
+        FROM hours h
+        LEFT JOIN log_hourly l ON l.ts = h.ts
+        LEFT JOIN data_hourly d ON d.ts = h.ts
+        WHERE p_pv IS NOT NULL AND p_load IS NOT NULL
+        ORDER BY h.ts ASC
     `;
 
     db.all(query, [], (err, rows) => {

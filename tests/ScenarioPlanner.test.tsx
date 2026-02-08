@@ -130,8 +130,7 @@ describe('ScenarioPlanner Component', () => {
             expect(screen.queryByText(/Loading historical data/i)).not.toBeInTheDocument();
         });
 
-        // PV suggestion is shown inside the Details panel.
-        fireEvent.click(screen.getByText(/^Details$/i));
+        // PV suggestion is shown inside the Details panel (open by default).
         expect(screen.getByText(/PV Suggestion/i)).toBeInTheDocument();
     });
 });

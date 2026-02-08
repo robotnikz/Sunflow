@@ -49,9 +49,11 @@ Stay informed wherever you are.
 ### 📈 Upgrade Simulator (NEW!)
 Experiment with your system before spending a dime.
 *   **Scenario Planning:** Simulate adding more PV power (+200%) and/or a larger battery (up to 30kWh).
-*   **Coupled ROI:** Shows the battery’s *incremental* benefit (PV-only → PV+Battery) so PV ↔ battery dependencies are visible.
+*   **Recommendation Focus:** Choose between **ROI** (payback) and **Autonomy** (grid independence). ROI mode respects your selected payback horizon.
+*   **Coupled ROI:** Shows the battery’s *incremental* benefit (PV-only → PV+Battery) so PV ↔ battery dependencies are visible (and combined PV+battery payback stays within your horizon).
 *   **Historical Baseline (Correctness):** Uses your real hourly import/export where available so the “no-upgrade” baseline matches reality.
 *   **Uses Available Signals:** If present, the simulator uses measured battery SoC and charge/discharge flows to improve realism (start state + limits/efficiency).
+*   **Confidence & Coverage:** Shows how much of the selected timeframe contains usable hourly data, and which signals (grid/battery) were available.
 *   **Battery Sizing Hint:** Optionally suggests a “best value” battery add-on size based on your own history.
 
 ### ⚡ Dynamic Tariff Comparison (aWATTar)
