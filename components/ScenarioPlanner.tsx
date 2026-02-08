@@ -58,13 +58,13 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
     const [costPerKwp, setCostPerKwp] = useState<number>(1000);
     const [costPerKwhBat, setCostPerKwhBat] = useState<number>(400);
 
-    type UpgradeFocus = 'roi' | 'autonomy';
+    type UpgradeFocus = 'roi' | 'roiMax' | 'autonomy';
     const clampNumber = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
     const [upgradeFocus, setUpgradeFocus] = useState<UpgradeFocus>(() => {
         try {
             const v = window.localStorage.getItem('sunflow.scenarioPlanner.upgradeFocus');
-            return (v === 'autonomy' || v === 'roi') ? v : 'roi';
+            return (v === 'autonomy' || v === 'roi' || v === 'roiMax') ? v : 'roi';
         } catch {
             return 'roi';
         }
@@ -533,14 +533,19 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         const positive = addOns.filter(c => c.yearlyBenefit > 0);
         const bestYearly = [...addOns].sort((a, b) => b.yearlyBenefit - a.yearlyBenefit)[0] || null;
 
+        const AUTONOMY_NEAR_MAX_PCT = 0.25; // pick a “sensible” upgrade close to max autonomy
+
         if (upgradeFocus === 'autonomy') {
             const improving = addOns.filter(c => c.autonomyDeltaPct > 0.01);
             if (improving.length === 0) {
                 return { recommended: null as Candidate | null, bestYearly, thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: maxReasonableRoiYears, focus: upgradeFocus as UpgradeFocus } };
             }
-            const recommended = [...improving].sort((a, b) => {
-                if (b.autonomyPct !== a.autonomyPct) return b.autonomyPct - a.autonomyPct;
-                return a.invest - b.invest;
+
+            const maxAutonomy = Math.max(...improving.map(c => c.autonomyPct));
+            const nearMax = improving.filter(c => (maxAutonomy - c.autonomyPct) <= AUTONOMY_NEAR_MAX_PCT);
+            const recommended = [...nearMax].sort((a, b) => {
+                if (a.invest !== b.invest) return a.invest - b.invest;
+                return a.addedPvPercent - b.addedPvPercent;
             })[0];
 
             return { recommended, bestYearly, thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: maxReasonableRoiYears, focus: upgradeFocus as UpgradeFocus } };
@@ -553,6 +558,11 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         }
 
         const recommended = [...meaningful].sort((a, b) => {
+            if (upgradeFocus === 'roiMax') {
+                if (b.addedPvPercent !== a.addedPvPercent) return b.addedPvPercent - a.addedPvPercent;
+                if (b.netGainHorizon !== a.netGainHorizon) return b.netGainHorizon - a.netGainHorizon;
+                return a.roiYears - b.roiYears;
+            }
             if (b.netGainHorizon !== a.netGainHorizon) return b.netGainHorizon - a.netGainHorizon;
             return a.roiYears - b.roiYears;
         })[0];
@@ -674,6 +684,8 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
             };
         }
 
+        const AUTONOMY_NEAR_MAX_PCT = 0.25; // pick a “sensible” upgrade close to max autonomy
+
         if (focus === 'autonomy') {
             if (autonomyImproving.length === 0) {
                 return {
@@ -683,10 +695,12 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                 };
             }
 
-            // Max autonomy (tie-break: cheaper)
-            const recommended = [...autonomyImproving].sort((a, b) => {
-                if (b.autonomyPct !== a.autonomyPct) return b.autonomyPct - a.autonomyPct;
-                return a.invest - b.invest;
+            // “Sensible autonomy”: pick the cheapest size that is very close to max autonomy.
+            const maxAutonomy = Math.max(...autonomyImproving.map(c => c.autonomyPct));
+            const nearMax = autonomyImproving.filter(c => (maxAutonomy - c.autonomyPct) <= AUTONOMY_NEAR_MAX_PCT);
+            const recommended = [...nearMax].sort((a, b) => {
+                if (a.invest !== b.invest) return a.invest - b.invest;
+                return a.addedBatteryKwh - b.addedBatteryKwh;
             })[0];
 
             return { recommended, bestYearly: bestYearlyAny, thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: MAX_REASONABLE_ROI_YEARS, focus } };
@@ -703,6 +717,11 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
 
         // Prefer best net gain over horizon, then fastest payback.
         const recommended = [...meaningfulRoi].sort((a, b) => {
+            if (focus === 'roiMax') {
+                if (b.addedBatteryKwh !== a.addedBatteryKwh) return b.addedBatteryKwh - a.addedBatteryKwh;
+                if (b.netGainHorizon !== a.netGainHorizon) return b.netGainHorizon - a.netGainHorizon;
+                return a.roiYears - b.roiYears;
+            }
             if (b.netGainHorizon !== a.netGainHorizon) return b.netGainHorizon - a.netGainHorizon;
             return a.roiYears - b.roiYears;
         })[0];
@@ -741,24 +760,63 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
             return { level: 'none' as const, label: 'No data', detail: 'No usable hourly data.' };
         }
 
-        // Data volume heuristic: more complete days -> more trustworthy.
-        // We keep this conservative and easy to explain.
+        // Window-relative heuristic: “6/7 days” should not be penalized like “6/365 days”.
+        // We also factor in whether measured grid flows exist (strongly improves trustworthiness)
+        // and whether the timeframe contains many partial (non-hourly) days.
         const days = dataCoverage.days;
+        const expectedDays = windowBounds.expectedDays;
+        const coveragePct = expectedDays > 0 ? (days / expectedDays) * 100 : 0;
         const hasGrid = dataBasis.hasGridFlows;
         const hasBatteryFlows = dataBasis.hasBatteryFlows;
+        const hourlyQualityPct = dataCoverage.quality; // among days with any data: how many are complete hourly days
 
+        const baseDetail = `Complete days: ${days}/${expectedDays} (${Math.round(coveragePct)}%).`;
+        const qualityHint = hourlyQualityPct < 80 ? ` Hourly quality is only ${Math.round(hourlyQualityPct)}% (many partial days).` : '';
+
+        const mk = (level: 'high' | 'medium' | 'low' | 'veryLow', label: string, extra: string) => {
+            const flows = hasGrid
+                ? (hasBatteryFlows ? 'Measured grid + battery flows.' : 'Measured grid flows.')
+                : 'No measured grid flows.';
+            return { level, label, detail: `${baseDetail} ${flows} ${extra}${qualityHint}`.trim() };
+        };
+
+        // Cap confidence if grid flows are missing (we then rely more on simulation assumptions).
+        const gridCap = hasGrid ? null : ('low' as const);
+
+        if (expectedDays <= 7) {
+            if (days >= 6) return mk(gridCap === 'low' ? 'low' : 'high', gridCap === 'low' ? 'Low' : 'High', 'Short window, good coverage.');
+            if (days >= 4) return mk('medium', 'Medium', 'Short window, decent coverage.');
+            if (days >= 2) return mk('low', 'Low', 'Short window, limited coverage.');
+            return mk('veryLow', 'Very low', 'Too few complete days in this window.');
+        }
+
+        if (expectedDays <= 31) {
+            if (days >= 27 && hasGrid) return mk('high', 'High', 'Month window, strong coverage.');
+            if (days >= 21 && hasGrid) return mk('medium', 'Medium', 'Month window, good coverage.');
+            if (days >= 14) return mk('low', 'Low', 'Month window, partial coverage.');
+            return mk('veryLow', 'Very low', 'Too few complete days in this window.');
+        }
+
+        if (expectedDays <= 182) {
+            if (days >= 160 && hasGrid) return mk('high', 'High', '6-month window, strong coverage.');
+            if (days >= 120 && hasGrid) return mk('medium', 'Medium', '6-month window, good coverage.');
+            if (days >= 60) return mk('low', 'Low', '6-month window, partial coverage.');
+            return mk('veryLow', 'Very low', 'Too few complete days in this window.');
+        }
+
+        // Year-ish windows
+        if (days >= 300 && hasGrid) {
+            return mk('high', 'High', 'Long history, strong coverage.');
+        }
         if (days >= 180 && hasGrid) {
-            return { level: 'high' as const, label: 'High', detail: hasBatteryFlows ? 'Long history + measured grid & battery flows.' : 'Long history + measured grid flows.' };
+            return mk('medium', 'Medium', 'Long history, good coverage.');
         }
-        if (days >= 60 && hasGrid) {
-            return { level: 'medium' as const, label: 'Medium', detail: hasBatteryFlows ? 'Good history + measured grid & battery flows.' : 'Good history + measured grid flows.' };
-        }
-        if (days >= 30) {
-            return { level: 'low' as const, label: 'Low', detail: hasGrid ? 'Limited history.' : 'Limited history and no measured grid flows.' };
+        if (days >= 90) {
+            return mk('low', 'Low', 'Long history, partial coverage.');
         }
 
-        return { level: 'veryLow' as const, label: 'Very low', detail: 'Too few complete days for a reliable recommendation.' };
-    }, [dataBasis, dataCoverage.days]);
+        return mk('veryLow', 'Very low', 'Too few complete days in this window.');
+    }, [dataBasis, dataCoverage.days, dataCoverage.quality, windowBounds.expectedDays]);
 
 
     if (!isOpen) {
@@ -867,7 +925,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                             <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-700">
                                 <div className="flex items-center justify-between mb-3">
                                     <div className="text-xs font-bold uppercase text-slate-400">Recommendation focus</div>
-                                    <div className="text-[10px] text-slate-500">Affects battery suggestion + horizon net gain</div>
+                                    <div className="text-[10px] text-slate-500">How suggestions are picked</div>
                                 </div>
                                 <div className="flex gap-2">
                                     <button
@@ -879,7 +937,18 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                 : 'bg-slate-900/40 border-slate-700 text-slate-300 hover:bg-slate-900/60'
                                         }`}
                                     >
-                                        ROI
+                                        ROI (best value)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setUpgradeFocus('roiMax')}
+                                        className={`flex-1 px-3 py-2 rounded-lg border text-xs font-semibold transition-colors ${
+                                            upgradeFocus === 'roiMax'
+                                                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-200'
+                                                : 'bg-slate-900/40 border-slate-700 text-slate-300 hover:bg-slate-900/60'
+                                        }`}
+                                    >
+                                        ROI (max upgrade)
                                     </button>
                                     <button
                                         type="button"
@@ -890,7 +959,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                 : 'bg-slate-900/40 border-slate-700 text-slate-300 hover:bg-slate-900/60'
                                         }`}
                                     >
-                                        Autonomy
+                                        Autonomy (sensible)
                                     </button>
                                 </div>
 
@@ -905,16 +974,31 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                             min={5}
                                             max={30}
                                             step={1}
-                                            disabled={upgradeFocus !== 'roi'}
+                                            disabled={upgradeFocus === 'autonomy'}
                                             value={roiHorizonYears}
                                             onChange={(e) => setRoiHorizonYears(clampNumber(Number(e.target.value), 5, 30))}
                                             className={`w-16 px-2 py-1 rounded border bg-slate-950/40 text-right text-xs ${
-                                                upgradeFocus === 'roi'
+                                                upgradeFocus !== 'autonomy'
                                                     ? 'border-slate-700 text-slate-200'
                                                     : 'border-slate-800 text-slate-600'
                                             }`}
                                         />
-                                        <span className={`text-xs ${upgradeFocus === 'roi' ? 'text-slate-400' : 'text-slate-600'}`}>years</span>
+                                        <span className={`text-xs ${upgradeFocus !== 'autonomy' ? 'text-slate-400' : 'text-slate-600'}`}>years</span>
+                                    </div>
+                                </div>
+
+                                <div className="mt-3 text-[10px] text-slate-500 leading-relaxed">
+                                    <div>
+                                        <strong>How it works:</strong> We simulate PV and battery upgrades on your hourly history.
+                                    </div>
+                                    <div>
+                                        Benefit/year = saved import × buy price + extra export × sell price; ROI = invest / benefit.
+                                    </div>
+                                    <div>
+                                        <strong>ROI (best value):</strong> picks the highest net gain within the ROI horizon. <strong>ROI (max upgrade):</strong> picks the largest upgrade that still pays back within the horizon.
+                                    </div>
+                                    <div>
+                                        <strong>Autonomy (sensible):</strong> picks the cheapest upgrade that is very close to the maximum autonomy in this timeframe.
                                     </div>
                                 </div>
                             </div>

@@ -97,8 +97,8 @@ describe('ScenarioPlanner Component', () => {
         });
 
         expect(screen.getByText(/Recommendation focus/i)).toBeInTheDocument();
-        const roiBtn = screen.getByRole('button', { name: /^ROI$/i });
-        const autonomyBtn = screen.getByRole('button', { name: /^Autonomy$/i });
+        const roiBtn = screen.getByRole('button', { name: /roi \(best value\)/i });
+        const autonomyBtn = screen.getByRole('button', { name: /autonomy \(sensible\)/i });
         expect(roiBtn).toBeInTheDocument();
         expect(autonomyBtn).toBeInTheDocument();
 
@@ -108,6 +108,10 @@ describe('ScenarioPlanner Component', () => {
 
         fireEvent.click(autonomyBtn);
         expect((screen.getByLabelText(/ROI horizon/i) as HTMLInputElement).disabled).toBe(true);
+
+        const roiMaxBtn = screen.getByRole('button', { name: /roi \(max upgrade\)/i });
+        fireEvent.click(roiMaxBtn);
+        expect((screen.getByLabelText(/ROI horizon/i) as HTMLInputElement).disabled).toBe(false);
     });
 
     it('zeigt PV Suggestion bei ausreichenden Daten', async () => {
