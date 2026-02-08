@@ -137,4 +137,59 @@ describe('ScenarioPlanner Component', () => {
         // PV suggestion is shown inside the Details panel (open by default).
         expect(screen.getByText(/PV Suggestion/i)).toBeInTheDocument();
     });
+
+    it('zeigt Plausibilitätswarnung bei sehr großer Batterie relativ zu PV', async () => {
+        const dayStart = new Date();
+        dayStart.setHours(0, 0, 0, 0);
+        dayStart.setDate(dayStart.getDate() - 1);
+        const fullDayData = Array.from({ length: 24 }).map((_, i) => ({
+            t: dayStart.getTime() + (i * 60 * 60 * 1000),
+            p: 1000,
+            l: 500,
+        }));
+
+        (api.getSimulationData as any).mockResolvedValue(fullDayData);
+        (api.getTariffs as any).mockResolvedValue([]);
+
+        render(<ScenarioPlanner config={mockConfig} />);
+        fireEvent.click(screen.getByText(/Scenario Planner/i));
+
+        await waitFor(() => {
+            expect(screen.queryByText(/Loading historical data/i)).not.toBeInTheDocument();
+        });
+
+        // Push battery add-on to the max; base PV is 5kWp from mock config.
+        const storageSlider = screen.getByRole('slider', { name: /add storage/i });
+        fireEvent.change(storageSlider, { target: { value: '30' } });
+
+        // Warning is rendered in Details panel.
+        expect(screen.getByText(/Battery seems large vs PV/i)).toBeInTheDocument();
+    });
+
+    it('zeigt Hinweis wenn Einspeisebegrenzung aus Historie inferiert wird', async () => {
+        const dayStart = new Date();
+        dayStart.setHours(0, 0, 0, 0);
+        dayStart.setDate(dayStart.getDate() - 1);
+
+        // Include measured grid export (ge) so the planner can infer an export cap.
+        const fullDayData = Array.from({ length: 24 }).map((_, i) => ({
+            t: dayStart.getTime() + (i * 60 * 60 * 1000),
+            p: 2000,
+            l: 500,
+            ge: 1000,
+        }));
+
+        (api.getSimulationData as any).mockResolvedValue(fullDayData);
+        (api.getTariffs as any).mockResolvedValue([]);
+
+        render(<ScenarioPlanner config={mockConfig} />);
+        fireEvent.click(screen.getByText(/Scenario Planner/i));
+
+        await waitFor(() => {
+            expect(screen.queryByText(/Loading historical data/i)).not.toBeInTheDocument();
+        });
+
+        // Export cap is shown as a data/assumption chip when it can be inferred.
+        expect(screen.getByText(/Export cap \(est\.\):/i)).toBeInTheDocument();
+    });
 });
