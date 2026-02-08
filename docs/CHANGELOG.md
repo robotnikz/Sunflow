@@ -1,3 +1,10 @@
+# [1.13.0](https://github.com/robotnikz/Sunflow/compare/v1.12.0...v1.13.0) (2026-02-08)
+
+
+### Features
+
+* more trustworthy upgrade recommendations ([a22a8d6](https://github.com/robotnikz/Sunflow/commit/a22a8d6f992090308791e14e58ac206aaf6fbe4e)), closes [#61](https://github.com/robotnikz/Sunflow/issues/61)
+
 # [1.12.0](https://github.com/robotnikz/Sunflow/compare/v1.11.1...v1.12.0) (2026-01-27)
 
 
