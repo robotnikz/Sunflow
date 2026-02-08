@@ -312,6 +312,9 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
   if (!data) return null;
 
     const setup = (() => {
+        type SettingsTab = Parameters<NonNullable<DashboardProps['onOpenSettings']>>[0];
+        type SetupTab = Exclude<SettingsTab, undefined>;
+
         const connected = !!config.inverterIp;
         const hasStartDate = !!config.systemStartDate;
         const hasTariffs = (tariffs || []).length > 0;
@@ -326,7 +329,15 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
         const hasWebhook = !!(config.notifications?.discordWebhook || '').trim();
         const notificationsReady = notifEnabled && hasWebhook;
 
-        const items = [
+        const items: Array<{
+            key: string;
+            label: string;
+            description: string;
+            done: boolean;
+            tab: SetupTab;
+            icon: any;
+            required: boolean;
+        }> = [
             {
                 key: 'connected' as const,
                 label: 'Connected to inverter',
@@ -341,7 +352,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                 label: 'ROI tracking enabled',
                 description: 'Tariffs + expenses + commissioning date',
                 done: roiEnabled,
-                tab: (!hasTariffs ? 'tariffs' : !hasExpenses ? 'expenses' : 'general') as const,
+                tab: !hasTariffs ? 'tariffs' : !hasExpenses ? 'expenses' : 'general',
                 icon: PiggyBank,
                 required: true,
             },
@@ -375,7 +386,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
         ];
 
         const requiredIncomplete = items.filter(i => i.required && !i.done);
-        const next = (requiredIncomplete[0] || items.find(i => !i.done))?.tab;
+        const next: SettingsTab = (requiredIncomplete[0] || items.find(i => !i.done))?.tab;
         const doneCount = items.filter(i => i.done).length;
         const total = items.length;
         const requiredTotal = items.filter(i => i.required).length;
