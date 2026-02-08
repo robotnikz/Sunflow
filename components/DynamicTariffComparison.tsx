@@ -249,7 +249,7 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
             Dynamic Tariff Comparison
           </h2>
           <p className="text-slate-400 text-sm mt-1 flex items-center gap-2">
-            <Info size={14} className="text-slate-500" />
+            <Info size={14} className="text-slate-400" />
             {'aWATTar provides market (exchange) prices. Add “Surcharge” + VAT to approximate your all-in retail tariff.'}
           </p>
         </div>
@@ -299,7 +299,7 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
           {period === 'custom' && (
             <div className="mt-3 grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[10px] text-slate-500 font-bold uppercase">From</label>
+                <label className="text-xs text-slate-400 font-bold uppercase">From</label>
                 <input
                   type="date"
                   value={from}
@@ -308,7 +308,7 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
                 />
               </div>
               <div>
-                <label className="text-[10px] text-slate-500 font-bold uppercase">To</label>
+                <label className="text-xs text-slate-400 font-bold uppercase">To</label>
                 <input
                   type="date"
                   value={to}
@@ -317,11 +317,11 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
                 />
               </div>
               {!canApply && (
-                <div className="col-span-2 text-[10px] text-amber-300">
+                <div className="col-span-2 text-xs text-amber-300">
                   Select both dates to run a custom window.
                 </div>
               )}
-              <div className="col-span-2 text-[10px] text-slate-500">
+              <div className="col-span-2 text-xs text-slate-400">
                 Note: “To” is treated as inclusive in the UI.
               </div>
             </div>
@@ -335,7 +335,7 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
           </div>
 
           <div>
-            <label className="text-[10px] text-slate-500 font-bold uppercase">Country</label>
+            <label className="text-xs text-slate-400 font-bold uppercase">Country</label>
             <select
               value={country}
               onChange={e => setCountry(e.target.value as any)}
@@ -344,7 +344,7 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
               <option value="DE">DE</option>
               <option value="AT">AT</option>
             </select>
-            <div className="text-[10px] text-slate-600 mt-1">aWATTar is country-based (DE/AT).</div>
+            <div className="text-xs text-slate-400 mt-1">aWATTar is country-based (DE/AT).</div>
           </div>
         </div>
 
@@ -356,7 +356,7 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[10px] text-slate-500 font-bold uppercase">Surcharge (ct/kWh)</label>
+              <label className="text-xs text-slate-400 font-bold uppercase">Surcharge (ct/kWh)</label>
               <input
                 type="number"
                 step="0.1"
@@ -364,12 +364,12 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
                 onChange={e => setSurchargeCt(Number(e.target.value))}
                 className="mt-1 w-full bg-slate-800 border border-slate-600 text-white text-sm rounded px-3 py-1.5 focus:border-indigo-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
-              <div className="text-[10px] text-slate-600 mt-1">
+              <div className="text-xs text-slate-400 mt-1">
                 Added to the market price before VAT. Typical use: fees, margin, balancing costs, etc.
               </div>
             </div>
             <div>
-              <label className="text-[10px] text-slate-500 font-bold uppercase">VAT (%)</label>
+              <label className="text-xs text-slate-400 font-bold uppercase">VAT (%)</label>
               <input
                 type="number"
                 step="0.1"
@@ -377,11 +377,11 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
                 onChange={e => setVatPercent(Number(e.target.value))}
                 className="mt-1 w-full bg-slate-800 border border-slate-600 text-white text-sm rounded px-3 py-1.5 focus:border-indigo-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
-              <div className="text-[10px] text-slate-600 mt-1">
+              <div className="text-xs text-slate-400 mt-1">
                 Applied on top: (market + surcharge) × (1 + VAT).
               </div>
             </div>
-            <div className="col-span-2 text-[10px] text-slate-600">
+            <div className="col-span-2 text-xs text-slate-400">
               Tip: set VAT to 20% (AT) / 19% (DE). Example: market 10ct + surcharge 5ct @ 19% VAT ⇒ ~17.85ct/kWh.
             </div>
           </div>
@@ -406,32 +406,32 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-slate-900/40 border border-slate-700/50 rounded-xl p-4">
-                <div className="text-[10px] text-slate-500 font-bold uppercase">Fixed net cost</div>
+                <div className="text-xs text-slate-400 font-bold uppercase">Fixed net cost</div>
                 <div className="text-2xl font-bold text-slate-100 mt-1">
                   {currencySymbol} {result.totals.fixed.net.toFixed(2)}
                 </div>
-                <div className="text-[10px] text-slate-500 mt-1">Import − feed-in revenue</div>
+                <div className="text-xs text-slate-400 mt-1">Import − feed-in revenue</div>
               </div>
               <div className="bg-slate-900/40 border border-slate-700/50 rounded-xl p-4">
-                <div className="text-[10px] text-slate-500 font-bold uppercase">Dynamic net cost</div>
+                <div className="text-xs text-slate-400 font-bold uppercase">Dynamic net cost</div>
                 <div className="text-2xl font-bold text-slate-100 mt-1">
                   {currencySymbol} {result.totals.dynamic.net.toFixed(2)}
                 </div>
-                <div className="text-[10px] text-slate-500 mt-1">aWATTar + add-ons</div>
+                <div className="text-xs text-slate-400 mt-1">aWATTar + add-ons</div>
               </div>
               <div className="bg-slate-900/40 border border-slate-700/50 rounded-xl p-4">
-                <div className="text-[10px] text-slate-500 font-bold uppercase">Difference</div>
+                <div className="text-xs text-slate-400 font-bold uppercase">Difference</div>
                 <div className={`text-2xl font-bold mt-1 flex items-center gap-2 ${summary.delta <= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                   {summary.delta <= 0 ? <TrendingDown size={18} /> : <TrendingUp size={18} />}
                   {currencySymbol} {summary.delta.toFixed(2)}
                 </div>
-                <div className="text-[10px] text-slate-500 mt-1">
+                <div className="text-xs text-slate-400 mt-1">
                   {summary.delta <= 0 ? `You would have saved ~${currencySymbol} ${summary.savings.toFixed(2)}` : `You would have paid ~${currencySymbol} ${summary.extra.toFixed(2)} more`}
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
               <span className="bg-slate-900/60 border border-slate-700/50 px-2 py-1 rounded">
                 Range: {result.range.from.substring(0, 10)} → {result.range.to.substring(0, 10)}
               </span>

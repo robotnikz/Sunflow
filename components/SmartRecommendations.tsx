@@ -192,15 +192,15 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
                     <span className={`text-2xl font-bold ${totalAvailablePower > 0 || (isDay && aboveReserveKwh > 0) ? 'text-emerald-400' : 'text-slate-500'}`}>
                         {totalAvailablePower > 0 ? `${Math.round(totalAvailablePower)} W` : (isDay && aboveReserveKwh > 0 ? `${aboveReserveKwh.toFixed(1)} kWh` : '0 W')}
                     </span>
-                    <span className="text-xs text-slate-500 font-medium">
+                    <span className="text-xs text-slate-400 font-medium">
                         {totalAvailablePower > 0 ? 'Free' : (isDay && aboveReserveKwh > 0 ? 'Above reserve' : 'Free')}
                     </span>
               </div>
 
               {(batteryCapacityKwh > 0 || divertableAmount > 0) && (
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0 text-[10px] leading-tight">
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0 text-xs leading-tight">
                       {batteryCapacityKwh > 0 && (
-                          <span className="text-slate-500">
+                          <span className="text-slate-400">
                               Reserve: <span className="text-slate-300">{Math.round(reservePct)}%</span>
                           </span>
                       )}
@@ -220,7 +220,7 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
         <div className="flex flex-col items-end gap-2">
             
             {/* 1. Status Badge */}
-            <div className={`flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded border shadow-sm ${
+            <div className={`flex items-center gap-1.5 text-xs font-bold px-2 py-1 rounded border shadow-sm ${
                 isBatterySafe
                 ? 'bg-emerald-900/40 border-emerald-500/30 text-emerald-400' 
                 : 'bg-amber-900/40 border-amber-500/30 text-amber-400'
@@ -232,7 +232,7 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
             </div>
             
             {/* 2. Forecast vs Battery Need */}
-            <div className="flex items-center gap-2 text-[10px] bg-slate-900/60 px-2 py-1 rounded-md border border-slate-700/50">
+            <div className="flex items-center gap-2 text-xs bg-slate-900/60 px-2 py-1 rounded-md border border-slate-700/50">
                 <div className="flex items-center gap-1" title={hasAnyForecastData ? `Remaining Solar Forecast Today (Solcast)` : "Forecast data unavailable"}>
                     <SunMedium size={10} className={hasAnyForecastData ? "text-yellow-500" : "text-slate-600"}/> 
                     <span className="text-slate-300">
@@ -244,7 +244,7 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
                         </span>
                     )}
                 </div>
-                <span className="text-slate-600 text-[9px]">vs</span>
+                <span className="text-xs text-slate-400">vs</span>
                 <div className="flex items-center gap-1" title="Energy needed to reach your reserve target">
                     <Battery size={10} className="text-blue-400"/> 
                     <span className="text-slate-300">-{Math.round(kwhToReachReserve)}k</span>
@@ -262,7 +262,7 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
                     <>
                          <Leaf size={32} className="text-amber-500 mb-2" />
                          <p className="text-sm text-amber-400 font-medium">Conserve Energy</p>
-                         <p className="text-xs text-slate-500 mt-1 max-w-[200px]">
+                                 <p className="text-xs text-slate-400 mt-1 max-w-[200px]">
                             Not enough sun left today to refill battery if devices run now.
                          </p>
                     </>
@@ -270,7 +270,7 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
                     <>
                         <Hourglass size={32} className="text-amber-500 mb-2" />
                         <p className="text-sm text-amber-400 font-medium">Charging Storage</p>
-                        <p className="text-xs text-slate-500 mt-1 max-w-[200px]">
+                        <p className="text-xs text-slate-400 mt-1 max-w-[200px]">
                             {Math.round(batteryCharging)}W is flowing to battery. Waiting for surplus...
                         </p>
                     </>
@@ -320,7 +320,7 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
                                     </div>
                                     <div>
                                         <span className="text-sm font-medium text-slate-200 block leading-tight">{app.name}</span>
-                                                                                <span className="text-[9px] text-slate-500">
+                                                                                <span className="text-xs text-slate-400">
                                                                                     ~{runKwh} kWh/run
                                                                                     {hasCost && runCost !== null && (
                                                                                         <>
@@ -336,9 +336,9 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <span className="text-xs font-bold text-slate-500 block">{app.watts} W</span>
+                                    <span className="text-xs font-bold text-slate-400 block">{app.watts} W</span>
                                     {sourceBadge && (
-                                        <span className={`mt-1 inline-flex items-center justify-end px-1.5 py-0.5 rounded border text-[9px] font-semibold ${sourceBadge.cls}`}>
+                                        <span className={`mt-1 inline-flex items-center justify-end px-1.5 py-0.5 rounded border text-xs font-semibold ${sourceBadge.cls}`}>
                                             {sourceBadge.label}
                                         </span>
                                     )}

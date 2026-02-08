@@ -37,7 +37,7 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config, forecast, weather
   if (!config.latitude || !config.longitude) {
     return (
         <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-xl flex flex-col items-center justify-center text-center h-full min-h-[220px]">
-            <MapPinOff className="text-slate-500 mb-2" size={32}/>
+                  <MapPinOff className="text-slate-400 mb-2" size={32}/>
             <p className="text-slate-400 text-sm">Add location in settings to see Weather & Solar Forecast.</p>
         </div>
     );
@@ -72,7 +72,7 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config, forecast, weather
           <div>
              <h3 className="text-slate-400 text-sm font-medium">Local Weather</h3>
              {weatherData && (
-                 <div className="mt-1 text-slate-500 text-xs">{getWeatherLabel(weatherData.current.weatherCode)}</div>
+                <div className="mt-1 text-slate-400 text-xs">{getWeatherLabel(weatherData.current.weatherCode)}</div>
              )}
           </div>
           {weatherData ? (
@@ -80,7 +80,7 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config, forecast, weather
                 <div className="text-2xl font-bold text-slate-200">{weatherData.current.temp}°C</div>
              </div>
           ) : (
-             <div className="flex items-center gap-2 text-slate-500 text-xs">
+             <div className="flex items-center gap-2 text-slate-400 text-xs">
                  <Loader2 className="animate-spin" size={14} /> Loading...
              </div>
           )}
@@ -92,7 +92,7 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config, forecast, weather
 
        <div className={`mt-2 bg-slate-900/50 rounded-xl p-3 border relative z-10 ${hasSolcastKey ? 'border-yellow-500/20 bg-yellow-900/10' : 'border-slate-700/50'}`}>
           <div className="flex justify-between items-center mb-1">
-             <span className="text-xs text-slate-500 uppercase font-bold">Total Forecast Today</span>
+             <span className="text-xs text-slate-400 uppercase font-bold">Total Forecast Today</span>
              {hasSolcastKey ? (
                  <div className="flex items-center gap-1">
                      {solcastRateLimited && (
@@ -100,11 +100,11 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config, forecast, weather
                             <AlertOctagon size={12} className="text-red-500 animate-pulse" />
                          </span>
                      )}
-                     <span className="text-[10px] text-yellow-500 flex items-center gap-1"><SunMedium size={10}/> Solcast</span>
+                   <span className="text-xs text-yellow-500 flex items-center gap-1"><SunMedium size={10}/> Solcast</span>
                  </div>
              ) : (
                  // No key = No forecast provider active
-                 <span className="text-[10px] text-slate-500 flex items-center gap-1">No Provider</span>
+                <span className="text-xs text-slate-400 flex items-center gap-1">No Provider</span>
              )}
           </div>
           
@@ -115,7 +115,7 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config, forecast, weather
                     <span className="text-sm text-slate-400">kWh</span>
                 </div>
              ) : (
-                 <div className="text-xs text-slate-500 italic">
+                <div className="text-xs text-slate-400 italic">
                     Loading...
                  </div>
              )

@@ -17,7 +17,7 @@ const BatteryHealthWidget: React.FC<BatteryHealthWidgetProps> = ({ data, nominal
                 <Activity size={24} />
             </div>
             <h3 className="text-slate-200 font-semibold">Battery Health</h3>
-            <p className="text-sm text-slate-500 mt-2 max-w-xs">
+            <p className="text-sm text-slate-400 mt-2 max-w-xs">
                 Not enough data yet. Requires full charge cycles to calculate SOH and efficiency.
             </p>
         </div>
@@ -57,7 +57,7 @@ const BatteryHealthWidget: React.FC<BatteryHealthWidgetProps> = ({ data, nominal
                 <h3 className="text-slate-200 text-sm font-bold flex items-center gap-2">
                     <Activity size={16} className="text-purple-400"/> Battery Health (SOH)
                 </h3>
-                <p className="text-[10px] text-slate-500 mt-0.5">Based on {data.totalCycles} estimated cycles</p>
+                <p className="text-xs text-slate-400 mt-0.5">Based on {data.totalCycles} estimated cycles</p>
             </div>
             <div className={`px-2 py-0.5 rounded border bg-slate-900/50 flex items-center gap-1.5 ${healthColor} border-current opacity-80`}>
                 <Battery size={12} />
@@ -68,17 +68,17 @@ const BatteryHealthWidget: React.FC<BatteryHealthWidgetProps> = ({ data, nominal
         {/* Stats Grid */}
         <div className="grid grid-cols-2 gap-3 mb-4">
             <div className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-700/50">
-                <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase mb-0.5">
+                <div className="flex items-center gap-1.5 text-slate-400 text-xs font-bold uppercase mb-0.5">
                     <Zap size={10} className="text-green-400"/> Efficiency
                 </div>
                 <div className="text-lg font-bold text-slate-100">{data.averageEfficiency}%</div>
             </div>
             <div className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-700/50">
-                 <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase mb-0.5">
+                 <div className="flex items-center gap-1.5 text-slate-400 text-xs font-bold uppercase mb-0.5">
                     <Battery size={10} className="text-purple-400"/> Est. Cap
                 </div>
                 <div className="text-lg font-bold text-slate-100">
-                    {data.latestCapacityEst > 0 ? data.latestCapacityEst.toFixed(1) : '--'} <span className="text-xs font-normal text-slate-500">kWh</span>
+                    {data.latestCapacityEst > 0 ? data.latestCapacityEst.toFixed(1) : '--'} <span className="text-xs font-normal text-slate-400">kWh</span>
                 </div>
             </div>
         </div>

@@ -15,7 +15,7 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
       return (
         <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg">
            <h3 className="text-slate-200 text-lg font-semibold mb-4">Inverter Status</h3>
-           <div className="h-16 flex items-center justify-center text-slate-500 text-sm border border-dashed border-slate-700 rounded-lg">
+           <div className="h-16 flex items-center justify-center text-slate-400 text-sm border border-dashed border-slate-700 rounded-lg">
              Waiting for data logs...
            </div>
         </div>
@@ -154,7 +154,7 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
 
       <div className="grid grid-cols-[80px_1fr] gap-x-4 mt-2">
          <div></div> 
-         <div className="flex justify-between text-xs text-slate-500 px-1">
+        <div className="flex justify-between text-xs text-slate-400 px-1">
             <span>{ticks[0]}</span>
             <span>{ticks[1]}</span>
             <span>{ticks[2]}</span>
