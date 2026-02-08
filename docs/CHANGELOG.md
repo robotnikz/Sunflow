@@ -1,3 +1,10 @@
+## [1.13.3](https://github.com/robotnikz/Sunflow/compare/v1.13.2...v1.13.3) (2026-02-08)
+
+
+### Bug Fixes
+
+* clarify scenario planner recommendations ([b6fbd6c](https://github.com/robotnikz/Sunflow/commit/b6fbd6c6e1386349d9b517e797a728ca3dfee959))
+
 ## [1.13.2](https://github.com/robotnikz/Sunflow/compare/v1.13.1...v1.13.2) (2026-02-08)
 
 
