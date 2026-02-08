@@ -1,3 +1,10 @@
+## [1.13.1](https://github.com/robotnikz/Sunflow/compare/v1.13.0...v1.13.1) (2026-02-08)
+
+
+### Bug Fixes
+
+* **scenario-planner:** show empty/error state when no history ([2abf455](https://github.com/robotnikz/Sunflow/commit/2abf455c0d337b879696cdbf0f03ee92878209e1))
+
 # [1.13.0](https://github.com/robotnikz/Sunflow/compare/v1.12.0...v1.13.0) (2026-02-08)
 
 

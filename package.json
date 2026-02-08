@@ -1,6 +1,6 @@
 {
   "name": "sunflow-dashboard",
-  "version": "1.13.0",
+  "version": "1.13.1",
   "description": "Solar Energy Dashboard for Fronius Gen24",
   "private": true,
   "type": "module",
