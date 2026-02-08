@@ -1438,6 +1438,68 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                             </div>
                                         )}
 
+                                        {pvRecommendation && (
+                                            <div>
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <div className="text-xs font-bold uppercase text-slate-400">PV Suggestion</div>
+                                                    <div className="text-[10px] text-slate-500">PV-only (base → PV) · ignores storage slider</div>
+                                                </div>
+
+                                                {pvRecommendation.recommended ? (
+                                                    <div className="text-sm text-slate-200">
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-slate-400">Recommended add-on</span>
+                                                            <span className="text-white font-bold">+{pvRecommendation.recommended.addedPvPercent}%</span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between mt-1">
+                                                            <span className="text-slate-400">Added PV</span>
+                                                            <span className="text-yellow-300 font-semibold">+{pvRecommendation.recommended.addedKwp.toFixed(1)} kWp</span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between mt-1">
+                                                            <span className="text-slate-400">PV ROI (PV-only)</span>
+                                                            <span className="text-emerald-400 font-semibold">{pvRecommendation.recommended.roiYears.toFixed(1)}y</span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between mt-1">
+                                                            <span className="text-slate-400">Net gain ({financials.horizonYears}y)</span>
+                                                            <span className={`${pvRecommendation.recommended.netGainHorizon >= 0 ? 'text-emerald-300' : 'text-red-300'} font-semibold`}>
+                                                                {pvRecommendation.recommended.netGainHorizon >= 0 ? '+' : ''}{pvRecommendation.recommended.netGainHorizon.toLocaleString(undefined, { maximumFractionDigits: 0 })} {config.currency}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between mt-1">
+                                                            <span className="text-slate-400">Yearly benefit (PV)</span>
+                                                            <span className="text-emerald-300 font-semibold">+{pvRecommendation.recommended.yearlyBenefit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {config.currency}</span>
+                                                        </div>
+
+                                                        {pvRecommendation.thresholds?.focus === 'autonomy' && (
+                                                            <div className="flex items-center justify-between mt-1">
+                                                                <span className="text-slate-400">Autonomy Δ (base → PV)</span>
+                                                                <span className="text-blue-300 font-semibold">+{pvRecommendation.recommended.autonomyDeltaPct.toFixed(2)}%</span>
+                                                            </div>
+                                                        )}
+
+                                                        {pvRecommendation.bestYearly && pvRecommendation.bestYearly.addedPvPercent !== pvRecommendation.recommended.addedPvPercent && (
+                                                            <div className="mt-2 text-[10px] text-slate-500">
+                                                                Max yearly benefit at +{pvRecommendation.bestYearly.addedPvPercent}%.
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-xs text-slate-400">
+                                                        <div>
+                                                            No worthwhile PV recommendation for this timeframe.
+                                                            {pvRecommendation.thresholds && (
+                                                                <span>
+                                                                    {pvRecommendation.thresholds.focus === 'roi'
+                                                                        ? ` (ROI focus: needs ≥ ${pvRecommendation.thresholds.minYearlyBenefit} ${config.currency}/yr and payback ≤ ${pvRecommendation.thresholds.maxRoiYears}y.)`
+                                                                        : ' (Autonomy focus: no PV size improves autonomy in this timeframe.)'}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
                                         {batteryRecommendation && (
                                             <div>
                                                 <div className="flex items-center justify-between mb-2">
@@ -1506,68 +1568,6 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                                 export Δ ~{batteryRecommendation.bestYearly.yearlyExportDeltaKwh.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh/yr.
                                                             </div>
                                                         )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {pvRecommendation && (
-                                            <div>
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <div className="text-xs font-bold uppercase text-slate-400">PV Suggestion</div>
-                                                    <div className="text-[10px] text-slate-500">PV-only (base → PV) · ignores storage slider</div>
-                                                </div>
-
-                                                {pvRecommendation.recommended ? (
-                                                    <div className="text-sm text-slate-200">
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="text-slate-400">Recommended add-on</span>
-                                                            <span className="text-white font-bold">+{pvRecommendation.recommended.addedPvPercent}%</span>
-                                                        </div>
-                                                        <div className="flex items-center justify-between mt-1">
-                                                            <span className="text-slate-400">Added PV</span>
-                                                            <span className="text-yellow-300 font-semibold">+{pvRecommendation.recommended.addedKwp.toFixed(1)} kWp</span>
-                                                        </div>
-                                                        <div className="flex items-center justify-between mt-1">
-                                                            <span className="text-slate-400">PV ROI (PV-only)</span>
-                                                            <span className="text-emerald-400 font-semibold">{pvRecommendation.recommended.roiYears.toFixed(1)}y</span>
-                                                        </div>
-                                                        <div className="flex items-center justify-between mt-1">
-                                                            <span className="text-slate-400">Net gain ({financials.horizonYears}y)</span>
-                                                            <span className={`${pvRecommendation.recommended.netGainHorizon >= 0 ? 'text-emerald-300' : 'text-red-300'} font-semibold`}>
-                                                                {pvRecommendation.recommended.netGainHorizon >= 0 ? '+' : ''}{pvRecommendation.recommended.netGainHorizon.toLocaleString(undefined, { maximumFractionDigits: 0 })} {config.currency}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center justify-between mt-1">
-                                                            <span className="text-slate-400">Yearly benefit (PV)</span>
-                                                            <span className="text-emerald-300 font-semibold">+{pvRecommendation.recommended.yearlyBenefit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {config.currency}</span>
-                                                        </div>
-
-                                                        {pvRecommendation.thresholds?.focus === 'autonomy' && (
-                                                            <div className="flex items-center justify-between mt-1">
-                                                                <span className="text-slate-400">Autonomy Δ (base → PV)</span>
-                                                                <span className="text-blue-300 font-semibold">+{pvRecommendation.recommended.autonomyDeltaPct.toFixed(2)}%</span>
-                                                            </div>
-                                                        )}
-
-                                                        {pvRecommendation.bestYearly && pvRecommendation.bestYearly.addedPvPercent !== pvRecommendation.recommended.addedPvPercent && (
-                                                            <div className="mt-2 text-[10px] text-slate-500">
-                                                                Max yearly benefit at +{pvRecommendation.bestYearly.addedPvPercent}%.
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    <div className="text-xs text-slate-400">
-                                                        <div>
-                                                            No worthwhile PV recommendation for this timeframe.
-                                                            {pvRecommendation.thresholds && (
-                                                                <span>
-                                                                    {pvRecommendation.thresholds.focus === 'roi'
-                                                                        ? ` (ROI focus: needs ≥ ${pvRecommendation.thresholds.minYearlyBenefit} ${config.currency}/yr and payback ≤ ${pvRecommendation.thresholds.maxRoiYears}y.)`
-                                                                        : ' (Autonomy focus: no PV size improves autonomy in this timeframe.)'}
-                                                                </span>
-                                                            )}
-                                                        </div>
                                                     </div>
                                                 )}
                                             </div>
