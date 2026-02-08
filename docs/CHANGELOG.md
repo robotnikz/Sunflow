@@ -1,3 +1,10 @@
+## [1.13.2](https://github.com/robotnikz/Sunflow/compare/v1.13.1...v1.13.2) (2026-02-08)
+
+
+### Bug Fixes
+
+* **api:** restore simulation data endpoint ([cfb9614](https://github.com/robotnikz/Sunflow/commit/cfb961454576579f110b330691b415614f4b34f0))
+
 ## [1.13.1](https://github.com/robotnikz/Sunflow/compare/v1.13.0...v1.13.1) (2026-02-08)
 
 
