@@ -64,6 +64,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
       if (config.inflationRate === undefined) config.inflationRate = 2.0;
       if (config.batteryCapacity === undefined) config.batteryCapacity = 10.0;
 
+      // Export cap defaults (Scenario Planner)
+      if (!config.exportCap || typeof config.exportCap !== 'object') {
+          config.exportCap = { mode: 'estimated' };
+      } else {
+          const mode = (config.exportCap as any).mode;
+          const validMode = mode === 'estimated' || mode === 'none' || mode === 'fixed';
+          config.exportCap = {
+              mode: validMode ? mode : 'estimated',
+              fixedW: Number.isFinite(Number((config.exportCap as any).fixedW)) ? Number((config.exportCap as any).fixedW) : undefined,
+          };
+      }
+
       return config;
   });
 
@@ -115,7 +127,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                 ...(prev.smartUsage || {}),
                 ...(currentConfig.smartUsage || {}),
                 reserveSocPct: (currentConfig.smartUsage?.reserveSocPct ?? prev.smartUsage?.reserveSocPct ?? 100)
-            }
+            },
+            exportCap: (() => {
+                const incoming = (currentConfig as any).exportCap;
+                const prevCap = (prev as any).exportCap;
+                const base = (incoming && typeof incoming === 'object') ? incoming : prevCap;
+                const mode = base?.mode;
+                const validMode = mode === 'estimated' || mode === 'none' || mode === 'fixed';
+                const fixedWRaw = base?.fixedW;
+                const fixedW = Number.isFinite(Number(fixedWRaw)) ? Number(fixedWRaw) : undefined;
+                return { mode: validMode ? mode : 'estimated', fixedW };
+            })()
         };
     });
   }, [currentConfig]);
@@ -366,6 +388,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
         return;
     }
 
+    // Export cap validation (only when user selects a fixed cap)
+    const exportMode = (formData.exportCap?.mode ?? 'estimated') as any;
+    const fixedW = Number(formData.exportCap?.fixedW);
+    if (exportMode === 'fixed') {
+        if (!Number.isFinite(fixedW) || fixedW <= 0) {
+            setActiveTab('general');
+            push({ type: 'warning', title: 'Invalid export cap', message: 'Please enter a positive export cap in watts, or switch to “Off (100%)” / “Estimated”.' });
+            return;
+        }
+    }
+
     setFieldErrors({});
 
     // Ensure numbers are numbers before saving
@@ -380,7 +413,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
         smartUsage: {
             ...(formData.smartUsage || {}),
             reserveSocPct: Math.min(100, Math.max(0, Number(formData.smartUsage?.reserveSocPct ?? 100)))
-        }
+        },
+        exportCap: (() => {
+            const mode = formData.exportCap?.mode ?? 'estimated';
+            if (mode === 'none' || mode === 'estimated') return { mode };
+            const fw = Number(formData.exportCap?.fixedW);
+            return { mode: 'fixed' as const, fixedW: Number.isFinite(fw) ? fw : undefined };
+        })()
     };
     onSave(cleanedConfig);
   };
@@ -816,6 +855,61 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                  <div className="grid grid-cols-2 gap-4">
                     <div><label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2"><Zap size={14} className="text-yellow-500"/> Solar Capacity (kWp)</label><input type="number" step="0.1" value={formData.systemCapacity || ''} onChange={(e) => setFormData({...formData, systemCapacity: parseFloat(e.target.value)})} placeholder="e.g. 10.5" className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" /></div>
                     <div><label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2"><Battery size={14} className="text-emerald-500"/> Battery Size (kWh)</label><input type="number" step="0.1" value={formData.batteryCapacity || ''} onChange={(e) => setFormData({...formData, batteryCapacity: parseFloat(e.target.value)})} placeholder="e.g. 7.7" className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" /></div>
+                 </div>
+              </div>
+
+              <div className="space-y-4 pt-4">
+                 <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2 flex items-center gap-2"><ArrowRight size={18}/> Grid Export</h3>
+                 <div className="grid grid-cols-2 gap-4">
+                     <div>
+                         <label className="block text-sm font-medium text-slate-400 mb-2">Export cap</label>
+                         <select
+                             value={formData.exportCap?.mode ?? 'estimated'}
+                             onChange={(e) => {
+                                 const mode = e.target.value as any;
+                                 setFormData({
+                                     ...formData,
+                                     exportCap: {
+                                         mode,
+                                         fixedW: mode === 'fixed' ? (formData.exportCap?.fixedW ?? 5000) : undefined,
+                                     }
+                                 });
+                             }}
+                             className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
+                         >
+                             <option value="estimated">Estimated (from history)</option>
+                             <option value="none">Off (100%)</option>
+                             <option value="fixed">Fixed (W)</option>
+                         </select>
+                         <p className="text-xs text-slate-400 mt-1">
+                             Controls export limitation used in the Scenario Planner upgrade simulator.
+                         </p>
+                     </div>
+                     <div>
+                         <label className="block text-sm font-medium text-slate-400 mb-2">Fixed cap (W)</label>
+                         <input
+                             type="number"
+                             step="50"
+                             disabled={(formData.exportCap?.mode ?? 'estimated') !== 'fixed'}
+                             value={(formData.exportCap?.mode ?? 'estimated') === 'fixed' ? (formData.exportCap?.fixedW ?? '') : ''}
+                             onChange={(e) => {
+                                 const raw = e.target.value;
+                                 const n = raw === '' ? undefined : Number(raw);
+                                 setFormData({
+                                     ...formData,
+                                     exportCap: {
+                                         mode: 'fixed',
+                                         fixedW: Number.isFinite(n as any) ? n : undefined,
+                                     }
+                                 });
+                             }}
+                             placeholder="e.g. 5350"
+                             className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500 disabled:opacity-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                         />
+                         <p className="text-xs text-slate-400 mt-1">
+                             Tip: If you want no export limit (older installations / other regions), choose “Off (100%)”.
+                         </p>
+                     </div>
                  </div>
               </div>
 

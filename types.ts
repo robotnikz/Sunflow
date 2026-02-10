@@ -51,6 +51,16 @@ export interface NotificationConfig {
   minCyclesForSoh?: number; // Default 50 cycles
 }
 
+export type ExportCapMode = 'estimated' | 'none' | 'fixed';
+
+export interface ExportCapConfig {
+  // estimated: infer from measured grid export (if available)
+  // none: no export limit (100%)
+  // fixed: cap export at fixedW
+  mode: ExportCapMode;
+  fixedW?: number;
+}
+
 export interface SystemConfig {
   inverterIp: string;
   currency: string;
@@ -59,6 +69,9 @@ export interface SystemConfig {
   longitude?: string;
   systemCapacity?: number; // kWp
   batteryCapacity?: number; // kWh (Total capacity of the stack)
+
+  // Optional: export limitation (used by Scenario Planner upgrade simulator)
+  exportCap?: ExportCapConfig;
 
   // Smart Usage tuning
   smartUsage?: {

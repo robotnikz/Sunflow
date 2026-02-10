@@ -194,6 +194,12 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         maxExportWhPerHour?: number; // Optional export cap (Wh/h or W avg over the hour)
     };
 
+    const toPositiveFinite = (value: unknown): number | null => {
+        const n = typeof value === 'number' ? value : Number(value);
+        if (!Number.isFinite(n)) return null;
+        return n > 0 ? n : null;
+    };
+
     const simulate = (dataPoints: SimulationDataPoint[], pvPercent: number, batteryCapacityWh: number, model: BatteryModelParams): ScenarioSimResult => {
         let currentSocWh = Math.max(0, Math.min(batteryCapacityWh, model.initialSocWh));
         let totalLoadWh = 0;
@@ -364,12 +370,21 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
 
         const inferredModel = inferBatteryModel(filteredHourlyData);
         const inferredExportCap = inferExportCapWhPerHour(filteredHourlyData);
+
+        const exportCapMode = config.exportCap?.mode ?? 'estimated';
+        const fixedCap = toPositiveFinite(config.exportCap?.fixedW);
+        const effectiveExportCap = (() => {
+            if (exportCapMode === 'none') return null;
+            if (exportCapMode === 'fixed') return fixedCap;
+            return inferredExportCap;
+        })();
+
         const baseModelNoInitial: Omit<BatteryModelParams, 'initialSocWh'> = {
             chargeEff: inferredModel.chargeEff,
             dischargeEff: inferredModel.dischargeEff,
             maxChargeWhPerHour: inferredModel.maxChargeWhPerHour,
             maxDischargeWhPerHour: inferredModel.maxDischargeWhPerHour,
-            maxExportWhPerHour: inferredExportCap ?? undefined,
+            maxExportWhPerHour: effectiveExportCap ?? undefined,
         };
 
         // Try to initialize SoC from historical data (when available).
@@ -398,7 +413,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         const pvPlusBattery = simulate(filteredHourlyData, addedPvPercent, pvPlusBatteryCap, { ...baseModelNoInitial, initialSocWh: initialEnergyWhPvPlusBattery });
 
         return { base, pvOnly, pvPlusBattery };
-    }, [filteredHourlyData, addedPvPercent, addedBatteryKwh, config.batteryCapacity]);
+    }, [filteredHourlyData, addedPvPercent, addedBatteryKwh, config.batteryCapacity, config.exportCap?.mode, config.exportCap?.fixedW]);
 
     // Backwards-compatible view model for the existing UI
     const results = useMemo(() => {
@@ -497,6 +512,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         const MIN_YEARLY_BENEFIT = 5; // {currency}/year
         const horizonYears = clampNumber(roiHorizonYears, 5, 30);
         const maxReasonableRoiYears = horizonYears;
+        const NET_GAIN_EPS = 1e-6;
 
         const yearsCovered = Math.max(0.1, dataCoverage.days / 365);
         const gridCost = activeTariff.costPerKwh;
@@ -592,8 +608,15 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                 if (b.netGainHorizon !== a.netGainHorizon) return b.netGainHorizon - a.netGainHorizon;
                 return a.roiYears - b.roiYears;
             }
-            if (b.netGainHorizon !== a.netGainHorizon) return b.netGainHorizon - a.netGainHorizon;
-            return a.roiYears - b.roiYears;
+
+            const dGain = b.netGainHorizon - a.netGainHorizon;
+            if (Math.abs(dGain) > NET_GAIN_EPS) return dGain;
+            // If gains are effectively identical, prefer the candidate that uses more of the ROI horizon
+            // (i.e., payback closer to the selected horizon), so the chosen horizon is actually reflected.
+            const aH = Math.abs(horizonYears - a.roiYears);
+            const bH = Math.abs(horizonYears - b.roiYears);
+            if (aH !== bH) return aH - bH;
+            return b.addedPvPercent - a.addedPvPercent;
         })[0];
 
         return { recommended, bestYearly, thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: maxReasonableRoiYears, focus: upgradeFocus as UpgradeFocus } };
@@ -608,6 +631,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         // These are heuristics (not hard truths) to prevent misleading suggestions.
         const MIN_YEARLY_BENEFIT = 5; // {currency}/year
         const MAX_REASONABLE_ROI_YEARS = clampNumber(roiHorizonYears, 5, 30);
+        const NET_GAIN_EPS = 1e-6;
 
         const yearsCovered = Math.max(0.1, dataCoverage.days / 365);
         const gridCost = activeTariff.costPerKwh;
@@ -751,8 +775,13 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                 if (b.netGainHorizon !== a.netGainHorizon) return b.netGainHorizon - a.netGainHorizon;
                 return a.roiYears - b.roiYears;
             }
-            if (b.netGainHorizon !== a.netGainHorizon) return b.netGainHorizon - a.netGainHorizon;
-            return a.roiYears - b.roiYears;
+
+            const dGain = b.netGainHorizon - a.netGainHorizon;
+            if (Math.abs(dGain) > NET_GAIN_EPS) return dGain;
+            const aH = Math.abs(MAX_REASONABLE_ROI_YEARS - a.roiYears);
+            const bH = Math.abs(MAX_REASONABLE_ROI_YEARS - b.roiYears);
+            if (aH !== bH) return aH - bH;
+            return b.addedBatteryKwh - a.addedBatteryKwh;
         })[0];
 
         return { recommended, bestYearly: bestYearlyAny, thresholds: { minYearlyBenefit: MIN_YEARLY_BENEFIT, maxRoiYears: MAX_REASONABLE_ROI_YEARS, focus } };
@@ -767,6 +796,14 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
 
         const inferred = inferBatteryModel(filteredHourlyData);
         const inferredExportCap = inferExportCapWhPerHour(filteredHourlyData);
+
+        const exportCapMode = config.exportCap?.mode ?? 'estimated';
+        const fixedCap = toPositiveFinite(config.exportCap?.fixedW);
+        const effectiveExportCap = (() => {
+            if (exportCapMode === 'none') return null;
+            if (exportCapMode === 'fixed') return fixedCap;
+            return inferredExportCap;
+        })();
 
         // We use measured SoC if present. Otherwise: cyclic estimate (steady-state) to avoid boundary artifacts.
         const startSocMethod = hasSoc ? 'Measured SoC' : 'Estimated (steady-state)';
@@ -783,8 +820,11 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
             inferred,
             roundTripEffPct,
             inferredExportCap,
+            exportCapMode,
+            exportCapFixed: fixedCap,
+            effectiveExportCap,
         };
-    }, [filteredHourlyData]);
+    }, [filteredHourlyData, config.exportCap?.mode, config.exportCap?.fixedW]);
 
     const recommendationConfidence = useMemo(() => {
         if (!dataBasis) {
@@ -1265,6 +1305,16 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                     {dataBasis.inferredExportCap !== null && dataBasis.inferredExportCap !== undefined && (
                                                         <span className="px-2 py-0.5 rounded-full border text-xs border-slate-500/30 text-slate-300">
                                                             Export cap (est.): {Math.round(dataBasis.inferredExportCap)} W
+                                                        </span>
+                                                    )}
+                                                    {dataBasis.exportCapMode === 'none' && (
+                                                        <span className="px-2 py-0.5 rounded-full border text-xs border-slate-500/30 text-slate-300">
+                                                            Export cap: off (100%)
+                                                        </span>
+                                                    )}
+                                                    {dataBasis.exportCapMode === 'fixed' && dataBasis.exportCapFixed !== null && dataBasis.exportCapFixed !== undefined && (
+                                                        <span className="px-2 py-0.5 rounded-full border text-xs border-slate-500/30 text-slate-300">
+                                                            Export cap: {Math.round(dataBasis.exportCapFixed)} W
                                                         </span>
                                                     )}
                                                     {dataBasis.inferred.hasMeasured && (
