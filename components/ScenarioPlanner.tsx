@@ -522,11 +522,23 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         const firstSocPct = filteredHourlyData.find(d => d.s !== null && d.s !== undefined)?.s;
         const initialSocPct = (firstSocPct === null || firstSocPct === undefined) ? null : Math.max(0, Math.min(100, Number(firstSocPct)));
         const inferredModel = inferBatteryModel(filteredHourlyData);
+
+        // Keep export-cap modeling consistent with the “Current sliders” simulation.
+        const inferredExportCap = inferExportCapWhPerHour(filteredHourlyData);
+        const exportCapMode = config.exportCap?.mode ?? 'estimated';
+        const fixedCap = toPositiveFinite(config.exportCap?.fixedW);
+        const effectiveExportCap = (() => {
+            if (exportCapMode === 'none') return null;
+            if (exportCapMode === 'fixed') return fixedCap;
+            return inferredExportCap;
+        })();
+
         const baseModelNoInitial: Omit<BatteryModelParams, 'initialSocWh'> = {
             chargeEff: inferredModel.chargeEff,
             dischargeEff: inferredModel.dischargeEff,
             maxChargeWhPerHour: inferredModel.maxChargeWhPerHour,
             maxDischargeWhPerHour: inferredModel.maxDischargeWhPerHour,
+            maxExportWhPerHour: effectiveExportCap ?? undefined,
         };
 
         // Baseline: prefer measured grid flows if present.
@@ -651,11 +663,23 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         const firstSocPct = filteredHourlyData.find(d => d.s !== null && d.s !== undefined)?.s;
         const initialSocPct = (firstSocPct === null || firstSocPct === undefined) ? null : Math.max(0, Math.min(100, Number(firstSocPct)));
         const inferredModel = inferBatteryModel(filteredHourlyData);
+
+        // Keep export-cap modeling consistent with the “Current sliders” simulation.
+        const inferredExportCap = inferExportCapWhPerHour(filteredHourlyData);
+        const exportCapMode = config.exportCap?.mode ?? 'estimated';
+        const fixedCap = toPositiveFinite(config.exportCap?.fixedW);
+        const effectiveExportCap = (() => {
+            if (exportCapMode === 'none') return null;
+            if (exportCapMode === 'fixed') return fixedCap;
+            return inferredExportCap;
+        })();
+
         const baseModelNoInitial: Omit<BatteryModelParams, 'initialSocWh'> = {
             chargeEff: inferredModel.chargeEff,
             dischargeEff: inferredModel.dischargeEff,
             maxChargeWhPerHour: inferredModel.maxChargeWhPerHour,
             maxDischargeWhPerHour: inferredModel.maxDischargeWhPerHour,
+            maxExportWhPerHour: effectiveExportCap ?? undefined,
         };
 
         const initialEnergyWhBaseMeasured = initialSocPct === null ? null : (initialSocPct / 100) * baseBatteryWh;
@@ -978,7 +1002,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         if ((addedPvPercent > 0 || addedBatteryKwh > 0)) {
             warnings.push({
                 type: 'info',
-                text: 'This planner does not model roof limits, inverter AC clipping, export caps, or battery power limits specific to your hardware (unless inferred from measured battery flows).',
+                text: 'This planner does not model roof limits or inverter AC clipping. Export caps (optional) and battery power limits are only approximated (export cap setting + inference from measured battery flows).',
             });
         }
 
