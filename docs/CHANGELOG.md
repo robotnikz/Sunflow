@@ -1,3 +1,11 @@
+## [1.13.8](https://github.com/robotnikz/Sunflow/compare/v1.13.7...v1.13.8) (2026-02-10)
+
+
+### Bug Fixes
+
+* align ROI suggestions with export cap ([20ee513](https://github.com/robotnikz/Sunflow/commit/20ee513f9066adeeb1db5b07526b4b55acbdaa94))
+* make ROI recommendations consistent with current sliders ([f5dcc51](https://github.com/robotnikz/Sunflow/commit/f5dcc51d106fb75d96a7adc94e21fd09fcefc733))
+
 ## [1.13.7](https://github.com/robotnikz/Sunflow/compare/v1.13.6...v1.13.7) (2026-02-10)
 
 
