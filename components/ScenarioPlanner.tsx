@@ -544,8 +544,8 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         // Baseline: prefer measured grid flows if present.
         const measuredBase = measuredBaseFromData(filteredHourlyData);
         const initialEnergyWhBaseMeasured = initialSocPct === null ? null : (initialSocPct / 100) * baseBatteryWh;
-        const initialEnergyWhForSweep = initialEnergyWhBaseMeasured ?? estimateCyclicInitialSocWh(filteredHourlyData, 0, baseBatteryWh, baseModelNoInitial);
-        const simulatedBase = simulate(filteredHourlyData, 0, baseBatteryWh, { ...baseModelNoInitial, initialSocWh: initialEnergyWhForSweep });
+        const initialEnergyWhBase = initialEnergyWhBaseMeasured ?? estimateCyclicInitialSocWh(filteredHourlyData, 0, baseBatteryWh, baseModelNoInitial);
+        const simulatedBase = simulate(filteredHourlyData, 0, baseBatteryWh, { ...baseModelNoInitial, initialSocWh: initialEnergyWhBase });
         const base = measuredBase ?? simulatedBase;
 
         const benefitOverDataset = (from: ScenarioSimResult, to: ScenarioSimResult) => {
@@ -567,7 +567,11 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
 
         const candidates: Candidate[] = [];
         for (let pvPercent = 0; pvPercent <= 200; pvPercent += 10) {
-            const pvOnly = simulate(filteredHourlyData, pvPercent, baseBatteryWh, { ...baseModelNoInitial, initialSocWh: initialEnergyWhForSweep });
+            // Keep SoC treatment consistent with the main “Current sliders” simulation:
+            // - If measured SoC exists, keep the same absolute starting energy.
+            // - Otherwise, estimate a cyclic (steady-state) initial SoC per candidate.
+            const initialSocWh = initialEnergyWhBaseMeasured ?? estimateCyclicInitialSocWh(filteredHourlyData, pvPercent, baseBatteryWh, baseModelNoInitial);
+            const pvOnly = simulate(filteredHourlyData, pvPercent, baseBatteryWh, { ...baseModelNoInitial, initialSocWh });
             const totalBenefit = benefitOverDataset(base, pvOnly);
             const yearlyBenefit = totalBenefit / yearsCovered;
 
@@ -683,16 +687,15 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         };
 
         const initialEnergyWhBaseMeasured = initialSocPct === null ? null : (initialSocPct / 100) * baseBatteryWh;
-        // For the recommendation sweep, keep the same absolute starting energy for all candidates
-        // to make them comparable and avoid extra cyclic estimation work.
-        const initialEnergyWhForSweep = initialEnergyWhBaseMeasured ?? estimateCyclicInitialSocWh(filteredHourlyData, pvBasisPercent, baseBatteryWh, baseModelNoInitial);
+        const initialEnergyWhBase = initialEnergyWhBaseMeasured ?? estimateCyclicInitialSocWh(filteredHourlyData, 0, baseBatteryWh, baseModelNoInitial);
+        const initialEnergyWhPvOnly = initialEnergyWhBaseMeasured ?? estimateCyclicInitialSocWh(filteredHourlyData, pvBasisPercent, baseBatteryWh, baseModelNoInitial);
 
         // Baseline for combined ROI: prefer measured grid flows if present.
         const measuredBase = measuredBaseFromData(filteredHourlyData);
-        const simulatedBase = simulate(filteredHourlyData, 0, baseBatteryWh, { ...baseModelNoInitial, initialSocWh: initialEnergyWhForSweep });
+        const simulatedBase = simulate(filteredHourlyData, 0, baseBatteryWh, { ...baseModelNoInitial, initialSocWh: initialEnergyWhBase });
         const base = measuredBase ?? simulatedBase;
 
-        const pvOnly = simulate(filteredHourlyData, pvBasisPercent, baseBatteryWh, { ...baseModelNoInitial, initialSocWh: initialEnergyWhForSweep });
+        const pvOnly = simulate(filteredHourlyData, pvBasisPercent, baseBatteryWh, { ...baseModelNoInitial, initialSocWh: initialEnergyWhPvOnly });
 
         const benefitOverDataset = (from: ScenarioSimResult, to: ScenarioSimResult) => {
             const savedImportKwh = (from.importedWh - to.importedWh) / 1000;
@@ -715,7 +718,9 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
 
         const candidates: Candidate[] = [];
         for (let kwh = 0; kwh <= 30; kwh += 1) {
-            const sim = simulate(filteredHourlyData, pvBasisPercent, baseBatteryWh + (kwh * 1000), { ...baseModelNoInitial, initialSocWh: initialEnergyWhForSweep });
+            const capWh = baseBatteryWh + (kwh * 1000);
+            const initialSocWh = initialEnergyWhBaseMeasured ?? estimateCyclicInitialSocWh(filteredHourlyData, pvBasisPercent, capWh, baseModelNoInitial);
+            const sim = simulate(filteredHourlyData, pvBasisPercent, capWh, { ...baseModelNoInitial, initialSocWh });
             const savedImportKwh = (pvOnly.importedWh - sim.importedWh) / 1000;
             const exportDeltaKwh = (sim.exportedWh - pvOnly.exportedWh) / 1000;
 
