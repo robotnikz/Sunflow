@@ -1,3 +1,10 @@
+## [1.13.7](https://github.com/robotnikz/Sunflow/compare/v1.13.6...v1.13.7) (2026-02-10)
+
+
+### Bug Fixes
+
+* configurable export cap and semantic-release workflow ([bcaa5cb](https://github.com/robotnikz/Sunflow/commit/bcaa5cbed033cd6e9016d308bc61b4b90076eae7))
+
 ## [1.13.6](https://github.com/robotnikz/Sunflow/compare/v1.13.5...v1.13.6) (2026-02-08)
 
 
