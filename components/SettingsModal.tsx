@@ -24,7 +24,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
           batteryFull: true,
           batteryEmpty: true,
           batteryHealth: false,
-          smartAdvice: true
+          smartAdvice: true,
+          solarDropDaylight: false
       };
       
       const config = { ...currentConfig };
@@ -37,7 +38,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
               triggers: defaultTriggers,
               smartAdviceCooldownMinutes: 120,
               sohThreshold: 75,
-              minCyclesForSoh: 50
+              minCyclesForSoh: 50,
+              solarDropThresholdW: 50,
+              solarDropStartHour: 7,
+              solarDropEndHour: 17,
+              solarDropConsecutiveMinutes: 3
           };
       } else {
           // Ensure triggers exist and merge with defaults
@@ -88,10 +93,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
         const baseNotifs = currentConfig.notifications || {
             enabled: false,
             discordWebhook: '',
-            triggers: { errors: true, batteryFull: true, batteryEmpty: true, batteryHealth: false, smartAdvice: true },
+            triggers: { errors: true, batteryFull: true, batteryEmpty: true, batteryHealth: false, smartAdvice: true, solarDropDaylight: false },
             smartAdviceCooldownMinutes: 120,
             sohThreshold: 75,
-            minCyclesForSoh: 50
+            minCyclesForSoh: 50,
+            solarDropThresholdW: 50,
+            solarDropStartHour: 7,
+            solarDropEndHour: 17,
+            solarDropConsecutiveMinutes: 3
         };
 
         const defaultTriggers = {
@@ -99,11 +108,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
             batteryFull: true,
             batteryEmpty: true,
             batteryHealth: false,
-            smartAdvice: true
+            smartAdvice: true,
+            solarDropDaylight: false
         };
 
         const robustNotifs = {
             ...baseNotifs,
+            solarDropThresholdW: baseNotifs.solarDropThresholdW ?? 50,
+            solarDropStartHour: baseNotifs.solarDropStartHour ?? 7,
+            solarDropEndHour: baseNotifs.solarDropEndHour ?? 17,
+            solarDropConsecutiveMinutes: baseNotifs.solarDropConsecutiveMinutes ?? 3,
             triggers: {
                 ...defaultTriggers,
                 ...(baseNotifs.triggers || {})
@@ -459,12 +473,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
       const current = formData.notifications || { 
           enabled: false, 
           discordWebhook: '', 
-          triggers: { errors: false, batteryFull: false, batteryEmpty: false, batteryHealth: false, smartAdvice: false }, 
+          triggers: { errors: false, batteryFull: false, batteryEmpty: false, batteryHealth: false, smartAdvice: false, solarDropDaylight: false }, 
           smartAdviceCooldownMinutes: 120,
           sohThreshold: 75,
-          minCyclesForSoh: 50
+          minCyclesForSoh: 50,
+          solarDropThresholdW: 50,
+          solarDropStartHour: 7,
+          solarDropEndHour: 17,
+          solarDropConsecutiveMinutes: 3
       };
-      const triggers = current.triggers || { errors: false, batteryFull: false, batteryEmpty: false, batteryHealth: false, smartAdvice: false };
+      const triggers = current.triggers || { errors: false, batteryFull: false, batteryEmpty: false, batteryHealth: false, smartAdvice: false, solarDropDaylight: false };
       
       setFormData({
           ...formData,
@@ -917,7 +935,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                  <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2 flex items-center gap-2"><Sliders size={18}/> Smart Usage</h3>
                  <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700/50">
                     <div className="flex items-center justify-between mb-2">
-                        <label className="block text-sm font-medium text-slate-400">Reserve until sunset</label>
+                        <label className="block text-sm font-medium text-slate-400">Battery Reserve (%)</label>
                         <span className="text-sm font-bold text-slate-200">{Math.round(Number(formData.smartUsage?.reserveSocPct ?? 100))}%</span>
                     </div>
                     <input
@@ -937,10 +955,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                     />
                     <div className="mt-2 text-xs text-slate-400 space-y-1">
                         <p>
-                            Smart Usage may use battery energy <strong>above</strong> this threshold during daytime.
+                            Applies to both <strong>runtime calculation</strong> and <strong>Smart Usage suggestions</strong>.
                         </p>
                         <p>
-                            Set to <strong>100%</strong> to keep current behavior (battery-first).
+                            Battery energy <strong>above</strong> this reserve can be considered usable during daytime.
+                        </p>
+                        <p>
+                            Set to <strong>100%</strong> to keep battery-first behavior.
                         </p>
                     </div>
                  </div>
@@ -1027,6 +1048,36 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                                 <div>
                                     <label className="text-xs text-slate-400 block mb-1">Min Cycles</label>
                                     <input type="number" min={0} value={formData.notifications?.minCyclesForSoh ?? 50} onChange={(e) => updateNotification({ minCyclesForSoh: parseFloat(e.target.value) })} className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm text-white" />
+                                </div>
+                            </div>
+                        )}
+                     </div>
+
+                     <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-3">
+                                <SunMedium size={18} className="text-yellow-500" />
+                                <div><div className="text-sm font-medium text-slate-200">Solar Drop During Daylight</div></div>
+                            </div>
+                            <input type="checkbox" aria-label="Solar Drop During Daylight" checked={formData.notifications?.triggers?.solarDropDaylight ?? false} onChange={(e) => updateNotification({ triggers: { solarDropDaylight: e.target.checked } })} className="w-5 h-5 accent-yellow-500 rounded bg-slate-700 border-slate-500"/>
+                        </div>
+                        {formData.notifications?.triggers?.solarDropDaylight && (
+                            <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-slate-700/50 animate-fade-in">
+                                <div>
+                                    <label className="text-xs text-slate-400 block mb-1">PV Threshold (W)</label>
+                                    <input type="number" min={0} max={10000} value={formData.notifications?.solarDropThresholdW ?? 50} onChange={(e) => updateNotification({ solarDropThresholdW: parseFloat(e.target.value) })} className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm text-white" />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-slate-400 block mb-1">Min Minutes</label>
+                                    <input type="number" min={1} max={120} value={formData.notifications?.solarDropConsecutiveMinutes ?? 3} onChange={(e) => updateNotification({ solarDropConsecutiveMinutes: parseFloat(e.target.value) })} className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm text-white" />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-slate-400 block mb-1">Start Hour</label>
+                                    <input type="number" min={0} max={23} value={formData.notifications?.solarDropStartHour ?? 7} onChange={(e) => updateNotification({ solarDropStartHour: parseFloat(e.target.value) })} className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm text-white" />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-slate-400 block mb-1">End Hour</label>
+                                    <input type="number" min={0} max={23} value={formData.notifications?.solarDropEndHour ?? 17} onChange={(e) => updateNotification({ solarDropEndHour: parseFloat(e.target.value) })} className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm text-white" />
                                 </div>
                             </div>
                         )}

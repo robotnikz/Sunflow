@@ -28,6 +28,12 @@ interface DashboardProps {
     onOpenSettings?: (tab?: 'general' | 'notifications' | 'tariffs' | 'expenses' | 'appliances' | 'history' | 'import') => void;
 }
 
+interface TemperatureSample {
+    ts: number;
+    battery: number | null;
+    inverter: number | null;
+}
+
 export interface WeatherData {
     current: {
       temp: number;
@@ -72,6 +78,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [batteryHealth, setBatteryHealth] = useState<BatteryHealthData | null>(null);
   const [loadingHist, setLoadingHist] = useState(false);
+    const [temperatureHistory, setTemperatureHistory] = useState<TemperatureSample[]>([]);
   
   // Rate Limit Flag for UI Hint
   const [solcastRateLimited, setSolcastRateLimited] = useState(false);
@@ -217,6 +224,29 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
       setLoadingHist(false);
     }
   };
+
+    useEffect(() => {
+        const batteryTempRaw = data?.temperatures?.battery;
+        const inverterTempRaw = data?.temperatures?.inverter;
+        const batteryTemp = Number.isFinite(Number(batteryTempRaw)) ? Number(batteryTempRaw) : null;
+        const inverterTemp = Number.isFinite(Number(inverterTempRaw)) ? Number(inverterTempRaw) : null;
+
+        if (batteryTemp === null && inverterTemp === null) return;
+
+        const sample: TemperatureSample = {
+            ts: Date.now(),
+            battery: batteryTemp,
+            inverter: inverterTemp,
+        };
+
+        const cutoff = Date.now() - (30 * 60 * 1000);
+        setTemperatureHistory(prev => {
+            const retained = prev.filter(p => p.ts >= cutoff);
+            const next = [...retained, sample];
+            const maxPoints = 360;
+            return next.length > maxPoints ? next.slice(next.length - maxPoints) : next;
+        });
+    }, [data?.temperatures?.battery, data?.temperatures?.inverter]);
 
   const getTimeLabel = () => {
     const now = new Date();
@@ -555,6 +585,9 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                 power={data.power.battery}
                 state={data.battery.state}
                 capacity={config.batteryCapacity || 10}
+                     reserveSocPct={config.smartUsage?.reserveSocPct}
+                     temperatures={data.temperatures}
+                     temperatureHistory={temperatureHistory}
              />
           </div>
         </div>

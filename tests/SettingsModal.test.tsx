@@ -94,6 +94,35 @@ describe('SettingsModal Interaction', () => {
     expect(savedConfig.notifications.sohThreshold).toBe(80);
   });
 
+  it('konfiguriert Solar Drop Notification korrekt', async () => {
+    render(<SettingsModal currentConfig={mockConfig} onSave={onSaveMock} onClose={onCloseMock} />);
+
+    fireEvent.click(screen.getByRole('tab', { name: /Notifications/i }));
+    const notifPanel = await screen.findByRole('tabpanel', { name: /Notifications/i });
+
+    const solarDropCheckbox = within(notifPanel).getByRole('checkbox', { name: /Solar Drop During Daylight/i });
+    fireEvent.click(solarDropCheckbox);
+
+    await waitFor(() => {
+      expect(within(notifPanel).getByText(/PV Threshold \(W\)/i)).toBeInTheDocument();
+    });
+
+    fireEvent.change(within(notifPanel).getByDisplayValue('50'), { target: { value: '80' } });
+    fireEvent.change(within(notifPanel).getByDisplayValue('3'), { target: { value: '4' } });
+    fireEvent.change(within(notifPanel).getByDisplayValue('7'), { target: { value: '8' } });
+    fireEvent.change(within(notifPanel).getByDisplayValue('17'), { target: { value: '18' } });
+
+    fireEvent.click(within(notifPanel).getByRole('button', { name: /Save Notifications/i }));
+
+    expect(onSaveMock).toHaveBeenCalled();
+    const savedConfig = onSaveMock.mock.calls[0][0];
+    expect(savedConfig.notifications.triggers.solarDropDaylight).toBe(true);
+    expect(savedConfig.notifications.solarDropThresholdW).toBe(80);
+    expect(savedConfig.notifications.solarDropConsecutiveMinutes).toBe(4);
+    expect(savedConfig.notifications.solarDropStartHour).toBe(8);
+    expect(savedConfig.notifications.solarDropEndHour).toBe(18);
+  });
+
   it('zeigt Calibration Tab und berechnet Summen korrekt', async () => {
       // Config mit DB Totals
       const configWithDb = {

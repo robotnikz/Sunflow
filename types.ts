@@ -44,11 +44,17 @@ export interface NotificationConfig {
     batteryEmpty: boolean; // Triggers at <= 7%
     batteryHealth: boolean; // New: Triggers if SOH drops below threshold
     smartAdvice: boolean;
+    solarDropDaylight?: boolean; // Triggers when PV drops below threshold during configured daytime window
   };
   smartAdviceCooldownMinutes: number;
   // SOH Config
   sohThreshold?: number; // Default 75%
   minCyclesForSoh?: number; // Default 50 cycles
+  // Daylight PV drop alert config
+  solarDropThresholdW?: number; // Default 50W
+  solarDropStartHour?: number; // Local hour 0..23, default 7
+  solarDropEndHour?: number; // Local hour 0..23, default 17
+  solarDropConsecutiveMinutes?: number; // Default 3 minutes
 }
 
 export type ExportCapMode = 'estimated' | 'none' | 'fixed';
@@ -198,6 +204,10 @@ export interface InverterData {
   };
   autonomy: number;      // Realtime %
   selfConsumption: number; // Realtime %
+  temperatures?: {
+    battery?: number | null;
+    inverter?: number | null;
+  };
 }
 
 export type SimulationDataPoint = {
