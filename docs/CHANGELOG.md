@@ -1,3 +1,10 @@
+# [1.14.0](https://github.com/robotnikz/Sunflow/compare/v1.13.8...v1.14.0) (2026-02-16)
+
+
+### Features
+
+* **issue-80:** implement solar-drop alert, reserve-aware runtime, and temperature trend ([ee5850e](https://github.com/robotnikz/Sunflow/commit/ee5850e94979aa6f418e9772fc944142a706733b))
+
 ## [1.13.8](https://github.com/robotnikz/Sunflow/compare/v1.13.7...v1.13.8) (2026-02-10)
 
 
