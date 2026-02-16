@@ -473,12 +473,32 @@ const getConfig = () => {
                 batteryFull: true,
                 batteryEmpty: true,
                 batteryHealth: false,
-                smartAdvice: true
+                smartAdvice: true,
+                solarDropDaylight: false
             },
             smartAdviceCooldownMinutes: 120,
             sohThreshold: 75,
-            minCyclesForSoh: 50
+            minCyclesForSoh: 50,
+            solarDropThresholdW: 50,
+            solarDropStartHour: 7,
+            solarDropEndHour: 17,
+            solarDropConsecutiveMinutes: 3
         };
+    } else {
+        config.notifications.triggers = {
+            errors: true,
+            batteryFull: true,
+            batteryEmpty: true,
+            batteryHealth: false,
+            smartAdvice: true,
+            solarDropDaylight: false,
+            ...(config.notifications.triggers || {})
+        };
+
+        if (config.notifications.solarDropThresholdW === undefined) config.notifications.solarDropThresholdW = 50;
+        if (config.notifications.solarDropStartHour === undefined) config.notifications.solarDropStartHour = 7;
+        if (config.notifications.solarDropEndHour === undefined) config.notifications.solarDropEndHour = 17;
+        if (config.notifications.solarDropConsecutiveMinutes === undefined) config.notifications.solarDropConsecutiveMinutes = 3;
     }
     
     // Update Cache
@@ -536,6 +556,19 @@ const getLocalIsoDate = (date = new Date()) => {
 const parseFiniteNumber = (value) => {
     const n = typeof value === 'number' ? value : Number(value);
     return Number.isFinite(n) ? n : null;
+};
+
+const clampNumberSafe = (value, min, max, fallback) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(max, Math.max(min, n));
+};
+
+const isNowWithinHourWindow = (startHour, endHour, nowDate = new Date()) => {
+    const h = nowDate.getHours() + (nowDate.getMinutes() / 60);
+    if (startHour === endHour) return true;
+    if (startHour < endHour) return h >= startHour && h < endHour;
+    return h >= startHour || h < endHour;
 };
 
 const getTodaySunTimes = async (config) => {
@@ -679,6 +712,65 @@ const fetchFroniusData = async (ip) => {
     }
 };
 
+const findNumericByPathMatch = (source, matchers) => {
+    const visited = new Set();
+
+    const walk = (node, path = '', depth = 0) => {
+        if (depth > 8 || node === null || node === undefined) return null;
+
+        const nodeType = typeof node;
+        if (nodeType !== 'object') {
+            const n = Number(node);
+            if (!Number.isFinite(n)) return null;
+
+            const normalizedPath = String(path || '').toLowerCase();
+            const isMatch = matchers.every(m => m.test(normalizedPath));
+            return isMatch ? n : null;
+        }
+
+        if (visited.has(node)) return null;
+        visited.add(node);
+
+        if (Array.isArray(node)) {
+            for (let i = 0; i < node.length; i++) {
+                const next = walk(node[i], `${path}[${i}]`, depth + 1);
+                if (next !== null) return next;
+            }
+            return null;
+        }
+
+        for (const [k, v] of Object.entries(node)) {
+            const nextPath = path ? `${path}.${k}` : k;
+            const next = walk(v, nextPath, depth + 1);
+            if (next !== null) return next;
+        }
+        return null;
+    };
+
+    return walk(source);
+};
+
+const extractRealtimeTemperatures = (rawData) => {
+    const data = rawData?.Body?.Data;
+    if (!data || typeof data !== 'object') {
+        return { battery: null, inverter: null };
+    }
+
+    const inverters = data?.Inverters || {};
+    const inverterKey = Object.keys(inverters)[0];
+    const inverterNode = inverterKey ? inverters[inverterKey] : null;
+
+    const batteryTemp =
+        findNumericByPathMatch(data, [/(battery|akku|storage)/i, /(temp|temperature)/i]) ?? null;
+
+    const inverterTemp =
+        findNumericByPathMatch(inverterNode || data, [/(inverter|inv)/i, /(temp|temperature)/i]) ??
+        findNumericByPathMatch(inverterNode || data, [/(temp|temperature)/i]) ??
+        null;
+
+    return { battery: batteryTemp, inverter: inverterTemp };
+};
+
 // Helper: Get Local SQLite-compatible Timestamp (YYYY-MM-DD HH:MM:SS)
 const notifyState = {
     previousSoc: 0,
@@ -688,6 +780,8 @@ const notifyState = {
     lastSohCheck: 0, // Track when we last checked battery health
     notifiedFull: false, // Prevent notification bouncing at 100%
     notifiedLow: false,  // Prevent notification bouncing at low levels
+    notifiedSolarDrop: false,
+    solarDropLowStreak: 0,
 };
 
 const sendDiscordNotification = async (webhookUrl, title, description, color, fields = []) => {
@@ -962,11 +1056,49 @@ if (!IS_TEST) setInterval(async () => {
         }
         notifyState.previousSoc = soc;
 
-        // 3. Battery Health (Async Check)
+        // 3. Solar drop during user-defined daylight window
+        if (nConfig.triggers.solarDropDaylight) {
+            const thresholdW = clampNumberSafe(nConfig.solarDropThresholdW, 0, 10000, 50);
+            const startHour = clampNumberSafe(nConfig.solarDropStartHour, 0, 23, 7);
+            const endHour = clampNumberSafe(nConfig.solarDropEndHour, 0, 23, 17);
+            const minMinutes = Math.round(clampNumberSafe(nConfig.solarDropConsecutiveMinutes, 1, 120, 3));
+
+            const inDaylightWindow = isNowWithinHourWindow(startHour, endHour);
+            const isLowPv = p_pv <= thresholdW;
+            const resetThreshold = Math.max(thresholdW + 150, thresholdW * 2);
+
+            if (inDaylightWindow && isLowPv) {
+                notifyState.solarDropLowStreak += 1;
+
+                if (!notifyState.notifiedSolarDrop && notifyState.solarDropLowStreak >= minMinutes) {
+                    await sendDiscordNotification(
+                        nConfig.discordWebhook,
+                        "☀️⚠️ Solar Production Drop",
+                        `PV output stayed at or below ${Math.round(thresholdW)}W for ${minMinutes} minutes during configured daylight hours.`,
+                        15158332,
+                        [
+                            { name: 'Current PV', value: `${Math.round(p_pv)} W`, inline: true },
+                            { name: 'Threshold', value: `${Math.round(thresholdW)} W`, inline: true },
+                            { name: 'Window', value: `${Math.floor(startHour)}:00 - ${Math.floor(endHour)}:00`, inline: true },
+                            { name: 'Inverter Status', value: statusCode === 3 ? 'Idle' : (statusCode === 2 ? 'Error' : (statusCode === 1 ? 'Running' : 'Offline')), inline: true }
+                        ]
+                    );
+                    notifyState.notifiedSolarDrop = true;
+                }
+            } else {
+                notifyState.solarDropLowStreak = 0;
+
+                if (!inDaylightWindow || p_pv >= resetThreshold) {
+                    notifyState.notifiedSolarDrop = false;
+                }
+            }
+        }
+
+        // 4. Battery Health (Async Check)
         // Fire and forget, don't await blocking the main loop
         checkBatteryHealthNotification(config, config.batteryCapacity || 10).catch(err => console.error("Health Check Error", err));
 
-        // 4. Smart Advice (Matching Frontend Logic)
+        // 5. Smart Advice (Matching Frontend Logic)
         if (nConfig.triggers.smartAdvice && statusCode === 1) {
             const now = Date.now();
             const cooldownMs = (nConfig.smartAdviceCooldownMinutes || 60) * 60 * 1000;
@@ -1629,7 +1761,8 @@ app.get('/api/data', async (req, res) => {
         battery: { soc: 0, state: 'idle' },
         energy: { today: { production: 0, consumption: 0 } },
         autonomy: 0,
-        selfConsumption: 0
+        selfConsumption: 0,
+        temperatures: { battery: null, inverter: null }
     };
 
     if (rawData && rawData.Body && rawData.Body.Data) {
@@ -1657,6 +1790,8 @@ app.get('/api/data', async (req, res) => {
         
         responseData.autonomy = Math.round(site.rel_Autonomy || 0);
         responseData.selfConsumption = Math.round(site.rel_SelfConsumption || 0);
+
+        responseData.temperatures = extractRealtimeTemperatures(rawData);
     }
     res.json(responseData);
 });
