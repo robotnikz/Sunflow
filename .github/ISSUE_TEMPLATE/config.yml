@@ -1,8 +1,5 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
 contact_links:
-  - name: "Security vulnerability report"
+  - name: "Report a security vulnerability"
     url: "https://github.com/robotnikz/Sunflow/security/advisories"
     about: "Please report security issues via GitHub Security Advisories (do not open a public issue)."
-  - name: "Operations / troubleshooting"
-    url: "https://github.com/robotnikz/Sunflow/blob/main/docs/OPERATIONS.md"
-    about: "Common troubleshooting, upgrades, backups, and diagnostics bundle."
