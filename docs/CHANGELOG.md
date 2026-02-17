@@ -1,3 +1,10 @@
+## [1.17.3](https://github.com/robotnikz/Sunflow/compare/v1.17.2...v1.17.3) (2026-02-17)
+
+
+### Bug Fixes
+
+* **ui:** address Issue [#95](https://github.com/robotnikz/Sunflow/issues/95) UI polish ([09b8153](https://github.com/robotnikz/Sunflow/commit/09b81533e0d0a469fbb48355b855e626e939b8f3))
+
 ## [1.17.2](https://github.com/robotnikz/Sunflow/compare/v1.17.1...v1.17.2) (2026-02-17)
 
 
