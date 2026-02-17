@@ -1,3 +1,15 @@
+# [1.16.0](https://github.com/robotnikz/Sunflow/compare/v1.15.0...v1.16.0) (2026-02-17)
+
+
+### Bug Fixes
+
+* **ui:** improve battery widget footer layout ([7cbda9f](https://github.com/robotnikz/Sunflow/commit/7cbda9f953ea04c933fa29ced5fda9320af82609))
+
+
+### Features
+
+* **ui:** add system/dark/light theme ([71154be](https://github.com/robotnikz/Sunflow/commit/71154bed5d543234347b4c5e59c1afc08ca4626c))
+
 # [1.15.0](https://github.com/robotnikz/Sunflow/compare/v1.14.0...v1.15.0) (2026-02-17)
 
 
