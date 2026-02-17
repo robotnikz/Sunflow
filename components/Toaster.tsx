@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import { X, CheckCircle2, AlertTriangle, AlertCircle, Info } from 'lucide-react';
+import { useI18n } from '../services/i18n';
 
 export type ToastType = 'success' | 'info' | 'warning' | 'error';
 
@@ -107,6 +108,7 @@ export const Toaster: React.FC<{ toasts: ToastItem[]; onDismiss: (id: string) =>
   toasts,
   onDismiss,
 }) => {
+  const { t } = useI18n();
   if (!toasts.length) return null;
 
   return (
@@ -115,42 +117,42 @@ export const Toaster: React.FC<{ toasts: ToastItem[]; onDismiss: (id: string) =>
       aria-live="polite"
       aria-relevant="additions removals"
     >
-      {toasts.map((t) => {
-        const styles = getToastStyles(t.type);
+      {toasts.map((toast) => {
+        const styles = getToastStyles(toast.type);
 
         return (
           <div
-            key={t.id}
+            key={toast.id}
             className={`rounded-xl border ${styles.border} bg-slate-900/95 shadow-lg backdrop-blur px-4 py-3`}
           >
             <div className="flex items-start gap-3">
               <div className="mt-0.5">{styles.icon}</div>
               <div className="flex-1">
-                <div className={`text-sm font-semibold ${styles.title}`}>{t.title || ''}</div>
-                <div className="text-sm text-slate-200">{t.message}</div>
-                {t.action && (
+                <div className={`text-sm font-semibold ${styles.title}`}>{toast.title || ''}</div>
+                <div className="text-sm text-slate-200">{toast.message}</div>
+                {toast.action && (
                   <div className="mt-2">
                     <button
                       type="button"
                       onClick={() => {
                         try {
-                          t.action?.onClick();
+                          toast.action?.onClick();
                         } finally {
-                          onDismiss(t.id);
+                          onDismiss(toast.id);
                         }
                       }}
                       className="text-xs font-bold px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 transition"
                     >
-                      {t.action.label}
+                      {toast.action.label}
                     </button>
                   </div>
                 )}
               </div>
               <button
                 type="button"
-                onClick={() => onDismiss(t.id)}
+                onClick={() => onDismiss(toast.id)}
                 className="text-slate-400 hover:text-white hover:bg-slate-800 rounded p-1 transition"
-                aria-label="Dismiss"
+                aria-label={t('Dismiss')}
               >
                 <X size={16} />
               </button>

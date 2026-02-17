@@ -29,7 +29,7 @@ const AmortizationWidget: React.FC<AmortizationWidgetProps> = ({ roiData, curren
   const percent = Math.min(100, Math.max(0, roiData.roiPercent));
   
   // Format large numbers
-  const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+    const fmt = (n: number) => n.toLocaleString(locale, { maximumFractionDigits: 0 });
 
   const breakEvenDate = roiData.breakEvenDate ? new Date(roiData.breakEvenDate) : null;
   const isPaidOff = roiData.netValue >= 0;

@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useI18n } from '../services/i18n';
 
 interface BatteryChartProps {
   history: Array<{
@@ -11,6 +12,7 @@ interface BatteryChartProps {
 }
 
 const BatteryChart: React.FC<BatteryChartProps> = ({ history, timeRange }) => {
+  const { t, locale } = useI18n();
   if (history.length === 0) return null;
 
   // Dynamic Tick Formatting based on selected timeRange
@@ -19,19 +21,19 @@ const BatteryChart: React.FC<BatteryChartProps> = ({ history, timeRange }) => {
     
     switch(timeRange) {
         case 'hour':
-            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
         case 'day':
-            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
         case 'week':
-            return d.toLocaleDateString([], { weekday: 'short', day: '2-digit' });
+            return d.toLocaleDateString(locale, { weekday: 'short', day: '2-digit' });
         case 'month':
-            return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
+            return d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' });
         case 'year':
-            return d.toLocaleDateString([], { month: 'short', year: '2-digit' });
+            return d.toLocaleDateString(locale, { month: 'short', year: '2-digit' });
         case 'custom':
-            return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
         default:
-            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
     }
   };
 
@@ -39,7 +41,7 @@ const BatteryChart: React.FC<BatteryChartProps> = ({ history, timeRange }) => {
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload || !payload.length) return null;
     const d = new Date(label);
-    const dateStr = d.toLocaleString();
+    const dateStr = d.toLocaleString(locale);
 
     return (
       <div className="bg-slate-900 border border-slate-600 p-3 rounded-lg shadow-2xl antialiased" style={{ boxShadow: '0 10px 30px -10px rgba(0,0,0,0.8)' }}>
@@ -50,7 +52,7 @@ const BatteryChart: React.FC<BatteryChartProps> = ({ history, timeRange }) => {
           {payload.map((entry: any, index: number) => (
             <div key={index} className="flex items-center justify-between gap-6 text-xs">
                  <span className="text-emerald-400 font-bold">
-                    State of Charge:
+                  {t('State of Charge:')}
                  </span>
                  <span className="text-slate-100 font-mono font-bold tracking-tight">
                     {entry.value}%

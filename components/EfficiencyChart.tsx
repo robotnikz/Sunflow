@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { useI18n } from '../services/i18n';
 
 interface EfficiencyChartProps {
   history: Array<{
@@ -12,6 +13,7 @@ interface EfficiencyChartProps {
 }
 
 const EfficiencyChart: React.FC<EfficiencyChartProps> = ({ history, timeRange }) => {
+  const { t, locale } = useI18n();
   if (history.length === 0) return null;
 
   // Dynamic Tick Formatting based on selected timeRange
@@ -20,19 +22,19 @@ const EfficiencyChart: React.FC<EfficiencyChartProps> = ({ history, timeRange })
     
     switch(timeRange) {
         case 'hour':
-            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
         case 'day':
-            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
         case 'week':
-            return d.toLocaleDateString([], { weekday: 'short', day: '2-digit' });
+            return d.toLocaleDateString(locale, { weekday: 'short', day: '2-digit' });
         case 'month':
-            return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
+            return d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' });
         case 'year':
-            return d.toLocaleDateString([], { month: 'short', year: '2-digit' });
+            return d.toLocaleDateString(locale, { month: 'short', year: '2-digit' });
         case 'custom':
-            return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
         default:
-            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
     }
   };
 
@@ -44,7 +46,7 @@ const EfficiencyChart: React.FC<EfficiencyChartProps> = ({ history, timeRange })
           <div key={`item-${index}`} className="flex items-center gap-2">
             <div style={{ backgroundColor: entry.color }} className="w-3 h-3 rounded-full" />
             <span 
-                className={`text-sm font-bold ${entry.value === 'Autonomy' ? 'text-blue-400' : 'text-green-400'}`}
+                className={`text-sm font-bold ${entry.dataKey === 'autonomy' ? 'text-blue-400' : 'text-green-400'}`}
             >
               {entry.value}
             </span>
@@ -58,7 +60,7 @@ const EfficiencyChart: React.FC<EfficiencyChartProps> = ({ history, timeRange })
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload || !payload.length) return null;
     const d = new Date(label);
-    const dateStr = d.toLocaleString();
+    const dateStr = d.toLocaleString(locale);
 
     return (
       <div className="bg-slate-900 border border-slate-600 p-3 rounded-lg shadow-2xl antialiased" style={{ boxShadow: '0 10px 30px -10px rgba(0,0,0,0.8)' }}>
@@ -67,13 +69,13 @@ const EfficiencyChart: React.FC<EfficiencyChartProps> = ({ history, timeRange })
         </p>
         <div className="flex flex-col gap-1.5">
           {payload.map((entry: any, index: number) => {
-             const isAutonomy = entry.name === 'Autonomy';
+             const isAutonomy = entry.dataKey === 'autonomy';
              const textColor = isAutonomy ? '#60A5FA' : '#4ADE80'; // Blue-400 : Green-400
              
              return (
                 <div key={index} className="flex items-center justify-between gap-6 text-xs">
                     <span style={{ color: textColor }} className="font-bold">
-                        {entry.name}:
+                      {entry.name}:
                     </span>
                     <span className="text-slate-100 font-mono font-bold tracking-tight">
                         {entry.value}%
@@ -115,7 +117,7 @@ const EfficiencyChart: React.FC<EfficiencyChartProps> = ({ history, timeRange })
         <Line 
             type="monotone" 
             dataKey="autonomy" 
-            name="Autonomy"
+            name={t('Autonomy')}
             stroke="#3B82F6" 
             strokeWidth={2}
             dot={false} 
@@ -124,7 +126,7 @@ const EfficiencyChart: React.FC<EfficiencyChartProps> = ({ history, timeRange })
         <Line 
             type="monotone" 
             dataKey="selfConsumption" 
-            name="Self Consumption"
+            name={t('Self Consumption')}
             stroke="#22C55E" 
             strokeWidth={2}
             dot={false} 

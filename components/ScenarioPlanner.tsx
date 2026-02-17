@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Settings2, Calculator, ArrowRight, TrendingUp, Zap, Battery, Info, PiggyBank, Coins, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { SimulationDataPoint, SystemConfig, Tariff } from '../types';
 import { getSimulationData, getTariffs } from '../services/api';
+import { useI18n } from '../services/i18n';
 
 interface ScenarioPlannerProps {
     config: SystemConfig;
@@ -45,6 +46,7 @@ const getWindowBounds = (window: SimulationWindow): { startMs: number; endMs: nu
 };
 
 const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
+    const { t, locale } = useI18n();
     const [data, setData] = useState<SimulationDataPoint[]>([]);
     const [tariffs, setTariffs] = useState<Tariff[]>([]);
     const [loading, setLoading] = useState(false);
@@ -158,7 +160,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
             })
             .catch(err => {
                 console.error("Sim data fail", err);
-                setLoadError('Failed to load historical data. Please try again.');
+                setLoadError(t('Failed to load historical data. Please try again.'));
                 setData([]);
             })
             .finally(() => setLoading(false));
@@ -835,7 +837,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         })();
 
         // We use measured SoC if present. Otherwise: cyclic estimate (steady-state) to avoid boundary artifacts.
-        const startSocMethod = hasSoc ? 'Measured SoC' : 'Estimated (steady-state)';
+        const startSocMethod = hasSoc ? t('Measured SoC') : t('Estimated (steady-state)');
 
         const roundTripEffPct = inferred.hasMeasured
             ? Math.round((inferred.chargeEff * inferred.dischargeEff) * 100)
@@ -853,11 +855,11 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
             exportCapFixed: fixedCap,
             effectiveExportCap,
         };
-    }, [filteredHourlyData, config.exportCap?.mode, config.exportCap?.fixedW]);
+    }, [filteredHourlyData, config.exportCap?.mode, config.exportCap?.fixedW, t]);
 
     const recommendationConfidence = useMemo(() => {
         if (!dataBasis) {
-            return { level: 'none' as const, label: 'No data', detail: 'No usable hourly data.' };
+            return { level: 'none' as const, label: t('No data'), detail: t('No usable hourly data.') };
         }
 
         // Window-relative heuristic: “6/7 days” should not be penalized like “6/365 days”.
@@ -870,14 +872,14 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         const hasBatteryFlows = dataBasis.hasBatteryFlows;
         const hourlyQualityPct = dataCoverage.quality; // among days with any data: how many are complete hourly days
 
-        const baseDetail = `Complete days: ${days}/${expectedDays} (${Math.round(coveragePct)}%).`;
-        const qualityHint = hourlyQualityPct < 80 ? ` Hourly quality is only ${Math.round(hourlyQualityPct)}% (many partial days).` : '';
+        const baseDetail = `${t('Complete days:')} ${days}/${expectedDays} (${Math.round(coveragePct)}%).`;
+        const qualityHint = hourlyQualityPct < 80 ? ` ${t('Hourly quality is only')} ${Math.round(hourlyQualityPct)}% ${t('(many partial days).')}` : '';
 
         const mk = (level: 'high' | 'medium' | 'low' | 'veryLow', label: string, extra: string) => {
             const flows = hasGrid
-                ? (hasBatteryFlows ? 'Measured grid + battery flows.' : 'Measured grid flows.')
-                : 'No measured grid flows.';
-            return { level, label, detail: `${baseDetail} ${flows} ${extra}${qualityHint}`.trim() };
+                ? (hasBatteryFlows ? t('Measured grid + battery flows.') : t('Measured grid flows.'))
+                : t('No measured grid flows.');
+            return { level, label: t(label), detail: `${baseDetail} ${flows} ${t(extra)}${qualityHint}`.trim() };
         };
 
         // Cap confidence if grid flows are missing (we then rely more on simulation assumptions).
@@ -916,7 +918,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         }
 
         return mk('veryLow', 'Very low', 'Too few complete days in this window.');
-    }, [dataBasis, dataCoverage.days, dataCoverage.quality, windowBounds.expectedDays]);
+    }, [dataBasis, dataCoverage.days, dataCoverage.quality, windowBounds.expectedDays, t]);
 
     const loadProfileInsight = useMemo(() => {
         if (!filteredHourlyData) return null;
@@ -940,9 +942,9 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         // Heuristic categories for explainability (not for sizing decisions).
         let hint: string | null = null;
         if (eveningPct >= 45) {
-            hint = `Your consumption is evening-heavy (~${Math.round(eveningPct)}% between 17–23h). Batteries usually help most by shifting midday PV surplus into the evening.`;
+            hint = `${t('Your consumption is evening-heavy (~')} ${Math.round(eveningPct)}% ${t('between 17–23h). Batteries usually help most by shifting midday PV surplus into the evening.')}`;
         } else if (dayPct >= 45) {
-            hint = `Your consumption is daytime-heavy (~${Math.round(dayPct)}% between 10–15h). PV upgrades often deliver more direct self-consumption than batteries in this profile.`;
+            hint = `${t('Your consumption is daytime-heavy (~')} ${Math.round(dayPct)}% ${t('between 10–15h). PV upgrades often deliver more direct self-consumption than batteries in this profile.')}`;
         }
 
         return {
@@ -950,7 +952,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
             dayPct,
             hint,
         };
-    }, [filteredHourlyData]);
+    }, [filteredHourlyData, t]);
 
     const plannerWarnings = useMemo(() => {
         if (!financials) return [] as Array<{ type: 'info' | 'warn'; text: string }>;
@@ -967,12 +969,12 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
             if (ratio >= 3) {
                 warnings.push({
                     type: 'warn',
-                    text: `Battery seems large vs PV (${ratio.toFixed(1)} kWh per kWp). In winter/low-sun periods it often won't fill, and ROI can look better in simulation than in reality.`,
+                    text: `${t('Battery seems large vs PV (')} ${ratio.toFixed(1)} ${t(' kWh per kWp). In winter/low-sun periods it often won\'t fill, and ROI can look better in simulation than in reality.')}`,
                 });
             } else if (ratio >= 2.2) {
                 warnings.push({
                     type: 'info',
-                    text: `Battery-to-PV ratio is on the high side (${ratio.toFixed(1)} kWh per kWp). Consider sizing storage to evening/night usage rather than winter charging.`,
+                    text: `${t('Battery-to-PV ratio is on the high side (')} ${ratio.toFixed(1)} ${t(' kWh per kWp). Consider sizing storage to evening/night usage rather than winter charging.')}`,
                 });
             }
         }
@@ -986,12 +988,12 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         if (annualizedFromShortWindow) {
             warnings.push({
                 type: 'warn',
-                text: `Yearly return is annualized from ${WINDOW_LABEL[simulationWindow].toLowerCase()}. This can be very seasonal (summer vs winter).`,
+                text: `${t('Yearly return is annualized from')} ${t(WINDOW_LABEL[simulationWindow])}. ${t('This can be very seasonal (summer vs winter).')}`,
             });
         } else if (weakCoverage) {
             warnings.push({
                 type: 'warn',
-                text: `Yearly return is annualized from incomplete data coverage (${Math.round(coveragePct)}%). Missing periods can skew ROI (especially seasonality).`,
+                text: `${t('Yearly return is annualized from incomplete data coverage (')} ${Math.round(coveragePct)}%). ${t('Missing periods can skew ROI (especially seasonality).')}`,
             });
         }
 
@@ -999,7 +1001,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         if ((addedPvPercent > 0 || addedBatteryKwh > 0) && Number.isFinite(financials.roiYears) && financials.roiYears > 0 && financials.roiYears < 5) {
             warnings.push({
                 type: 'warn',
-                text: `Payback < 5 years is unusually fast. Double-check costs (€/kWp, €/kWh) and note: export limits, inverter clipping and O&M are not modeled here.`,
+                text: t('Payback < 5 years is unusually fast. Double-check costs (€/kWp, €/kWh) and note: export limits, inverter clipping and O&M are not modeled here.'),
             });
         }
 
@@ -1007,7 +1009,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         if ((addedPvPercent > 0 || addedBatteryKwh > 0)) {
             warnings.push({
                 type: 'info',
-                text: 'This planner does not model roof limits or inverter AC clipping. Export caps (optional) and battery power limits are only approximated (export cap setting + inference from measured battery flows).',
+                text: t('This planner does not model roof limits or inverter AC clipping. Export caps (optional) and battery power limits are only approximated (export cap setting + inference from measured battery flows).'),
             });
         }
 
@@ -1017,7 +1019,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
         }
 
         return warnings;
-    }, [financials, addedPvPercent, addedBatteryKwh, config.batteryCapacity, dataCoverage.days, simulationWindow, windowBounds.expectedDays, loadProfileInsight, dataBasis]);
+    }, [financials, addedPvPercent, addedBatteryKwh, config.batteryCapacity, dataCoverage.days, simulationWindow, windowBounds.expectedDays, loadProfileInsight, dataBasis, t]);
 
 
     if (!isOpen) {
@@ -1031,8 +1033,8 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                         <Calculator className="text-white" size={24} />
                     </div>
                     <div className="text-left">
-                        <div className="text-white font-bold text-lg">Scenario Planner</div>
-                        <div className="text-indigo-200 text-sm">Simulate Upgrades & ROI</div>
+                        <div className="text-white font-bold text-lg">{t('Scenario Planner')}</div>
+                        <div className="text-indigo-200 text-sm">{t('Simulate Upgrades & ROI')}</div>
                     </div>
                 </div>
                 <ArrowRight className="text-white opacity-50 group-hover:opacity-100 transition-opacity" />
@@ -1047,10 +1049,10 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                  <div>
                     <h2 className="text-2xl font-bold text-white flex items-center gap-2">
                         <TrendingUp className="text-purple-400" />
-                        Upgrade Simulator
+                        {t('Upgrade Simulator')}
                     </h2>
                     <p className="text-slate-400 text-sm mt-1">
-                        Based on {WINDOW_LABEL[simulationWindow].toLowerCase()} (until today). Financials at {activeTariff.costPerKwh.toFixed(2)} {config.currency}/kWh buy & {activeTariff.feedInTariff.toFixed(2)} {config.currency}/kWh sell.
+                        {t('Based on')} {t(WINDOW_LABEL[simulationWindow])} {t('(until today).')} {t('Financials at')} {activeTariff.costPerKwh.toFixed(2)} {config.currency}/kWh {t('buy')} {t('&')} {activeTariff.feedInTariff.toFixed(2)} {config.currency}/kWh {t('sell')}.
                     </p>
                  </div>
                  <button 
@@ -1058,13 +1060,13 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                     onClick={() => setIsOpen(false)}
                           className="px-3 py-2 rounded-lg border bg-slate-900/40 border-slate-700 text-slate-300 hover:bg-slate-900/60 transition-colors text-sm font-medium"
                  >
-                    Close
+                          {t('Close')}
                  </button>
              </div>
 
              {/* Timeframe Selector */}
              <div className="flex flex-wrap items-center gap-2 mb-6">
-                 <div className="text-xs text-slate-400 font-bold uppercase tracking-wide">Timeframe</div>
+                 <div className="text-xs text-slate-400 font-bold uppercase tracking-wide">{t('Timeframe')}</div>
                  <div className="flex bg-slate-900 border border-slate-700 rounded-lg p-1">
                      {(Object.keys(WINDOW_LABEL) as SimulationWindow[]).map((key) => (
                          <button
@@ -1076,20 +1078,20 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                      : 'text-slate-300 hover:text-white hover:bg-slate-800'
                              }`}
                          >
-                             {WINDOW_LABEL[key]}
+                             {t(WINDOW_LABEL[key])}
                          </button>
                      ))}
                  </div>
              </div>
 
              {loading && (
-                 <div className="text-center py-10 text-slate-400">Loading historical data...</div>
+                 <div className="text-center py-10 text-slate-400">{t('Loading historical data...')}</div>
              )}
 
              {!loading && loadError && (
                  <div className="text-center py-10 bg-slate-900/50 rounded-xl border border-dashed border-slate-700">
                      <AlertTriangle className="text-red-400 mx-auto mb-3" size={48} />
-                     <h3 className="text-white font-bold text-lg">Could not load data</h3>
+                     <h3 className="text-white font-bold text-lg">{t('Could not load data')}</h3>
                      <p className="text-slate-400 text-sm max-w-md mx-auto mt-2">{loadError}</p>
                  </div>
              )}
@@ -1097,9 +1099,9 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
              {!loading && !loadError && data.length === 0 && (
                  <div className="text-center py-10 bg-slate-900/50 rounded-xl border border-dashed border-slate-700">
                      <Info className="text-blue-400 mx-auto mb-3" size={48} />
-                     <h3 className="text-white font-bold text-lg">No historical data available</h3>
+                     <h3 className="text-white font-bold text-lg">{t('No historical data available')}</h3>
                      <p className="text-slate-400 text-sm max-w-md mx-auto mt-2">
-                         Import or collect some history first, then reopen the simulator. The planner needs hourly data to simulate upgrades.
+                         {t('Import or collect some history first, then reopen the simulator. The planner needs hourly data to simulate upgrades.')}
                      </p>
                  </div>
              )}
@@ -1107,10 +1109,10 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
              {!loading && !results && data.length > 0 && (
                  <div className="text-center py-10 bg-slate-900/50 rounded-xl border border-dashed border-slate-700">
                      <AlertTriangle className="text-yellow-500 mx-auto mb-3" size={48} />
-                     <h3 className="text-white font-bold text-lg">No usable hourly data in selected timeframe</h3>
+                     <h3 className="text-white font-bold text-lg">{t('No usable hourly data in selected timeframe')}</h3>
                      <p className="text-slate-400 text-sm max-w-md mx-auto mt-2">
-                         The simulator requires at least one full day (24h) of hourly data in the selected timeframe to calculate battery behavior.
-                         Try selecting a longer timeframe or import hourly-resolution data.
+                         {t('The simulator requires at least one full day (24h) of hourly data in the selected timeframe to calculate battery behavior.')}
+                         {t('Try selecting a longer timeframe or import hourly-resolution data.')}
                      </p>
                  </div>
              )}
@@ -1125,8 +1127,8 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                             {/* Recommendation focus */}
                             <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-700">
                                 <div className="flex items-center justify-between mb-3">
-                                    <div className="text-xs font-bold uppercase text-slate-400">Recommendation focus</div>
-                                    <div className="text-xs text-slate-400">How suggestions are picked</div>
+                                    <div className="text-xs font-bold uppercase text-slate-400">{t('Recommendation focus')}</div>
+                                    <div className="text-xs text-slate-400">{t('How suggestions are picked')}</div>
                                 </div>
                                 <div className="flex gap-2">
                                     <button
@@ -1138,7 +1140,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                 : 'bg-slate-900/40 border-slate-700 text-slate-300 hover:bg-slate-900/60'
                                         }`}
                                     >
-                                        ROI (best value)
+                                        {t('ROI (best value)')}
                                     </button>
                                     <button
                                         type="button"
@@ -1149,7 +1151,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                 : 'bg-slate-900/40 border-slate-700 text-slate-300 hover:bg-slate-900/60'
                                         }`}
                                     >
-                                        ROI (max upgrade)
+                                        {t('ROI (max upgrade)')}
                                     </button>
                                     <button
                                         type="button"
@@ -1160,13 +1162,13 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                 : 'bg-slate-900/40 border-slate-700 text-slate-300 hover:bg-slate-900/60'
                                         }`}
                                     >
-                                        Autonomy (sensible)
+                                        {t('Autonomy (sensible)')}
                                     </button>
                                 </div>
 
                                 <div className="mt-3 flex items-center justify-between gap-3">
                                     <label htmlFor="roiHorizonYears" className={`text-xs ${upgradeFocus === 'roi' ? 'text-slate-300' : 'text-slate-400'}`}>
-                                        ROI horizon
+                                        {t('ROI horizon')}
                                     </label>
                                     <div className="flex items-center gap-2">
                                         <input
@@ -1184,22 +1186,22 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                     : 'border-slate-800 text-slate-600'
                                             }`}
                                         />
-                                        <span className={`text-xs ${upgradeFocus !== 'autonomy' ? 'text-slate-400' : 'text-slate-600'}`}>years</span>
+                                        <span className={`text-xs ${upgradeFocus !== 'autonomy' ? 'text-slate-400' : 'text-slate-600'}`}>{t('years')}</span>
                                     </div>
                                 </div>
 
                                 <div className="mt-3 text-xs text-slate-400 leading-relaxed">
                                     <div>
-                                        <strong>How it works:</strong> We simulate PV and battery upgrades on your hourly history.
+                                        <strong>{t('How it works:')}</strong> {t('We simulate PV and battery upgrades on your hourly history.')}
                                     </div>
                                     <div>
-                                        Benefit/year = saved import × buy price + extra export × sell price; ROI = invest / benefit.
+                                        {t('Benefit/year = saved import × buy price + extra export × sell price; ROI = invest / benefit.')}
                                     </div>
                                     <div>
-                                        <strong>ROI (best value):</strong> picks the highest net gain within the ROI horizon. <strong>ROI (max upgrade):</strong> picks the largest upgrade that still pays back within the horizon.
+                                        <strong>{t('ROI (best value):')}</strong> {t('picks the highest net gain within the ROI horizon.')} <strong>{t('ROI (max upgrade):')}</strong> {t('picks the largest upgrade that still pays back within the horizon.')}
                                     </div>
                                     <div>
-                                        <strong>Autonomy (sensible):</strong> picks the cheapest upgrade that is very close to the maximum autonomy in this timeframe.
+                                        <strong>{t('Autonomy (sensible):')}</strong> {t('picks the cheapest upgrade that is very close to the maximum autonomy in this timeframe.')}
                                     </div>
                                 </div>
                             </div>
@@ -1209,12 +1211,12 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                 <div className="flex justify-between mb-2">
                                     <label className="text-slate-200 font-medium flex items-center gap-2">
                                         <Zap size={16} className="text-yellow-400" />
-                                        ADD PV Power
+                                        {t('ADD PV Power')}
                                     </label>
                                     <span className="text-yellow-400 font-bold">+{addedPvPercent}%</span>
                                 </div>
                                 <input 
-                                    aria-label="ADD PV Power"
+                                    aria-label={t('ADD PV Power')}
                                     type="range" 
                                     min="0" 
                                     max="200" 
@@ -1224,9 +1226,9 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                     className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500 mb-2"
                                 />
                                 <div className="flex justify-between items-center text-xs text-slate-400">
-                                    <span>Base: {financials.estimatedBaseKwp} kWp {config.systemCapacity ? '(Configured)' : '(Est.)'}</span>
+                                    <span>{t('Base:')} {financials.estimatedBaseKwp} kWp {config.systemCapacity ? `(${t('Configured')})` : `(${t('Est.')})`}</span>
                                     <div className="flex items-center gap-1 bg-slate-800 px-2 py-1 rounded border border-slate-700">
-                                        <span>Cost:</span>
+                                        <span>{t('Cost:')}</span>
                                         <input 
                                             type="number" 
                                             value={costPerKwp}
@@ -1243,12 +1245,12 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                 <div className="flex justify-between mb-2">
                                     <label className="text-slate-200 font-medium flex items-center gap-2">
                                         <Battery size={16} className="text-green-400" />
-                                        ADD Storage
+                                        {t('ADD Storage')}
                                     </label>
                                     <span className="text-green-400 font-bold">+{addedBatteryKwh} kWh</span>
                                 </div>
                                 <input 
-                                    aria-label="ADD Storage"
+                                    aria-label={t('ADD Storage')}
                                     type="range" 
                                     min="0" 
                                     max="30" 
@@ -1258,9 +1260,9 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                     className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-green-500 mb-2"
                                 />
                                 <div className="flex justify-between items-center text-xs text-slate-400">
-                                    <span>Base: {config.batteryCapacity || 0} kWh</span>
+                                    <span>{t('Base:')} {config.batteryCapacity || 0} kWh</span>
                                     <div className="flex items-center gap-1 bg-slate-800 px-2 py-1 rounded border border-slate-700">
-                                        <span>Cost:</span>
+                                        <span>{t('Cost:')}</span>
                                         <input 
                                             type="number" 
                                             value={costPerKwhBat}
@@ -1276,26 +1278,26 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                 <div className="flex gap-3 items-start">
                                     <Info size={18} className="text-blue-400 shrink-0 mt-0.5" />
                                     <div className="text-xs text-blue-200 leading-relaxed">
-                                        <strong>Accuracy:</strong> Uses only complete (hourly) days.
+                                        <strong>{t('Accuracy:')}</strong> {t('Uses only complete (hourly) days.')}
                                         {dataCoverage.days < windowBounds.expectedDays ? (
                                             <div className="mt-2 space-y-1">
                                                 <p className="text-yellow-400 font-medium">
-                                                    ⚠️ Found <strong>{dataCoverage.days} complete days</strong> with hourly resolution.
+                                                    ⚠️ {t('Found')} <strong>{dataCoverage.days} {t('complete days')}</strong> {t('with hourly resolution.')}
                                                 </p>
                                                 <p className="opacity-80">
-                                                    You need <strong>{dataCoverage.missingDays} more full days</strong> for a 100% reliable baseline for this timeframe.
+                                                    {t('You need')} <strong>{dataCoverage.missingDays} {t('more full days')}</strong> {t('for a 100% reliable baseline for this timeframe.')}
                                                 </p>
                                             </div>
                                         ) : (
                                             <p className="mt-2 text-emerald-400 font-medium flex items-center gap-1">
-                                                <CheckCircle2 size={12} /> Baseline reached ({dataCoverage.days} days available)!
+                                                <CheckCircle2 size={12} /> {t('Baseline reached (')} {dataCoverage.days} {t('days available)!')}
                                             </p>
                                         )}
 
                                         {dataBasis && (
                                             <div className="mt-3 pt-3 border-t border-blue-500/20">
                                                 <div className="flex items-center justify-between mb-2">
-                                                    <div className="text-xs uppercase tracking-wide text-blue-300/80">Recommendation confidence</div>
+                                                    <div className="text-xs uppercase tracking-wide text-blue-300/80">{t('Recommendation confidence')}</div>
                                                     <div className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
                                                         recommendationConfidence.level === 'high'
                                                             ? 'border-emerald-400/40 text-emerald-300'
@@ -1311,44 +1313,44 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                 <div className="text-xs text-blue-200/80 mb-2">{recommendationConfidence.detail}</div>
 
                                                 <div className="text-xs uppercase tracking-wide text-blue-300/80 mb-2">
-                                                    Data used
+                                                    {t('Data used')}
                                                 </div>
                                                 <div className="flex flex-wrap gap-2">
                                                     <span className={`px-2 py-0.5 rounded-full border text-xs ${dataBasis.hasSoc ? 'border-emerald-400/40 text-emerald-300' : 'border-slate-500/30 text-slate-400'}`}>
-                                                        SoC: {dataBasis.hasSoc ? 'yes' : 'no'}
+                                                        {t('SoC:')} {dataBasis.hasSoc ? t('yes') : t('no')}
                                                     </span>
                                                     <span className={`px-2 py-0.5 rounded-full border text-xs ${dataBasis.hasBatteryFlows ? 'border-emerald-400/40 text-emerald-300' : 'border-slate-500/30 text-slate-400'}`}>
-                                                        Battery flows: {dataBasis.hasBatteryFlows ? 'yes' : 'no'}
+                                                        {t('Battery flows:')} {dataBasis.hasBatteryFlows ? t('yes') : t('no')}
                                                     </span>
                                                     <span className={`px-2 py-0.5 rounded-full border text-xs ${dataBasis.hasGridFlows ? 'border-emerald-400/40 text-emerald-300' : 'border-slate-500/30 text-slate-400'}`}>
-                                                        Grid flows: {dataBasis.hasGridFlows ? 'yes' : 'no'}
+                                                        {t('Grid flows:')} {dataBasis.hasGridFlows ? t('yes') : t('no')}
                                                     </span>
                                                     <span className="px-2 py-0.5 rounded-full border text-xs border-slate-500/30 text-slate-300">
-                                                        Start SoC: {dataBasis.startSocMethod}
+                                                        {t('Start SoC:')} {t(dataBasis.startSocMethod)}
                                                     </span>
                                                     {dataBasis.roundTripEffPct !== null && (
                                                         <span className="px-2 py-0.5 rounded-full border text-xs border-slate-500/30 text-slate-300">
-                                                            RTE (est.): {dataBasis.roundTripEffPct}%
+                                                            {t('RTE (est.):')} {dataBasis.roundTripEffPct}%
                                                         </span>
                                                     )}
                                                     {dataBasis.inferredExportCap !== null && dataBasis.inferredExportCap !== undefined && (
                                                         <span className="px-2 py-0.5 rounded-full border text-xs border-slate-500/30 text-slate-300">
-                                                            Export cap (est.): {Math.round(dataBasis.inferredExportCap)} W
+                                                            {t('Export cap (est.):')} {Math.round(dataBasis.inferredExportCap)} W
                                                         </span>
                                                     )}
                                                     {dataBasis.exportCapMode === 'none' && (
                                                         <span className="px-2 py-0.5 rounded-full border text-xs border-slate-500/30 text-slate-300">
-                                                            Export cap: off (100%)
+                                                            {t('Export cap: off (100%)')}
                                                         </span>
                                                     )}
                                                     {dataBasis.exportCapMode === 'fixed' && dataBasis.exportCapFixed !== null && dataBasis.exportCapFixed !== undefined && (
                                                         <span className="px-2 py-0.5 rounded-full border text-xs border-slate-500/30 text-slate-300">
-                                                            Export cap: {Math.round(dataBasis.exportCapFixed)} W
+                                                            {t('Export cap:')} {Math.round(dataBasis.exportCapFixed)} W
                                                         </span>
                                                     )}
                                                     {dataBasis.inferred.hasMeasured && (
                                                         <span className="px-2 py-0.5 rounded-full border text-xs border-slate-500/30 text-slate-300">
-                                                            Power limits: inferred
+                                                            {t('Power limits: inferred')}
                                                         </span>
                                                     )}
                                                 </div>
@@ -1363,7 +1365,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                     />
                                 </div>
                                 <div className="text-xs text-blue-200/80">
-                                    Tip: short windows benefit strongly from measured SoC.
+                                    {t('Tip: short windows benefit strongly from measured SoC.')}
                                 </div>
                             </div>
                         </div>
@@ -1373,7 +1375,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                             {/* Summary (less stacked cards) */}
                             <div className="bg-slate-900/60 p-5 rounded-xl border border-slate-700">
                                 <div className="flex items-center justify-between">
-                                    <div className="text-xs font-bold uppercase text-slate-400">Summary</div>
+                                    <div className="text-xs font-bold uppercase text-slate-400">{t('Summary')}</div>
                                     {(addedPvPercent > 0 || addedBatteryKwh > 0) && (
                                         <div className={`text-xs px-2 py-0.5 rounded-full border ${
                                             financials.roiYears < 10
@@ -1382,14 +1384,14 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                     ? 'border-yellow-500/30 text-yellow-300 bg-yellow-500/10'
                                                     : 'border-red-500/30 text-red-300 bg-red-500/10'
                                         }`}>
-                                            ROI (sliders): {Number.isFinite(financials.roiYears) ? `${financials.roiYears.toFixed(1)}y` : '∞'}
+                                            {t('ROI (sliders):')} {Number.isFinite(financials.roiYears) ? `${financials.roiYears.toFixed(1)}y` : '∞'}
                                         </div>
                                     )}
                                 </div>
 
                                 <div className="mt-3">
                                     <div className="flex justify-between mb-2">
-                                        <span className="text-slate-400 text-sm font-medium">Autonomy</span>
+                                        <span className="text-slate-400 text-sm font-medium">{t('Autonomy')}</span>
                                         <div className="flex gap-2 items-baseline">
                                             {(addedPvPercent === 0 && addedBatteryKwh === 0) ? (
                                                 <span className="text-white font-bold text-lg">{results.autonomyOriginal.toFixed(1)}%</span>
@@ -1425,26 +1427,26 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                 <div className="mt-4 grid grid-cols-2 gap-4">
                                     <div>
                                         <div className="text-xs text-slate-400 flex items-center gap-2">
-                                            <Coins size={16} className="text-yellow-500" /> Invest
+                                            <Coins size={16} className="text-yellow-500" /> {t('Invest')}
                                         </div>
                                         <div className="text-xl font-bold text-white mt-1">
-                                            {financials.totalInvest.toLocaleString()} {config.currency}
+                                            {financials.totalInvest.toLocaleString(locale)} {config.currency}
                                         </div>
                                     </div>
                                     <div>
                                         <div className="text-xs text-slate-400 flex items-center gap-2">
-                                            <PiggyBank size={16} className="text-green-500" /> Yearly return
+                                            <PiggyBank size={16} className="text-green-500" /> {t('Yearly return')}
                                         </div>
                                         <div className="text-xl font-bold text-green-400 mt-1">
-                                            +{financials.totalYearlyBenefit.toLocaleString(undefined, { maximumFractionDigits: 0 })} {config.currency}
+                                            +{financials.totalYearlyBenefit.toLocaleString(locale, { maximumFractionDigits: 0 })} {config.currency}
                                         </div>
                                     </div>
                                 </div>
 
                                 <div className="mt-3 text-xs text-slate-400 flex items-center justify-between">
-                                    <span>Net gain over {financials.horizonYears}y</span>
+                                    <span>{t('Net gain over')} {financials.horizonYears}y</span>
                                     <span className={`${financials.netGainHorizon >= 0 ? 'text-emerald-300' : 'text-red-300'} font-semibold`}>
-                                        {financials.netGainHorizon >= 0 ? '+' : ''}{financials.netGainHorizon.toLocaleString(undefined, { maximumFractionDigits: 0 })} {config.currency}
+                                        {financials.netGainHorizon >= 0 ? '+' : ''}{financials.netGainHorizon.toLocaleString(locale, { maximumFractionDigits: 0 })} {config.currency}
                                     </span>
                                 </div>
                             </div>
@@ -1453,7 +1455,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                             {(batteryRecommendation || addedPvPercent > 0 || addedBatteryKwh > 0) && (
                                 <details open className="bg-slate-900/40 p-4 rounded-xl border border-slate-700">
                                     <summary className="cursor-pointer select-none text-xs font-bold uppercase text-slate-400">
-                                        Details
+                                        {t('Details')}
                                     </summary>
                                     <div className="mt-3 text-xs text-slate-300 space-y-3">
                                         {plannerWarnings.length > 0 && (
@@ -1475,26 +1477,26 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
 
                                         {(addedPvPercent > 0 || addedBatteryKwh > 0 || pvRecommendation?.recommended || batteryRecommendation?.recommended) && (
                                             <div className="text-xs text-slate-400 leading-relaxed">
-                                                <strong>Next steps:</strong> sanity-check roof space + inverter/export limits, then request real quotes (€/kWp, €/kWh). If your goal is evening coverage, compare suggested battery size to your typical evening/night consumption.
+                                                <strong>{t('Next steps:')}</strong> {t('sanity-check roof space + inverter/export limits, then request real quotes (€/kWp, €/kWh). If your goal is evening coverage, compare suggested battery size to your typical evening/night consumption.')}
                                             </div>
                                         )}
 
                                         {(addedPvPercent > 0 || addedBatteryKwh > 0) && (
                                             <div>
                                                 <div className="flex items-center justify-between mb-2">
-                                                    <div className="text-xs font-bold uppercase text-slate-400">ROI (Current Sliders)</div>
+                                                    <div className="text-xs font-bold uppercase text-slate-400">{t('ROI (Current Sliders)')}</div>
                                                     <div className="text-xs text-slate-400">PV +{addedPvPercent}% · Storage +{addedBatteryKwh} kWh</div>
                                                 </div>
 
                                                 <div className="flex items-center justify-between">
-                                                    <span className="text-slate-400">Combined ROI (PV + Storage sliders)</span>
+                                                    <span className="text-slate-400">{t('Combined ROI (PV + Storage sliders)')}</span>
                                                     <span className="text-emerald-400 font-semibold">
                                                         {Number.isFinite(financials.roiYears) ? `${financials.roiYears.toFixed(1)}y` : '∞'}
                                                     </span>
                                                 </div>
 
                                                 <div className="flex items-center justify-between mt-1">
-                                                    <span className="text-slate-400">PV-only ROI (base → PV slider)</span>
+                                                    <span className="text-slate-400">{t('PV-only ROI (base → PV slider)')}</span>
                                                     <span className="text-yellow-300 font-semibold">
                                                         {financials.pvOnly.invest > 0
                                                             ? (Number.isFinite(financials.pvOnly.roiYears) ? `${financials.pvOnly.roiYears.toFixed(1)}y` : '∞')
@@ -1503,7 +1505,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                 </div>
 
                                                 <div className="flex items-center justify-between mt-1">
-                                                    <span className="text-slate-400">Battery ROI (incremental, PV slider → PV+Battery sliders)</span>
+                                                    <span className="text-slate-400">{t('Battery ROI (incremental, PV slider → PV+Battery sliders)')}</span>
                                                     <span className="text-green-300 font-semibold">
                                                         {financials.batteryIncremental.invest > 0
                                                             ? (Number.isFinite(financials.batteryIncremental.roiYears) ? `${financials.batteryIncremental.roiYears.toFixed(1)}y` : '∞')
@@ -1512,7 +1514,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                                 </div>
 
                                                 <div className="mt-2 text-xs text-slate-400">
-                                                    Battery ROI is incremental (PV-only → PV+Battery), not “battery-only”.
+                                                    {t('Battery ROI is incremental (PV-only → PV+Battery), not “battery-only”.')}
                                                 </div>
                                             </div>
                                         )}
@@ -1520,57 +1522,57 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                         {pvRecommendation && (
                                             <div>
                                                 <div className="flex items-center justify-between mb-2">
-                                                    <div className="text-xs font-bold uppercase text-slate-400">PV Suggestion</div>
-                                                    <div className="text-xs text-slate-400">PV-only (base → PV) · ignores storage slider</div>
+                                                    <div className="text-xs font-bold uppercase text-slate-400">{t('PV Suggestion')}</div>
+                                                    <div className="text-xs text-slate-400">{t('PV-only (base → PV) · ignores storage slider')}</div>
                                                 </div>
 
                                                 {pvRecommendation.recommended ? (
                                                     <div className="text-sm text-slate-200">
                                                         <div className="flex items-center justify-between">
-                                                            <span className="text-slate-400">Recommended add-on</span>
+                                                            <span className="text-slate-400">{t('Recommended add-on')}</span>
                                                             <span className="text-white font-bold">+{pvRecommendation.recommended.addedPvPercent}%</span>
                                                         </div>
                                                         <div className="flex items-center justify-between mt-1">
-                                                            <span className="text-slate-400">Added PV</span>
+                                                            <span className="text-slate-400">{t('Added PV')}</span>
                                                             <span className="text-yellow-300 font-semibold">+{pvRecommendation.recommended.addedKwp.toFixed(1)} kWp</span>
                                                         </div>
                                                         <div className="flex items-center justify-between mt-1">
-                                                            <span className="text-slate-400">PV ROI (PV-only)</span>
+                                                            <span className="text-slate-400">{t('PV ROI (PV-only)')}</span>
                                                             <span className="text-emerald-400 font-semibold">{pvRecommendation.recommended.roiYears.toFixed(1)}y</span>
                                                         </div>
                                                         <div className="flex items-center justify-between mt-1">
-                                                            <span className="text-slate-400">Net gain ({financials.horizonYears}y)</span>
+                                                            <span className="text-slate-400">{t('Net gain (')} {financials.horizonYears}y)</span>
                                                             <span className={`${pvRecommendation.recommended.netGainHorizon >= 0 ? 'text-emerald-300' : 'text-red-300'} font-semibold`}>
-                                                                {pvRecommendation.recommended.netGainHorizon >= 0 ? '+' : ''}{pvRecommendation.recommended.netGainHorizon.toLocaleString(undefined, { maximumFractionDigits: 0 })} {config.currency}
+                                                                {pvRecommendation.recommended.netGainHorizon >= 0 ? '+' : ''}{pvRecommendation.recommended.netGainHorizon.toLocaleString(locale, { maximumFractionDigits: 0 })} {config.currency}
                                                             </span>
                                                         </div>
                                                         <div className="flex items-center justify-between mt-1">
-                                                            <span className="text-slate-400">Yearly benefit (PV)</span>
-                                                            <span className="text-emerald-300 font-semibold">+{pvRecommendation.recommended.yearlyBenefit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {config.currency}</span>
+                                                            <span className="text-slate-400">{t('Yearly benefit (PV)')}</span>
+                                                            <span className="text-emerald-300 font-semibold">+{pvRecommendation.recommended.yearlyBenefit.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {config.currency}</span>
                                                         </div>
 
                                                         {pvRecommendation.thresholds?.focus === 'autonomy' && (
                                                             <div className="flex items-center justify-between mt-1">
-                                                                <span className="text-slate-400">Autonomy Δ (base → PV)</span>
+                                                                <span className="text-slate-400">{t('Autonomy Δ (base → PV)')}</span>
                                                                 <span className="text-blue-300 font-semibold">+{pvRecommendation.recommended.autonomyDeltaPct.toFixed(2)}%</span>
                                                             </div>
                                                         )}
 
                                                         {pvRecommendation.bestYearly && pvRecommendation.bestYearly.addedPvPercent !== pvRecommendation.recommended.addedPvPercent && (
                                                             <div className="mt-2 text-xs text-slate-400">
-                                                                Max yearly benefit at +{pvRecommendation.bestYearly.addedPvPercent}%.
+                                                                {t('Max yearly benefit at')} +{pvRecommendation.bestYearly.addedPvPercent}%.
                                                             </div>
                                                         )}
                                                     </div>
                                                 ) : (
                                                     <div className="text-xs text-slate-400">
                                                         <div>
-                                                            No worthwhile PV recommendation for this timeframe.
+                                                            {t('No worthwhile PV recommendation for this timeframe.')}
                                                             {pvRecommendation.thresholds && (
                                                                 <span>
                                                                     {pvRecommendation.thresholds.focus === 'roi'
-                                                                        ? ` (ROI focus: needs ≥ ${pvRecommendation.thresholds.minYearlyBenefit} ${config.currency}/yr and payback ≤ ${pvRecommendation.thresholds.maxRoiYears}y.)`
-                                                                        : ' (Autonomy focus: no PV size improves autonomy in this timeframe.)'}
+                                                                        ? ` (${t('ROI focus: needs ≥')} ${pvRecommendation.thresholds.minYearlyBenefit} ${config.currency}/${t('yr')} ${t('and payback ≤')} ${pvRecommendation.thresholds.maxRoiYears}y.)`
+                                                                        : ` (${t('Autonomy focus: no PV size improves autonomy in this timeframe.')})`}
                                                                 </span>
                                                             )}
                                                         </div>
@@ -1582,69 +1584,69 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                         {batteryRecommendation && (
                                             <div>
                                                 <div className="flex items-center justify-between mb-2">
-                                                    <div className="text-xs font-bold uppercase text-slate-400">Battery Suggestion</div>
-                                                    <div className="text-xs text-slate-400">Uses current PV slider · same timeframe</div>
+                                                    <div className="text-xs font-bold uppercase text-slate-400">{t('Battery Suggestion')}</div>
+                                                    <div className="text-xs text-slate-400">{t('Uses current PV slider · same timeframe')}</div>
                                                 </div>
 
                                                 {batteryRecommendation.recommended ? (
                                                     <div className="text-sm text-slate-200">
                                                         {(addedPvPercent > 0 || addedBatteryKwh > 0) && (
                                                             <div className="mb-2 text-xs text-slate-400">
-                                                                Current sliders combined ROI: {Number.isFinite(financials.roiYears) ? `${financials.roiYears.toFixed(1)}y` : '∞'}
+                                                                {t('Current sliders combined ROI:')} {Number.isFinite(financials.roiYears) ? `${financials.roiYears.toFixed(1)}y` : '∞'}
                                                             </div>
                                                         )}
                                                         <div className="flex items-center justify-between">
-                                                            <span className="text-slate-400">Recommended add-on</span>
+                                                            <span className="text-slate-400">{t('Recommended add-on')}</span>
                                                             <span className="text-white font-bold">+{batteryRecommendation.recommended.addedBatteryKwh} kWh</span>
                                                         </div>
                                                         <div className="flex items-center justify-between mt-1">
-                                                            <span className="text-slate-400">Battery ROI (incremental)</span>
+                                                            <span className="text-slate-400">{t('Battery ROI (incremental)')}</span>
                                                             <span className="text-emerald-400 font-semibold">{batteryRecommendation.recommended.roiYears.toFixed(1)}y</span>
                                                         </div>
                                                         <div className="flex items-center justify-between mt-1">
-                                                            <span className="text-slate-400">Combined ROI (PV slider + recommended battery)</span>
+                                                            <span className="text-slate-400">{t('Combined ROI (PV slider + recommended battery)')}</span>
                                                             <span className="text-emerald-400 font-semibold">{batteryRecommendation.recommended.combinedRoiYears.toFixed(1)}y</span>
                                                         </div>
                                                         <div className="flex items-center justify-between mt-1">
-                                                            <span className="text-slate-400">Net gain ({financials.horizonYears}y)</span>
+                                                            <span className="text-slate-400">{t('Net gain (')} {financials.horizonYears}y)</span>
                                                             <span className={`${batteryRecommendation.recommended.netGainHorizon >= 0 ? 'text-emerald-300' : 'text-red-300'} font-semibold`}>
-                                                                {batteryRecommendation.recommended.netGainHorizon >= 0 ? '+' : ''}{batteryRecommendation.recommended.netGainHorizon.toLocaleString(undefined, { maximumFractionDigits: 0 })} {config.currency}
+                                                                {batteryRecommendation.recommended.netGainHorizon >= 0 ? '+' : ''}{batteryRecommendation.recommended.netGainHorizon.toLocaleString(locale, { maximumFractionDigits: 0 })} {config.currency}
                                                             </span>
                                                         </div>
                                                         <div className="flex items-center justify-between mt-1">
-                                                            <span className="text-slate-400">Yearly benefit (battery)</span>
-                                                            <span className="text-emerald-300 font-semibold">+{batteryRecommendation.recommended.yearlyBenefit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {config.currency}</span>
+                                                            <span className="text-slate-400">{t('Yearly benefit (battery)')}</span>
+                                                            <span className="text-emerald-300 font-semibold">+{batteryRecommendation.recommended.yearlyBenefit.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {config.currency}</span>
                                                         </div>
 
                                                         {batteryRecommendation.thresholds?.focus === 'autonomy' && (
                                                             <div className="flex items-center justify-between mt-1">
-                                                                <span className="text-slate-400">Autonomy Δ (PV → PV+Battery)</span>
+                                                                <span className="text-slate-400">{t('Autonomy Δ (PV → PV+Battery)')}</span>
                                                                 <span className="text-blue-300 font-semibold">+{batteryRecommendation.recommended.autonomyDeltaPct.toFixed(2)}%</span>
                                                             </div>
                                                         )}
                                                         {batteryRecommendation.bestYearly && batteryRecommendation.bestYearly.addedBatteryKwh !== batteryRecommendation.recommended.addedBatteryKwh && (
                                                             <div className="mt-2 text-xs text-slate-400">
-                                                                Max yearly benefit at +{batteryRecommendation.bestYearly.addedBatteryKwh} kWh.
+                                                                {t('Max yearly benefit at')} +{batteryRecommendation.bestYearly.addedBatteryKwh} kWh.
                                                             </div>
                                                         )}
                                                     </div>
                                                 ) : (
                                                     <div className="text-xs text-slate-400">
                                                         <div>
-                                                            No worthwhile battery recommendation for this PV setting in the selected timeframe.
+                                                            {t('No worthwhile battery recommendation for this PV setting in the selected timeframe.')}
                                                             {batteryRecommendation.thresholds && (
                                                                 <span>
                                                                     {batteryRecommendation.thresholds.focus === 'roi'
-                                                                        ? ` (ROI focus: needs ≥ ${batteryRecommendation.thresholds.minYearlyBenefit} ${config.currency}/yr and payback ≤ ${batteryRecommendation.thresholds.maxRoiYears}y; also combined PV+Battery payback must be ≤ ${batteryRecommendation.thresholds.maxRoiYears}y.)`
-                                                                        : ' (Autonomy focus: no battery size improves autonomy in this timeframe.)'}
+                                                                        ? ` (${t('ROI focus: needs ≥')} ${batteryRecommendation.thresholds.minYearlyBenefit} ${config.currency}/${t('yr')} ${t('and payback ≤')} ${batteryRecommendation.thresholds.maxRoiYears}y; ${t('also combined PV+Battery payback must be ≤')} ${batteryRecommendation.thresholds.maxRoiYears}y.)`
+                                                                        : ` (${t('Autonomy focus: no PV size improves autonomy in this timeframe.')})`}
                                                                 </span>
                                                             )}
                                                         </div>
                                                         {batteryRecommendation.bestYearly && (
                                                             <div className="mt-2 text-xs text-slate-400">
-                                                                Best-case add-on: +{batteryRecommendation.bestYearly.addedBatteryKwh} kWh → {batteryRecommendation.bestYearly.yearlyBenefit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {config.currency}/yr,
-                                                                saves ~{batteryRecommendation.bestYearly.yearlySavedImportKwh.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh import/yr,
-                                                                export Δ ~{batteryRecommendation.bestYearly.yearlyExportDeltaKwh.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh/yr.
+                                                                {t('Best-case add-on:')} +{batteryRecommendation.bestYearly.addedBatteryKwh} kWh → {batteryRecommendation.bestYearly.yearlyBenefit.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {config.currency}/{t('yr')},
+                                                                {t('saves ~')} {batteryRecommendation.bestYearly.yearlySavedImportKwh.toLocaleString(locale, { maximumFractionDigits: 0 })} kWh {t('import/yr')},
+                                                                {t('export Δ ~')} {batteryRecommendation.bestYearly.yearlyExportDeltaKwh.toLocaleString(locale, { maximumFractionDigits: 0 })} kWh/{t('yr')}.
                                                             </div>
                                                         )}
                                                     </div>
