@@ -1,3 +1,10 @@
+## [1.17.1](https://github.com/robotnikz/Sunflow/compare/v1.17.0...v1.17.1) (2026-02-17)
+
+
+### Bug Fixes
+
+* **theme:** improve light mode contrast ([5ccb5ff](https://github.com/robotnikz/Sunflow/commit/5ccb5ffe0ab6f34268f2b3ddb2f384025e8e3c66))
+
 # [1.17.0](https://github.com/robotnikz/Sunflow/compare/v1.16.0...v1.17.0) (2026-02-17)
 
 
