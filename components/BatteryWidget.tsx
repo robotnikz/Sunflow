@@ -38,7 +38,11 @@ const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state, capaci
   const isDischarging = state === 'discharging';
   const powerKw = Math.abs(power) / 1000;
     const reserve = Math.min(100, Math.max(0, Number.isFinite(Number(reserveSocPct)) ? Number(reserveSocPct) : 0));
-    const batteryTemp = Number.isFinite(Number(temperatures?.battery)) ? Number(temperatures?.battery) : null;
+    const batteryTempRaw = temperatures?.battery;
+    const batteryTemp =
+        batteryTempRaw === null || batteryTempRaw === undefined
+            ? null
+            : (Number.isFinite(Number(batteryTempRaw)) ? Number(batteryTempRaw) : null);
 
   // Determine Colors
   const getColors = () => {
