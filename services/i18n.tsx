@@ -14,7 +14,7 @@ function resolveLocale(language: ResolvedLanguage): string {
 }
 
 // Key strategy: use the English UI string as the key.
-// This keeps the migration friction low (wrap UI literals in t('...')).
+// This keeps the migration friction low (wrap UI literals in t(key)).
 const DE: Record<string, string> = {
   'System Settings': 'Systemeinstellungen',
   'Settings': 'Einstellungen',
@@ -226,6 +226,7 @@ const DE: Record<string, string> = {
   'Type': 'Typ',
   'One-time': 'Einmalig',
   'Yearly (Recurring)': 'Jährlich (wiederkehrend)',
+  'Date Incurred (or Start Date for Yearly)': 'Datum der Ausgabe (oder Startdatum bei jährlich)',
   'Expense Log': 'Ausgabenprotokoll',
   'Expense': 'Ausgabe',
   'Date': 'Datum',
@@ -371,6 +372,7 @@ const DE: Record<string, string> = {
   'days available)!': 'Tage verfügbar)!',
 
   'Recommendation confidence': 'Empfehlungs-Vertrauen',
+  'Data used': 'Verwendete Daten',
   'No data': 'Keine Daten',
   'No usable hourly data.': 'Keine verwertbaren Stundendaten.',
   'Complete days:': 'Vollständige Tage:',
@@ -486,6 +488,10 @@ const DE: Record<string, string> = {
   '(optional)': '(optional)',
   'Fix': 'Beheben',
 
+  'ROI tracking enabled': 'ROI-Tracking aktiviert',
+  'Forecast & location enabled': 'Prognose & Standort aktiviert',
+  'Notifications enabled': 'Benachrichtigungen aktiviert',
+
   'Connected to inverter': 'Mit Wechselrichter verbunden',
   'Required for live data': 'Erforderlich für Live-Daten',
   'Tariffs + expenses + commissioning date': 'Tarife + Ausgaben + Inbetriebnahmedatum',
@@ -552,6 +558,7 @@ const DE: Record<string, string> = {
   'Grid Power': 'Netzleistung',
   'Charged': 'Geladen',
   'Discharged': 'Entladen',
+  'Battery Discharge': 'Batterie-Entladung',
 
   'SOLAR': 'SOLAR',
   'HOME LOAD': 'HAUSLAST',
@@ -571,7 +578,10 @@ const DE: Record<string, string> = {
   '30 Days': '30 Tage',
 
   'Errors': 'Fehler',
+  'Error': 'Fehler',
   'Status': 'Status',
+  'Offline': 'Offline',
+  'Inverter Status': 'Wechselrichter-Status',
   'Running': 'Läuft',
   'Idle': 'Standby',
   'Active': 'Aktiv',
@@ -596,6 +606,7 @@ const DE: Record<string, string> = {
   'Charging Storage': 'Speicher lädt',
   'is flowing to battery. Waiting for surplus...': 'fließen in die Batterie. Warte auf Überschuss...',
   'Wait for sun or reduce load.': 'Auf Sonne warten oder Last reduzieren.',
+  'No surplus available.': 'Kein Überschuss verfügbar.',
 
   'Battery Reserve': 'Batteriereserve',
   'Battery Divert': 'Batterie-Umleitung',
@@ -607,6 +618,7 @@ const DE: Record<string, string> = {
   'Dynamic Tariff Comparison (aWATTar)': 'Dynamischer Tarifvergleich (aWATTar)',
   'See if a dynamic tariff would have been cheaper': 'Prüfe, ob ein dynamischer Tarif günstiger gewesen wäre',
   'Close': 'Schließen',
+  'Deleted': 'Gelöscht',
   'Dynamic Tariff Comparison': 'Dynamischer Tarifvergleich',
   'aWATTar provides market (exchange) prices. Add “Surcharge” + VAT to approximate your all-in retail tariff.': 'aWATTar liefert Marktpreise (Börse). Ergänze „Aufschlag“ + MwSt., um deinen Endkundenpreis näherungsweise abzubilden.',
   'Calculating…': 'Berechne…',
