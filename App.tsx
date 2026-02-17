@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Settings, RefreshCw, AlertCircle, Sun, Battery, Zap, Home, Download, Moon, Monitor } from 'lucide-react';
+import { Settings, RefreshCw, AlertCircle, Sun, Battery, Zap, Home, Download, Moon } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import SettingsModal from './components/SettingsModal';
 import { useToast } from './components/Toaster';
 import { InverterData, SystemConfig, SystemInfo } from './types';
 import { getRealtimeData, getConfig, saveConfig, getSystemInfo } from './services/api';
-import { addThemeListener, getThemeMode, setThemeMode, type ThemeMode } from './services/uiPreferences';
+import { addThemeListener, getThemeMode, resolveTheme, setThemeMode, type ThemeMode } from './services/uiPreferences';
 
 const App: React.FC = () => {
   const { push } = useToast();
@@ -88,19 +88,15 @@ const App: React.FC = () => {
     return addThemeListener(() => setThemeModeState(getThemeMode()));
   }, []);
 
-  const themeUi = useMemo(() => {
-    switch (themeMode) {
-      case 'dark':
-        return { label: 'Dark', icon: <Moon size={16} /> };
-      case 'light':
-        return { label: 'Light', icon: <Sun size={16} /> };
-      default:
-        return { label: 'System', icon: <Monitor size={16} /> };
-    }
-  }, [themeMode]);
+  const resolvedTheme = useMemo(() => resolveTheme(themeMode), [themeMode]);
 
-  const cycleThemeMode = () => {
-    const next: ThemeMode = themeMode === 'system' ? 'dark' : themeMode === 'dark' ? 'light' : 'system';
+  const themeUi = useMemo(() => {
+    if (resolvedTheme === 'dark') return { label: 'Dark', icon: <Moon size={16} /> };
+    return { label: 'Light', icon: <Sun size={16} /> };
+  }, [resolvedTheme]);
+
+  const toggleTheme = () => {
+    const next: ThemeMode = resolvedTheme === 'dark' ? 'light' : 'dark';
     setThemeModeState(next);
     setThemeMode(next);
   };
@@ -170,9 +166,9 @@ const App: React.FC = () => {
 
               <button
                 type="button"
-                onClick={cycleThemeMode}
+                onClick={toggleTheme}
                 className="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-full border border-slate-700 transition-colors"
-                aria-label={`Theme mode: ${themeUi.label}. Click to switch.`}
+                aria-label={`Theme: ${themeUi.label}. Click to switch.`}
               >
                 {themeUi.icon}
                 <span className="text-xs font-bold tracking-wide">{themeUi.label}</span>
