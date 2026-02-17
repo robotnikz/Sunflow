@@ -18,6 +18,7 @@ import ScenarioPlanner from './ScenarioPlanner';
 import DynamicTariffComparison from './DynamicTariffComparison';
 import { getHistory, getRoiData, getForecast, getBatteryHealth, getTariffs } from '../services/api';
 import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp, ShieldCheck, Download, ChevronLeft, ChevronRight, History, CheckCircle2, AlertTriangle, Settings as SettingsIcon, Bell, Plug, CloudSun, X, Thermometer } from 'lucide-react';
+import { useI18n } from '../services/i18n';
 
 const SETUP_CHECKLIST_DISMISS_KEY = 'sunflow.setupChecklist.dismissed';
 
@@ -50,6 +51,7 @@ const SkeletonCard = ({ height = "h-64" }: { height?: string }) => (
 );
 
 const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigger, onOpenSettings }) => {
+    const { t, locale } = useI18n();
   const [timeRange, setTimeRange] = useState<TimeRange>('day');
   const [timeOffset, setTimeOffset] = useState(0);
 
@@ -222,7 +224,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
   const getTimeLabel = () => {
     const now = new Date();
     if (timeRange === 'custom') {
-       return `${new Date(startDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()}`;
+         return `${new Date(startDate).toLocaleDateString(locale)} - ${new Date(endDate).toLocaleDateString(locale)}`;
     }
     
     const getStartOfWeek = (d: Date) => {
@@ -238,12 +240,12 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
         case 'hour': {
             const d = new Date(now);
             d.setHours(d.getHours() + timeOffset);
-            return d.toLocaleString('en-US', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+                        return d.toLocaleString(locale, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
         }
         case 'day': {
             const d = new Date(now);
             d.setDate(d.getDate() + timeOffset);
-            return d.toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+                        return d.toLocaleDateString(locale, { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
         }
         case 'week': {
             const refDate = new Date(now);
@@ -251,11 +253,11 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
             const start = getStartOfWeek(refDate);
             const end = new Date(start);
             end.setDate(end.getDate() + 6);
-            return `${start.toLocaleDateString('en-US', { day: '2-digit', month: '2-digit' })} - ${end.toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
+                        return `${start.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' })} - ${end.toLocaleDateString(locale, { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
         }
         case 'month': {
             const d = new Date(now.getFullYear(), now.getMonth() + timeOffset, 1);
-            return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                        return d.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
         }
         case 'year': {
             const d = new Date(now.getFullYear() + timeOffset, 0, 1);
@@ -264,6 +266,25 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
         default: return '';
     }
   };
+
+    const getRangeLabel = (range: TimeRange): string => {
+        switch (range) {
+            case 'hour':
+                return t('Hour');
+            case 'day':
+                return t('Day');
+            case 'week':
+                return t('Week');
+            case 'month':
+                return t('Month');
+            case 'year':
+                return t('Year');
+            case 'custom':
+                return t('Custom');
+            default:
+                return range;
+        }
+    };
 
   const handleDownloadCSV = () => {
       if (!history || !history.chart) return;
@@ -341,8 +362,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
         }> = [
             {
                 key: 'connected' as const,
-                label: 'Connected to inverter',
-                description: 'Required for live data',
+                label: t('Connected to inverter'),
+                description: t('Required for live data'),
                 done: connected,
                 tab: 'general' as const,
                 icon: SettingsIcon,
@@ -350,8 +371,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
             },
             {
                 key: 'roi' as const,
-                label: 'ROI tracking enabled',
-                description: 'Tariffs + expenses + commissioning date',
+                label: t('ROI tracking enabled'),
+                description: t('Tariffs + expenses + commissioning date'),
                 done: roiEnabled,
                 tab: !hasTariffs ? 'tariffs' : !hasExpenses ? 'expenses' : 'general',
                 icon: PiggyBank,
@@ -359,8 +380,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
             },
             {
                 key: 'appliances' as const,
-                label: 'Appliances configured',
-                description: 'Improves smart recommendations',
+                label: t('Appliances configured'),
+                description: t('Improves smart recommendations'),
                 done: hasAppliances,
                 tab: 'appliances' as const,
                 icon: Plug,
@@ -368,8 +389,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
             },
             {
                 key: 'forecast' as const,
-                label: 'Forecast & location enabled',
-                description: 'Location + Solcast API key',
+                label: t('Forecast & location enabled'),
+                description: t('Location + Solcast API key'),
                 done: hasForecast,
                 tab: 'general' as const,
                 icon: CloudSun,
@@ -377,8 +398,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
             },
             {
                 key: 'notifications' as const,
-                label: 'Notifications enabled',
-                description: 'Discord webhook + triggers',
+                label: t('Notifications enabled'),
+                description: t('Discord webhook + triggers'),
                 done: notificationsReady,
                 tab: 'notifications' as const,
                 icon: Bell,
@@ -425,9 +446,9 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                             <CheckCircle2 size={18} />
                         </div>
                         <div>
-                            <div className="text-slate-100 font-semibold">Setup checklist</div>
+                            <div className="text-slate-100 font-semibold">{t('Setup checklist')}</div>
                             <div className="text-xs text-slate-400">
-                                {setup.requiredDone}/{setup.requiredTotal} required complete · {setup.doneCount}/{setup.total} total
+                                {setup.requiredDone}/{setup.requiredTotal} {t('required complete')} · {setup.doneCount}/{setup.total} {t('total')}
                             </div>
                         </div>
                     </div>
@@ -439,7 +460,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                                 onClick={() => onOpenSettings(setup.next)}
                                 className="px-3 py-2 rounded-lg bg-slate-900/50 hover:bg-slate-900/70 border border-slate-700 text-slate-200 text-sm font-medium transition-colors"
                             >
-                                Open settings
+                                {t('Open settings')}
                             </button>
                         )}
                         <button
@@ -453,11 +474,11 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                                 }
                             }}
                             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-900/30 hover:bg-slate-900/50 border border-slate-700 text-slate-400 hover:text-slate-200 text-sm font-medium transition-colors"
-                            aria-label="Dismiss setup checklist"
-                            title="Dismiss"
+                            aria-label={t('Dismiss setup checklist')}
+                            title={t('Dismiss')}
                         >
                             <X size={16} />
-                            <span className="hidden sm:inline">Dismiss</span>
+                            <span className="hidden sm:inline">{t('Dismiss')}</span>
                         </button>
                     </div>
                 </div>
@@ -467,11 +488,12 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                         const Icon = item.icon;
                         const status = item.done ? (
                             <span className="inline-flex items-center gap-1 text-emerald-300 text-xs font-semibold">
-                                <CheckCircle2 size={14} className="text-emerald-400" /> Done
+                                <CheckCircle2 size={14} className="text-emerald-400" /> {t('Done')}
                             </span>
                         ) : (
                             <span className="inline-flex items-center gap-1 text-yellow-200 text-xs font-semibold">
-                                <AlertTriangle size={14} className="text-yellow-400" /> Missing{item.required ? '' : ' (optional)'}
+                                <AlertTriangle size={14} className="text-yellow-400" /> {t('Missing')}
+                                {!item.required ? ` ${t('(optional)')}` : ''}
                             </span>
                         );
 
@@ -499,7 +521,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                                         onClick={() => onOpenSettings(item.tab)}
                                         className="shrink-0 inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-slate-700 bg-slate-900/40 hover:bg-slate-900/60 text-slate-200 text-sm font-medium transition-colors"
                                     >
-                                        Fix
+                                        {t('Fix')}
                                         <ArrowRight size={14} className="opacity-70" />
                                     </button>
                                 )}
@@ -519,7 +541,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
              <div className="p-1.5 bg-slate-700/50 rounded-lg backdrop-blur">
                 <Zap className="text-yellow-500" size={18} />
              </div>
-             Live Power Flow
+                 {t('Live Power Flow')}
           </div>
           {/* Centering Wrapper */}
           <div className="flex-1 w-full flex items-center justify-center p-4">
@@ -588,9 +610,9 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                         <div className="p-1.5 bg-blue-500/10 rounded-lg text-blue-400">
                              <ShieldCheck size={18} />
                         </div>
-                        <span className="text-slate-300 font-bold text-sm tracking-wide">AUTONOMY</span>
+                        <span className="text-slate-300 font-bold text-sm tracking-wide">{t('AUTONOMY')}</span>
                     </div>
-                    <div className="text-xs text-slate-400 pl-1">Grid Independence</div>
+                    <div className="text-xs text-slate-400 pl-1">{t('Grid Independence')}</div>
                 </div>
                 <div className="h-24 w-24 mr-2">
                     <EnergyDonut percentage={data.autonomy} color="#3b82f6" />
@@ -604,9 +626,9 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                          <div className="p-1.5 bg-emerald-500/10 rounded-lg text-emerald-400">
                              <Leaf size={18} />
                         </div>
-                        <span className="text-slate-300 font-bold text-sm tracking-wide">USAGE</span>
+                        <span className="text-slate-300 font-bold text-sm tracking-wide">{t('USAGE')}</span>
                     </div>
-                    <div className="text-xs text-slate-400 pl-1">Solar Utilization</div>
+                    <div className="text-xs text-slate-400 pl-1">{t('Solar Utilization')}</div>
                 </div>
                 <div className="h-24 w-24 mr-2">
                     <EnergyDonut percentage={data.selfConsumption} color="#22c55e" />
@@ -638,7 +660,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 w-full sm:w-auto">
                 <h2 className="text-lg font-semibold text-slate-200 px-2 flex items-center gap-2 shrink-0">
                     <Calendar size={18} className="text-blue-400"/>
-                    Statistics & Analysis
+                    {t('Statistics & Analysis')}
                 </h2>
                 <div className="px-4 py-1.5 bg-slate-900/80 border border-slate-700/50 rounded-full text-blue-400 text-sm font-bold shadow-inner animate-fade-in flex items-center gap-2">
                     <History size={14} className="opacity-50"/>
@@ -652,21 +674,21 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                                                     <button 
                                                         onClick={() => setTimeOffset(prev => prev - 1)}
                                                         className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
-                                                        title="Previous Period"
+                                                        title={t('Previous Period')}
                                                     >
                                                          <ChevronLeft size={18} />
                                                     </button>
 
                                                     {/* Disabled buttons typically don't show the title tooltip. Wrap to keep a hint available. */}
                                                     <span
-                                                        title={timeOffset >= 0 ? 'You are already viewing the latest available period.' : 'Next Period'}
+                                                        title={timeOffset >= 0 ? t('You are already viewing the latest available period.') : t('Next Period')}
                                                     >
                                                             <button 
                                                                 onClick={() => setTimeOffset(prev => prev + 1)}
                                                                 disabled={timeOffset >= 0}
                                                                 aria-describedby={timeOffset >= 0 ? 'time-nav-latest-hint' : undefined}
                                                                 className={`p-1.5 rounded-md transition-colors ${timeOffset >= 0 ? 'text-slate-600 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                                                                title="Next Period"
+                                                                title={t('Next Period')}
                                                             >
                                                                  <ChevronRight size={18} />
                                                             </button>
@@ -677,7 +699,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                                                     id="time-nav-latest-hint"
                                                     className="text-xs text-slate-400"
                                                 >
-                                                    Latest period
+                                                    {t('Latest period')}
                                                 </span>
                                             )}
                                     </div>
@@ -693,7 +715,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
                             }`}
                         >
-                            {range.charAt(0).toUpperCase() + range.slice(1)}
+                            {getRangeLabel(range)}
                         </button>
                     ))}
                 </div>
@@ -701,11 +723,11 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                 <button 
                     onClick={handleDownloadCSV}
                     className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg border border-slate-700 transition-colors"
-                    title="Export CSV"
-                    aria-label="Export CSV"
+                    title={t('Export CSV')}
+                    aria-label={t('Export CSV')}
                 >
                     <Download size={18} />
-                    <span className="text-sm font-medium sm:hidden">Export</span>
+                    <span className="text-sm font-medium sm:hidden">{t('Export')}</span>
                 </button>
             </div>
         </div>
@@ -713,7 +735,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
         {/* Custom Date Range Picker */}
         {timeRange === 'custom' && (
             <div className="flex flex-col sm:flex-row items-center justify-end gap-3 bg-slate-900/50 p-3 rounded-lg border border-slate-700/50 animate-fade-in">
-                <span className="text-sm text-slate-400">Interval:</span>
+                <span className="text-sm text-slate-400">{t('Interval:')}</span>
                 <input 
                     type="date" 
                     value={startDate}
@@ -731,7 +753,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                     onClick={fetchHistory}
                     className="bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-medium px-4 py-1.5 rounded ml-2 transition-colors shadow-lg shadow-yellow-900/20"
                 >
-                    Apply
+                    {t('Apply')}
                 </button>
             </div>
         )}
@@ -749,23 +771,23 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                     <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/5 blur-[50px] rounded-full pointer-events-none"></div>
                         <h3 className="text-slate-400 text-sm font-medium mb-6 flex items-center gap-2">
-                            <PiggyBank size={16} className="text-green-400"/> Financial Impact ({timeRange})
+                            <PiggyBank size={16} className="text-green-400"/> {t('Financial Impact')} ({getRangeLabel(timeRange)})
                         </h3>
                         <div className="flex flex-col gap-6 relative z-10">
                             <div>
-                                <span className="text-slate-400 text-xs uppercase tracking-wider font-bold">Total Benefit</span>
+                                <span className="text-slate-400 text-xs uppercase tracking-wider font-bold">{t('Total Benefit')}</span>
                                 <div className="text-4xl font-bold text-green-400 tracking-tight">
                                     {currencySymbol} {(history.stats.costSaved + history.stats.earnings).toFixed(2)}
                                 </div>
-                                <div className="text-xs text-slate-400 mt-1">Saved Grid Costs + Feed-in Reward</div>
+                                <div className="text-xs text-slate-400 mt-1">{t('Saved Grid Costs + Feed-in Reward')}</div>
                             </div>
                             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-700">
                                 <div>
-                                    <span className="text-slate-400 text-xs block mb-0.5">Direct Savings</span>
+                                    <span className="text-slate-400 text-xs block mb-0.5">{t('Direct Savings')}</span>
                                     <div className="text-lg font-semibold text-slate-200">{currencySymbol} {history.stats.costSaved.toFixed(2)}</div>
                                 </div>
                                 <div>
-                                    <span className="text-slate-400 text-xs block mb-0.5">Export Earnings</span>
+                                    <span className="text-slate-400 text-xs block mb-0.5">{t('Export Earnings')}</span>
                                     <div className="text-lg font-semibold text-slate-200">{currencySymbol} {history.stats.earnings.toFixed(2)}</div>
                                 </div>
                             </div>
@@ -776,7 +798,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                     <div className="grid grid-cols-2 gap-4">
                         <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-lg">
                             <div className="flex items-center gap-2 mb-2 text-emerald-400">
-                                <Leaf size={16} /> <span className="text-xs font-bold uppercase">CO₂ Saved</span>
+                                <Leaf size={16} /> <span className="text-xs font-bold uppercase">{t('CO₂ Saved')}</span>
                             </div>
                             <div className="text-2xl font-bold text-slate-100">
                                 {calculateCO2(history.stats.production)} <span className="text-sm font-normal text-slate-400">kg</span>
@@ -784,7 +806,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                         </div>
                         <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-lg">
                             <div className="flex items-center gap-2 mb-2 text-yellow-400">
-                                <TrendingUp size={16} /> <span className="text-xs font-bold uppercase">Peak PV</span>
+                                <TrendingUp size={16} /> <span className="text-xs font-bold uppercase">{t('Peak PV')}</span>
                             </div>
                             <div className="text-2xl font-bold text-slate-100">
                                 {(peaks.maxPv / 1000).toFixed(1)} <span className="text-sm font-normal text-slate-400">kW</span>
@@ -795,23 +817,23 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                     {/* Detailed Meters */}
                     <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
                         <h3 className="text-slate-400 text-sm font-medium mb-6 flex items-center gap-2">
-                             <BarChart3 size={16} /> Energy Totals
+                                <BarChart3 size={16} /> {t('Energy Totals')}
                         </h3>
                         <div className="grid grid-cols-2 gap-y-6 gap-x-4">
                             <div>
-                                <div className="text-xs text-slate-400 mb-1 flex items-center gap-1"><Sun size={12}/> Solar Yield</div>
+                                <div className="text-xs text-slate-400 mb-1 flex items-center gap-1"><Sun size={12}/> {t('Solar Yield')}</div>
                                 <div className="text-xl font-bold text-yellow-400">{history.stats.production.toFixed(2)} <span className="text-xs text-slate-400">kWh</span></div>
                             </div>
                             <div>
-                                <div className="text-xs text-slate-400 mb-1 flex items-center gap-1"><Home size={12}/> Consumption</div>
+                                <div className="text-xs text-slate-400 mb-1 flex items-center gap-1"><Home size={12}/> {t('Consumption')}</div>
                                 <div className="text-xl font-bold text-blue-400">{history.stats.consumption.toFixed(2)} <span className="text-xs text-slate-400">kWh</span></div>
                             </div>
                             <div>
-                                <div className="text-xs text-slate-400 mb-1 flex items-center gap-1"><Zap size={12}/> Imported</div>
+                                <div className="text-xs text-slate-400 mb-1 flex items-center gap-1"><Zap size={12}/> {t('Imported')}</div>
                                 <div className="text-xl font-bold text-red-400">{history.stats.imported.toFixed(2)} <span className="text-xs text-slate-400">kWh</span></div>
                             </div>
                             <div>
-                                <div className="text-xs text-slate-400 mb-1 flex items-center gap-1"><Zap size={12}/> Exported</div>
+                                <div className="text-xs text-slate-400 mb-1 flex items-center gap-1"><Zap size={12}/> {t('Exported')}</div>
                                 <div className="text-xl font-bold text-green-400">{history.stats.exported.toFixed(2)} <span className="text-xs text-slate-400">kWh</span></div>
                             </div>
                         </div>
@@ -831,10 +853,10 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                     {/* Main Power Chart */}
                     <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[400px] flex flex-col relative overflow-hidden group">
                         <div className="absolute top-0 right-0 p-6 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <span className="text-xs text-slate-600">Max Load: {(peaks.maxLoad).toFixed(0)}W</span>
+                            <span className="text-xs text-slate-600">{t('Max Load')}: {(peaks.maxLoad).toFixed(0)}W</span>
                         </div>
                         <h3 className="text-slate-400 text-sm font-medium mb-6 flex items-center gap-2 shrink-0">
-                             <Zap size={16}/> Power History
+                                <Zap size={16}/> {t('Power History')}
                         </h3>
                         <div className="flex-1 min-h-0 w-full">
                             <EnergyChart history={history.chart} timeRange={timeRange} />
@@ -844,7 +866,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                     {/* Battery SOC Chart - Restored to Full Width */}
                     <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[300px] flex flex-col">
                         <h3 className="text-slate-400 text-sm font-medium mb-6 flex items-center gap-2 shrink-0">
-                            <Battery size={16}/> Battery State of Charge
+                            <Battery size={16}/> {t('Battery State of Charge')}
                         </h3>
                         <div className="flex-1 min-h-0 w-full">
                             <BatteryChart history={history.chart} timeRange={timeRange} />
@@ -854,7 +876,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                     {/* Efficiency Chart */}
                     <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[250px] flex flex-col">
                         <h3 className="text-slate-400 text-sm font-medium mb-6 flex items-center gap-2 shrink-0">
-                            <BarChart3 size={16}/> Efficiency History
+                            <BarChart3 size={16}/> {t('Efficiency History')}
                         </h3>
                         <div className="flex-1 min-h-0 w-full">
                             <EfficiencyChart history={history.chart} timeRange={timeRange} />
@@ -864,7 +886,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                     {/* Battery Temperature Chart */}
                     <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[250px] flex flex-col">
                         <h3 className="text-slate-400 text-sm font-medium mb-6 flex items-center gap-2 shrink-0">
-                            <Thermometer size={16}/> Battery Temperature History
+                            <Thermometer size={16}/> {t('Battery Temperature History')}
                         </h3>
                         <div className="flex-1 min-h-0 w-full">
                             <BatteryTemperatureChart history={history.chart} timeRange={timeRange} />

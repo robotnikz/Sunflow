@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { BatteryCharging, Zap, Clock, Battery, ArrowDown, ArrowUp, Thermometer } from 'lucide-react';
+import { useI18n } from '../services/i18n';
 
 interface BatteryWidgetProps {
   soc: number;
@@ -14,6 +15,7 @@ interface BatteryWidgetProps {
 }
 
 const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state, capacity = 10, reserveSocPct = 0, temperatures }) => {
+    const { t } = useI18n();
   // --- CONFIG ---
   const radius = 80;
   const stroke = 12;
@@ -75,20 +77,22 @@ const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state, capaci
 
   const timeString = calculateTimeRemaining();
 
+    const stateLabel = state === 'idle' ? t('Standby') : state === 'charging' ? t('Charging') : t('Discharging');
+
   return (
     <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-xl flex flex-col items-center justify-between h-full relative overflow-hidden">
         
         {/* Header */}
         <div className="w-full flex justify-between items-start z-10 mb-2">
              <h3 className="text-slate-400 text-sm font-medium flex items-center gap-2">
-                <Battery size={16} /> Storage
+                     <Battery size={16} /> {t('Storage')}
             </h3>
              <div className={`text-xs font-bold uppercase px-2 py-0.5 rounded border ${
                  isCharging ? 'bg-emerald-900/30 border-emerald-500/30 text-emerald-400' :
                  isDischarging ? 'bg-amber-900/30 border-amber-500/30 text-amber-400' :
                  'bg-slate-700/30 border-slate-600 text-slate-400'
              }`}>
-                 {state === 'idle' ? 'Standby' : state}
+                 {stateLabel}
              </div>
         </div>
 
@@ -162,7 +166,7 @@ const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state, capaci
                         {powerKw.toFixed(2)} kW
                     </div>
                 ) : (
-                    <span className="text-slate-600 text-xs mt-2 font-medium">IDLE</span>
+                    <span className="text-slate-600 text-xs mt-2 font-medium">{t('IDLE')}</span>
                 )}
             </div>
             
@@ -179,25 +183,25 @@ const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state, capaci
                     <div className="flex items-center gap-2">
                         <Clock size={12} />
                         <span>
-                            {isCharging ? 'Full in' : 'Empty in'} <span className="text-slate-200 font-bold">{timeString}</span>
+                            {isCharging ? t('Full in') : t('Empty in')} <span className="text-slate-200 font-bold">{timeString}</span>
                         </span>
                     </div>
                 </div>
             )}
             {!timeString && soc < 100 && soc > 0 && (
-                <div className="text-xs text-slate-400">Calculated based on current load</div>
+                <div className="text-xs text-slate-400">{t('Calculated based on current load')}</div>
             )}
         </div>
 
         {(batteryTemp !== null || (isDischarging && reserve > 0)) && (
             <div className="w-full mt-1 flex items-center justify-center gap-2 text-[10px] text-slate-400 flex-wrap">
                 {isDischarging && reserve > 0 && (
-                    <span className="text-slate-500">incl. {Math.round(reserve)}% reserve</span>
+                    <span className="text-slate-500">{t('incl.')} {Math.round(reserve)}% {t('reserve')}</span>
                 )}
                 {batteryTemp !== null && (
                     <div className="flex items-center gap-1 bg-slate-900/50 px-2 py-1 rounded-full border border-slate-700/50">
                         <Thermometer size={11} className="text-emerald-400" />
-                        <span>Battery: <span className="text-slate-200">{batteryTemp !== null ? `${batteryTemp.toFixed(1)}°C` : 'n/a'}</span></span>
+                        <span>{t('Battery')}: <span className="text-slate-200">{batteryTemp !== null ? `${batteryTemp.toFixed(1)}°C` : t('n/a')}</span></span>
                     </div>
                 )}
             </div>
@@ -205,7 +209,7 @@ const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state, capaci
 
         {batteryTemp === null && (
             <div className="w-full mt-2 text-center text-[10px] text-slate-500">
-                Battery temperature unavailable
+                {t('Battery temperature unavailable')}
             </div>
         )}
 

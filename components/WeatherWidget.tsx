@@ -3,6 +3,7 @@ import React from 'react';
 import { Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Loader2, Sun, MapPinOff, SunMedium, AlertOctagon, Settings2 } from 'lucide-react';
 import { SystemConfig, ForecastData } from '../types';
 import { WeatherData } from './Dashboard';
+import { useI18n } from '../services/i18n';
 
 interface WeatherWidgetProps {
   config: SystemConfig;
@@ -12,6 +13,7 @@ interface WeatherWidgetProps {
 }
 
 const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config, forecast, weatherData, solcastRateLimited }) => {
+   const { t } = useI18n();
 
   // Calculate Total Daily Yield
   // STRICT LOGIC: If Solcast Key -> Use Solcast. Else -> OpenMeteo is NOT used for yield.
@@ -38,7 +40,7 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config, forecast, weather
     return (
         <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-xl flex flex-col items-center justify-center text-center h-full min-h-[220px]">
                   <MapPinOff className="text-slate-400 mb-2" size={32}/>
-            <p className="text-slate-400 text-sm">Add location in settings to see Weather & Solar Forecast.</p>
+                  <p className="text-slate-400 text-sm">{t('Add location in settings to see Weather & Solar Forecast.')}</p>
         </div>
     );
   }
@@ -55,12 +57,12 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config, forecast, weather
   };
 
   const getWeatherLabel = (code: number) => {
-    if (code === 0) return "Sunny";
-    if (code <= 3) return "Partly Cloudy";
-    if (code <= 48) return "Foggy";
-    if (code <= 67) return "Rainy";
-    if (code <= 77) return "Snowy";
-    return "Stormy";
+      if (code === 0) return t('Sunny');
+      if (code <= 3) return t('Partly Cloudy');
+      if (code <= 48) return t('Foggy');
+      if (code <= 67) return t('Rainy');
+      if (code <= 77) return t('Snowy');
+      return t('Stormy');
   };
 
   return (
@@ -70,7 +72,7 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config, forecast, weather
 
        <div className="flex justify-between items-start relative z-10">
           <div>
-             <h3 className="text-slate-400 text-sm font-medium">Local Weather</h3>
+             <h3 className="text-slate-400 text-sm font-medium">{t('Local Weather')}</h3>
              {weatherData && (
                 <div className="mt-1 text-slate-400 text-xs">{getWeatherLabel(weatherData.current.weatherCode)}</div>
              )}
@@ -81,7 +83,7 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config, forecast, weather
              </div>
           ) : (
              <div className="flex items-center gap-2 text-slate-400 text-xs">
-                 <Loader2 className="animate-spin" size={14} /> Loading...
+                 <Loader2 className="animate-spin" size={14} /> {t('Loading...')}
              </div>
           )}
        </div>
@@ -92,11 +94,11 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config, forecast, weather
 
        <div className={`mt-2 bg-slate-900/50 rounded-xl p-3 border relative z-10 ${hasSolcastKey ? 'border-yellow-500/20 bg-yellow-900/10' : 'border-slate-700/50'}`}>
           <div className="flex justify-between items-center mb-1">
-             <span className="text-xs text-slate-400 uppercase font-bold">Total Forecast Today</span>
+             <span className="text-xs text-slate-400 uppercase font-bold">{t('Total Forecast Today')}</span>
              {hasSolcastKey ? (
                  <div className="flex items-center gap-1">
                      {solcastRateLimited && (
-                         <span title="Solcast Limit Reached">
+                      <span title={t('Solcast Limit Reached')}>
                             <AlertOctagon size={12} className="text-red-500 animate-pulse" />
                          </span>
                      )}
@@ -104,7 +106,7 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config, forecast, weather
                  </div>
              ) : (
                  // No key = No forecast provider active
-                <span className="text-xs text-slate-400 flex items-center gap-1">No Provider</span>
+               <span className="text-xs text-slate-400 flex items-center gap-1">{t('No Provider')}</span>
              )}
           </div>
           
@@ -116,13 +118,13 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config, forecast, weather
                 </div>
              ) : (
                 <div className="text-xs text-slate-400 italic">
-                    Loading...
+                    {t('Loading...')}
                  </div>
              )
           ) : (
              <div className="flex items-center gap-2 text-xs text-slate-400">
                 <Settings2 size={14} />
-                <span>Configure Solcast</span>
+                <span>{t('Configure Solcast')}</span>
              </div>
           )}
        </div>

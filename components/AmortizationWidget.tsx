@@ -2,6 +2,7 @@
 import React from 'react';
 import { RoiData } from '../types';
 import { TrendingUp, CalendarCheck, AlertCircle } from 'lucide-react';
+import { useI18n } from '../services/i18n';
 
 interface AmortizationWidgetProps {
   roiData: RoiData | null;
@@ -9,15 +10,16 @@ interface AmortizationWidgetProps {
 }
 
 const AmortizationWidget: React.FC<AmortizationWidgetProps> = ({ roiData, currency }) => {
+    const { t, locale } = useI18n();
   if (!roiData || roiData.totalInvested === 0) {
     return (
         <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg flex flex-col items-center justify-center min-h-[220px] text-center">
             <div className="p-3 bg-slate-700/50 rounded-full mb-3 text-slate-400">
                 <TrendingUp size={24} />
             </div>
-            <h3 className="text-slate-200 font-semibold">Amortization Tracker</h3>
+            <h3 className="text-slate-200 font-semibold">{t('Amortization Tracker')}</h3>
             <p className="text-sm text-slate-400 mt-2 max-w-xs">
-                Configure your system costs (Expenses) in settings to track your Return on Investment.
+                {t('Configure your system costs (Expenses) in settings to track your Return on Investment.')}
             </p>
         </div>
     );
@@ -42,11 +44,11 @@ const AmortizationWidget: React.FC<AmortizationWidgetProps> = ({ roiData, curren
         <div className="flex justify-between items-start mb-4">
             <h3 className="text-slate-400 text-sm font-medium flex items-center gap-2">
                 <TrendingUp size={16} className={isPaidOff ? 'text-emerald-400' : 'text-blue-400'}/>
-                Return on Investment
+                {t('Return on Investment')}
             </h3>
             {isPaidOff && (
                 <span className="px-2 py-0.5 rounded bg-emerald-900/50 border border-emerald-700/50 text-emerald-400 text-xs font-bold uppercase tracking-wider">
-                    Paid Off
+                    {t('Paid Off')}
                 </span>
             )}
         </div>
@@ -57,7 +59,7 @@ const AmortizationWidget: React.FC<AmortizationWidgetProps> = ({ roiData, curren
                 <span className={`text-4xl font-bold tracking-tight ${isPaidOff ? 'text-emerald-400' : 'text-slate-100'}`}>
                     {roiData.roiPercent.toFixed(1)}%
                 </span>
-                <span className="text-sm text-slate-400">recovered</span>
+                <span className="text-sm text-slate-400">{t('recovered')}</span>
             </div>
             
             {/* Progress Bar */}
@@ -70,8 +72,8 @@ const AmortizationWidget: React.FC<AmortizationWidgetProps> = ({ roiData, curren
                 <div className="absolute top-0 bottom-0 left-[100%] w-0.5 bg-white/20"></div>
             </div>
             <div className="flex justify-between text-xs text-slate-400 mt-2 font-medium">
-                <span>{symbol}{fmt(roiData.totalReturned)} returned</span>
-                <span>Invested to date: {symbol}{fmt(roiData.totalInvested)}</span>
+                <span>{symbol}{fmt(roiData.totalReturned)} {t('returned')}</span>
+                <span>{t('Invested to date')}: {symbol}{fmt(roiData.totalInvested)}</span>
             </div>
         </div>
 
@@ -83,7 +85,7 @@ const AmortizationWidget: React.FC<AmortizationWidgetProps> = ({ roiData, curren
                         <CalendarCheck size={20} />
                     </div>
                     <div>
-                        <div className="text-xs text-slate-400 uppercase font-bold">Net Profit</div>
+                        <div className="text-xs text-slate-400 uppercase font-bold">{t('Net Profit')}</div>
                         <div className="text-emerald-400 font-bold text-lg">
                             +{symbol}{fmt(roiData.netValue)}
                         </div>
@@ -96,13 +98,13 @@ const AmortizationWidget: React.FC<AmortizationWidgetProps> = ({ roiData, curren
                             <CalendarCheck size={20} />
                         </div>
                         <div>
-                            <div className="text-xs text-slate-400 uppercase font-bold">Estimated Break-even</div>
+                            <div className="text-xs text-slate-400 uppercase font-bold">{t('Estimated Break-even')}</div>
                             <div className="text-slate-200 font-bold">
-                                {breakEvenDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                                {breakEvenDate.toLocaleDateString(locale, { month: 'long', year: 'numeric' })}
                             </div>
                             {roiData.projectedBreakEvenCost && (
                                 <div className="text-[10px] text-slate-400 mt-1">
-                                    Total Cost at Break-even: <span className="font-mono text-slate-300 font-bold">{symbol}{fmt(roiData.projectedBreakEvenCost)}</span>
+                                    {t('Total Cost at Break-even')}: <span className="font-mono text-slate-300 font-bold">{symbol}{fmt(roiData.projectedBreakEvenCost)}</span>
                                 </div>
                             )}
                         </div>
@@ -111,7 +113,7 @@ const AmortizationWidget: React.FC<AmortizationWidgetProps> = ({ roiData, curren
             ) : (
                 <div className="flex items-center gap-3 opacity-60">
                     <AlertCircle size={20} className="text-slate-400" />
-                    <span className="text-xs text-slate-400">Need more data for forecast...</span>
+                    <span className="text-xs text-slate-400">{t('Need more data for forecast...')}</span>
                 </div>
             )}
         </div>

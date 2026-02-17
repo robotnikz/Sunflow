@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { useI18n } from '../services/i18n';
 
 interface StatusTimelineProps {
   history: Array<{
@@ -10,13 +11,14 @@ interface StatusTimelineProps {
 }
 
 const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
+  const { t, locale } = useI18n();
   // Render placeholder if no data, but component must be visible
   if (!history || history.length === 0) {
       return (
         <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg">
-           <h3 className="text-slate-200 text-lg font-semibold mb-4">Inverter Status</h3>
+           <h3 className="text-slate-200 text-lg font-semibold mb-4">{t('Inverter Status')}</h3>
            <div className="h-16 flex items-center justify-center text-slate-400 text-sm border border-dashed border-slate-700 rounded-lg">
-             Waiting for data logs...
+             {t('Waiting for data logs...')}
            </div>
         </div>
       );
@@ -30,21 +32,20 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
   const durationHours = (endTime - startTime) / (1000 * 60 * 60);
   
   // Title Logic based on duration
-  let timeframeLabel = 'Long Term';
-  if (durationHours <= 1.2) timeframeLabel = '1h'; // Tolerance for gaps
-  else if (durationHours <= 25) timeframeLabel = '24h';
-  else if (durationHours <= 180) timeframeLabel = '7 Days';
-  else if (durationHours <= 750) timeframeLabel = '30 Days';
+  let timeframeLabel = t('Long Term');
+  if (durationHours <= 1.2) timeframeLabel = t('1h'); // Tolerance for gaps
+  else if (durationHours <= 25) timeframeLabel = t('24h');
+  else if (durationHours <= 180) timeframeLabel = t('7 Days');
+  else if (durationHours <= 750) timeframeLabel = t('30 Days');
 
   const showDate = durationHours > 24;
 
   const formatTime = (ts: string) => {
     const d = new Date(ts);
     if (showDate) {
-         // dd.MM HH:mm
-         return `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:00`;
+         return d.toLocaleString(locale, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     }
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
   };
 
   // Helper to compress data into visual segments
@@ -85,7 +86,7 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
 
   const errorSegments = createSegments(
     (p) => p.status === 2 ? 'error' : 'ok',
-    (val) => val === 'error' ? 'Error' : 'Flawless',
+    (val) => val === 'error' ? t('Error') : t('Flawless'),
     (val) => val === 'error' ? 'bg-red-500/80' : 'bg-emerald-600/80'
   );
 
@@ -97,10 +98,10 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
         return 'running';
     },
     (val) => {
-        if (val === 'offline') return 'Offline';
-        if (val === 'idle') return 'Idle';
-        if (val === 'error') return 'Error';
-        return 'Running';
+      if (val === 'offline') return t('Offline');
+      if (val === 'idle') return t('Idle');
+      if (val === 'error') return t('Error');
+      return t('Running');
     },
     (val) => {
         if (val === 'offline') return 'bg-slate-600';
@@ -112,7 +113,7 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
 
   const batterySegments = createSegments(
     (p) => p.soc > 0 ? 'active' : 'idle',
-    (val) => val === 'active' ? 'Active' : 'Idle',
+    (val) => val === 'active' ? t('Active') : t('Idle'),
     (val) => val === 'active' ? 'bg-emerald-600/80' : 'bg-slate-700'
   );
 
@@ -144,12 +145,12 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
 
   return (
     <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg">
-      <h3 className="text-slate-200 text-lg font-semibold mb-6">Inverter Status ({timeframeLabel})</h3>
+      <h3 className="text-slate-200 text-lg font-semibold mb-6">{t('Inverter Status')} ({timeframeLabel})</h3>
       
       <div className="grid grid-cols-[80px_1fr] gap-y-4 gap-x-4 items-center">
-        <Row label="Errors" segments={errorSegments} />
-        <Row label="Status" segments={statusSegments} />
-        <Row label="Battery" segments={batterySegments} />
+        <Row label={t('Errors')} segments={errorSegments} />
+        <Row label={t('Status')} segments={statusSegments} />
+        <Row label={t('Battery')} segments={batterySegments} />
       </div>
 
       <div className="grid grid-cols-[80px_1fr] gap-x-4 mt-2">
@@ -164,19 +165,19 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
       <div className="flex gap-6 mt-6 justify-center border-t border-slate-700/50 pt-4 flex-wrap">
             <div className="flex items-center gap-2">
                 <div className="w-4 h-1 bg-emerald-600 rounded"></div>
-                <span className="text-xs text-slate-400">Running / OK</span>
+            <span className="text-xs text-slate-400">{t('Running / OK')}</span>
             </div>
             <div className="flex items-center gap-2">
                 <div className="w-4 h-1 bg-blue-900/60 rounded"></div>
-                <span className="text-xs text-slate-400">Standby / Idle</span>
+            <span className="text-xs text-slate-400">{t('Standby / Idle')}</span>
             </div>
             <div className="flex items-center gap-2">
                 <div className="w-4 h-1 bg-red-500 rounded"></div>
-                <span className="text-xs text-slate-400">Error</span>
+            <span className="text-xs text-slate-400">{t('Error')}</span>
             </div>
             <div className="flex items-center gap-2">
                 <div className="w-4 h-1 bg-slate-600 rounded"></div>
-                <span className="text-xs text-slate-400">Offline</span>
+            <span className="text-xs text-slate-400">{t('Offline')}</span>
             </div>
         </div>
     </div>

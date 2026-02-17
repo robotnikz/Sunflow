@@ -3,6 +3,7 @@ import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { BatteryHealthData } from '../types';
 import { Activity, Battery, Zap, AlertTriangle } from 'lucide-react';
+import { useI18n } from '../services/i18n';
 
 interface BatteryHealthWidgetProps {
   data: BatteryHealthData | null;
@@ -10,15 +11,16 @@ interface BatteryHealthWidgetProps {
 }
 
 const BatteryHealthWidget: React.FC<BatteryHealthWidgetProps> = ({ data, nominalCapacity }) => {
+    const { t, locale } = useI18n();
   if (!data || data.dataPoints.length === 0) {
     return (
         <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg flex flex-col items-center justify-center h-full text-center">
             <div className="p-3 bg-slate-700/50 rounded-full mb-3 text-slate-400">
                 <Activity size={24} />
             </div>
-            <h3 className="text-slate-200 font-semibold">Battery Health</h3>
+            <h3 className="text-slate-200 font-semibold">{t('Battery Health')}</h3>
             <p className="text-sm text-slate-400 mt-2 max-w-xs">
-                Not enough data yet. Requires full charge cycles to calculate SOH and efficiency.
+                {t('Not enough data yet. Requires full charge cycles to calculate SOH and efficiency.')}
             </p>
         </div>
     );
@@ -29,10 +31,10 @@ const BatteryHealthWidget: React.FC<BatteryHealthWidgetProps> = ({ data, nominal
   const latestSoh = data.latestCapacityEst > 0 ? (data.latestCapacityEst / nominalCapacity) * 100 : 0;
   
   let healthColor = 'text-emerald-400';
-  let healthText = 'Excellent';
-  if (latestSoh < 90) { healthColor = 'text-yellow-400'; healthText = 'Good'; }
-  if (latestSoh < 80) { healthColor = 'text-amber-500'; healthText = 'Degrading'; }
-  if (latestSoh < 70) { healthColor = 'text-red-500'; healthText = 'Poor'; }
+    let healthText = t('Excellent');
+    if (latestSoh < 90) { healthColor = 'text-yellow-400'; healthText = t('Good'); }
+    if (latestSoh < 80) { healthColor = 'text-amber-500'; healthText = t('Degrading'); }
+    if (latestSoh < 70) { healthColor = 'text-red-500'; healthText = t('Poor'); }
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload || !payload.length) return null;
@@ -55,9 +57,9 @@ const BatteryHealthWidget: React.FC<BatteryHealthWidgetProps> = ({ data, nominal
         <div className="flex justify-between items-start mb-4">
             <div>
                 <h3 className="text-slate-200 text-sm font-bold flex items-center gap-2">
-                    <Activity size={16} className="text-purple-400"/> Battery Health (SOH)
+                    <Activity size={16} className="text-purple-400"/> {t('Battery Health (SOH)')}
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">Based on {data.totalCycles} estimated cycles</p>
+                <p className="text-xs text-slate-400 mt-0.5">{t('Based on')} {data.totalCycles} {t('estimated cycles')}</p>
             </div>
             <div className={`px-2 py-0.5 rounded border bg-slate-900/50 flex items-center gap-1.5 ${healthColor} border-current opacity-80`}>
                 <Battery size={12} />
@@ -69,13 +71,13 @@ const BatteryHealthWidget: React.FC<BatteryHealthWidgetProps> = ({ data, nominal
         <div className="grid grid-cols-2 gap-3 mb-4">
             <div className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-700/50">
                 <div className="flex items-center gap-1.5 text-slate-400 text-xs font-bold uppercase mb-0.5">
-                    <Zap size={10} className="text-green-400"/> Efficiency
+                    <Zap size={10} className="text-green-400"/> {t('Efficiency')}
                 </div>
                 <div className="text-lg font-bold text-slate-100">{data.averageEfficiency}%</div>
             </div>
             <div className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-700/50">
                  <div className="flex items-center gap-1.5 text-slate-400 text-xs font-bold uppercase mb-0.5">
-                    <Battery size={10} className="text-purple-400"/> Est. Cap
+                    <Battery size={10} className="text-purple-400"/> {t('Est. Cap')}
                 </div>
                 <div className="text-lg font-bold text-slate-100">
                     {data.latestCapacityEst > 0 ? data.latestCapacityEst.toFixed(1) : '--'} <span className="text-xs font-normal text-slate-400">kWh</span>
@@ -102,7 +104,7 @@ const BatteryHealthWidget: React.FC<BatteryHealthWidgetProps> = ({ data, nominal
                         minTickGap={30}
                         tickFormatter={(val) => {
                             const d = new Date(val);
-                            return `${d.getDate()}.${d.getMonth()+1}`;
+                            return d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' });
                         }}
                     />
                     <YAxis yAxisId="left" stroke="#64748b" fontSize={9} tickLine={false} domain={[0, nominalCapacity * 1.2]} />
@@ -110,13 +112,13 @@ const BatteryHealthWidget: React.FC<BatteryHealthWidgetProps> = ({ data, nominal
                     
                     <Tooltip content={<CustomTooltip />} />
                     
-                    <ReferenceLine y={nominalCapacity} yAxisId="left" stroke="#64748b" strokeDasharray="3 3" label={{ value: 'Rated', position: 'insideTopLeft', fontSize: 9, fill: '#64748b' }} />
+                    <ReferenceLine y={nominalCapacity} yAxisId="left" stroke="#64748b" strokeDasharray="3 3" label={{ value: t('Rated'), position: 'insideTopLeft', fontSize: 9, fill: '#64748b' }} />
 
                     <Area 
                         yAxisId="left"
                         type="monotone" 
                         dataKey="estimatedCapacity" 
-                        name="Est. Capacity"
+                        name={t('Est. Capacity')}
                         unit=" kWh"
                         stroke="#A855F7" 
                         fill="url(#colorCap)" 
@@ -128,7 +130,7 @@ const BatteryHealthWidget: React.FC<BatteryHealthWidgetProps> = ({ data, nominal
                         yAxisId="right"
                         type="monotone" 
                         dataKey="efficiency" 
-                        name="Efficiency"
+                        name={t('Efficiency')}
                         unit="%"
                         stroke="#10B981" 
                         fill="none" 

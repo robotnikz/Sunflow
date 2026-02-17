@@ -1,6 +1,7 @@
 
 import React, { memo } from 'react';
 import { Sun, Home, Zap, Battery, ArrowDown, ArrowUp } from 'lucide-react';
+import { useI18n } from '../services/i18n';
 
 interface PowerFlowProps {
   power: {
@@ -13,6 +14,7 @@ interface PowerFlowProps {
 }
 
 const PowerFlow: React.FC<PowerFlowProps> = memo(({ power, soc }) => {
+  const { t } = useI18n();
   // Logic
   const isImporting = power.grid > 0;
   const isExporting = power.grid < 0;
@@ -140,7 +142,7 @@ const PowerFlow: React.FC<PowerFlowProps> = memo(({ power, soc }) => {
              <Sun className="text-yellow-500" size={36} fill={power.pv > 0 ? "currentColor" : "none"} fillOpacity={0.2} />
         </div>
         <div className="flex flex-col items-center gap-1 mb-1">
-             <span className="text-xs text-slate-400 font-medium tracking-wide">SOLAR</span>
+             <span className="text-xs text-slate-400 font-medium tracking-wide">{t('SOLAR')}</span>
              <span className="text-xl font-bold text-yellow-400 drop-shadow-md leading-none whitespace-nowrap">{Math.round(power.pv)} W</span>
         </div>
       </div>
@@ -155,7 +157,7 @@ const PowerFlow: React.FC<PowerFlowProps> = memo(({ power, soc }) => {
         </div>
         <div className="flex flex-col items-center gap-1 mt-1">
              <span className="text-xl font-bold text-blue-400 drop-shadow-md leading-none whitespace-nowrap">{Math.round(power.load)} W</span>
-             <span className="text-xs text-slate-400 font-medium tracking-wide">HOME LOAD</span>
+             <span className="text-xs text-slate-400 font-medium tracking-wide">{t('HOME LOAD')}</span>
         </div>
       </div>
 
@@ -170,7 +172,7 @@ const PowerFlow: React.FC<PowerFlowProps> = memo(({ power, soc }) => {
         <div className="flex flex-col items-center gap-1 w-full mt-1">
              <span className="text-xl font-bold text-purple-400 drop-shadow-md leading-none whitespace-nowrap">{Math.round(batPowerAbs)} W</span>
              <span className="text-xs text-slate-400 font-medium flex justify-center items-center gap-1">
-                {isCharging ? 'CHARGING' : isDischarging ? 'DRAINING' : 'IDLE'}
+               {isCharging ? t('CHARGING') : isDischarging ? t('DRAINING') : t('IDLE')}
              </span>
         </div>
       </div>
@@ -190,7 +192,7 @@ const PowerFlow: React.FC<PowerFlowProps> = memo(({ power, soc }) => {
              <span className={`text-xs font-medium flex justify-center items-center gap-1 ${isImporting ? 'text-red-500' : isExporting ? 'text-green-500' : 'text-slate-500'}`}>
                 {isImporting && <ArrowDown size={12}/>}
                 {isExporting && <ArrowUp size={12}/>}
-                {isImporting ? 'GRID' : isExporting ? 'GRID' : 'GRID'}
+               {t('GRID')}
              </span>
         </div>
       </div>
