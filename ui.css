@@ -5,6 +5,10 @@
   --sf-scroll-thumb: #475569;
   --sf-scroll-thumb-hover: #64748b;
 
+  --sf-flow-hub-fill: #1e293b;   /* slate-800 */
+  --sf-flow-hub-stroke: #64748b; /* slate-500 */
+  --sf-flow-hub-pulse: #94a3b8;  /* slate-400 */
+
   --sf-chart-grid: rgba(148, 163, 184, 0.20); /* slate-400 */
   --sf-chart-axis: #94a3b8; /* slate-400 */
   --sf-chart-axis-strong: #64748b; /* slate-500 */
@@ -18,6 +22,10 @@ html[data-theme='light'] {
   --sf-scroll-track: #e2e8f0; /* slate-200 */
   --sf-scroll-thumb: #94a3b8; /* slate-400 */
   --sf-scroll-thumb-hover: #64748b; /* slate-500 */
+
+  --sf-flow-hub-fill: #ffffff;
+  --sf-flow-hub-stroke: #cbd5e1; /* slate-300 */
+  --sf-flow-hub-pulse: #475569;  /* slate-600 */
 
   --sf-chart-grid: rgba(15, 23, 42, 0.10);
   --sf-chart-axis: #475569; /* slate-600 */
@@ -59,6 +67,22 @@ html[data-theme='light'] .bg-slate-950 { background-color: rgba(15, 23, 42, 0.04
 html[data-theme='light'] .bg-slate-950\/40 { background-color: rgba(15, 23, 42, 0.06) !important; }
 
 html[data-theme='light'] .bg-white\/20 { background-color: rgba(15, 23, 42, 0.06) !important; }
+
+/* Hover variants: Tailwind encodes these as .hover\:bg-...:hover etc. */
+html[data-theme='light'] .hover\:bg-slate-900:hover { background-color: #f8fafc !important; }
+html[data-theme='light'] .hover\:bg-slate-800:hover { background-color: #f1f5f9 !important; }
+html[data-theme='light'] .hover\:bg-slate-700:hover { background-color: #e2e8f0 !important; }
+
+html[data-theme='light'] .hover\:bg-slate-900\/80:hover { background-color: rgba(248, 250, 252, 0.80) !important; }
+html[data-theme='light'] .hover\:bg-slate-900\/60:hover { background-color: rgba(248, 250, 252, 0.60) !important; }
+html[data-theme='light'] .hover\:bg-slate-900\/50:hover { background-color: rgba(248, 250, 252, 0.50) !important; }
+html[data-theme='light'] .hover\:bg-slate-900\/40:hover { background-color: rgba(248, 250, 252, 0.40) !important; }
+
+html[data-theme='light'] .hover\:bg-slate-800\/50:hover { background-color: rgba(241, 245, 249, 0.50) !important; }
+html[data-theme='light'] .hover\:bg-slate-800\/60:hover { background-color: rgba(241, 245, 249, 0.60) !important; }
+html[data-theme='light'] .hover\:bg-slate-800\/40:hover { background-color: rgba(241, 245, 249, 0.40) !important; }
+
+html[data-theme='light'] .hover\:text-white:hover { color: #0f172a !important; }
 
 /*
   Keep `text-white` truly white for colored accents (e.g. blue/indigo buttons).

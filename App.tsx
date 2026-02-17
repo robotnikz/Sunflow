@@ -145,16 +145,16 @@ const App: React.FC = () => {
               
               <button 
                 onClick={() => fetchData()}
-                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
-                title="Refresh Data"
+                className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-full transition-colors"
+                aria-label="Refresh Data"
               >
                 <RefreshCw size={20} />
               </button>
               
               <button 
                 onClick={() => openSettings()}
-                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
-                title="Settings"
+                className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-full transition-colors"
+                aria-label="Settings"
               >
                 <Settings size={20} />
               </button>
