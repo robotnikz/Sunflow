@@ -1,5 +1,1 @@
 blank_issues_enabled: false
-contact_links:
-  - name: "Report a security vulnerability"
-    url: "https://github.com/robotnikz/Sunflow/security/advisories"
-    about: "Please report security issues via GitHub Security Advisories (do not open a public issue)."
