@@ -1,0 +1,68 @@
+name: "Feature Request"
+description: "Suggest an idea or improvement"
+title: "[Feature]: "
+labels:
+  - "enhancement"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea!
+
+        **Public repo note:** Please avoid posting secrets or sensitive installation details.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: "What problem are you trying to solve? What’s painful today?"
+      placeholder: "Right now, I can’t …"
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: "What would you like to happen?"
+      placeholder: "Add … so that …"
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: "Any workarounds or other approaches you’ve tried?"
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context / screenshots / examples
+      description: "Mockups, screenshots, links, or sample data (redacted) help a lot."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - Small (UI polish / minor behavior)
+        - Medium (new widget / new chart / new endpoint)
+        - Large (new subsystem / major UX change)
+        - Not sure
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: "I searched existing issues to avoid duplicates."
+          required: true
+        - label: "I’m not including secrets or sensitive data in this request."
+          required: true

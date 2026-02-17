@@ -1,0 +1,114 @@
+name: "Bug Report"
+description: "Report something that isn’t working"
+title: "[Bug]: "
+labels:
+  - "bug"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug.
+
+        **Public repo note:** Please do **not** include secrets (tokens, webhook URLs, IPs you don’t want public, etc.). Redact where needed.
+
+        **Security issues:** Please don’t open a public issue for vulnerabilities. Use **Security Advisories** instead:
+        https://github.com/robotnikz/Sunflow/security/advisories
+
+  - type: input
+    id: version
+    attributes:
+      label: SunFlow version / image tag
+      description: "e.g. ghcr.io/robotnikz/sunflow:1.2.3 or :latest (include commit hash if you built locally)"
+      placeholder: "ghcr.io/robotnikz/sunflow:latest"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How are you running SunFlow?
+      options:
+        - Docker Compose
+        - Docker CLI (docker run)
+        - Local dev (npm run dev)
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: "A clear and concise description of the bug."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: "Numbered steps are easiest to follow."
+      placeholder: |
+        1. Go to …
+        2. Click …
+        3. See error …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior / error
+      description: "Include the exact error message if you have one."
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: |
+        Paste relevant logs (redacted) or attach screenshots.
+        Helpful sources:
+        - Docker logs: `docker logs sunflow`
+        - Browser console (DevTools)
+      render: shell
+    validations:
+      required: false
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: "OS + browser (and reverse proxy if relevant)"
+      placeholder: "Windows 11 / Chrome 121 (no proxy)"
+    validations:
+      required: false
+
+  - type: input
+    id: inverter
+    attributes:
+      label: Inverter / setup
+      description: "Model + whether Solar API is enabled (e.g. Gen24 Symo/Primo)."
+      placeholder: "Fronius Gen24 Symo, Solar API enabled"
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: "I searched existing issues to avoid duplicates."
+          required: true
+        - label: "I’m not including secrets or sensitive data in this report."
+          required: true
+        - label: "I’m running the latest release (or I can reproduce on latest)."
+          required: false
