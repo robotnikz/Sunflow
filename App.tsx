@@ -91,8 +91,8 @@ const App: React.FC = () => {
   const resolvedTheme = useMemo(() => resolveTheme(themeMode), [themeMode]);
 
   const themeUi = useMemo(() => {
-    if (resolvedTheme === 'dark') return { label: 'Dark', icon: <Moon size={16} /> };
-    return { label: 'Light', icon: <Sun size={16} /> };
+    if (resolvedTheme === 'dark') return { label: 'Dark', icon: <Moon size={20} /> };
+    return { label: 'Light', icon: <Sun size={20} /> };
   }, [resolvedTheme]);
 
   const toggleTheme = () => {
@@ -167,11 +167,10 @@ const App: React.FC = () => {
               <button
                 type="button"
                 onClick={toggleTheme}
-                className="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-full border border-slate-700 transition-colors"
+                className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-full transition-colors"
                 aria-label={`Theme: ${themeUi.label}. Click to switch.`}
               >
                 {themeUi.icon}
-                <span className="text-xs font-bold tracking-wide">{themeUi.label}</span>
               </button>
               
               <button 
