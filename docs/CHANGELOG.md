@@ -1,3 +1,12 @@
+# [1.17.0](https://github.com/robotnikz/Sunflow/compare/v1.16.0...v1.17.0) (2026-02-17)
+
+
+### Features
+
+* **i18n:** add language mode and translations ([735a051](https://github.com/robotnikz/Sunflow/commit/735a0516de5fed1c2b566dad7bd7ae668a30f06c))
+* **i18n:** localize charts and toaster ([3946227](https://github.com/robotnikz/Sunflow/commit/394622733fc4d6b1d8a4f1d5d2f7905c1efcbd58))
+* **i18n:** translate core dashboard widgets ([7fd5750](https://github.com/robotnikz/Sunflow/commit/7fd5750738c682af966cf8f71ee8ba2239445aae))
+
 # [1.16.0](https://github.com/robotnikz/Sunflow/compare/v1.15.0...v1.16.0) (2026-02-17)
 
 
