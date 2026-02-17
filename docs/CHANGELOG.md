@@ -1,3 +1,15 @@
+# [1.15.0](https://github.com/robotnikz/Sunflow/compare/v1.14.0...v1.15.0) (2026-02-17)
+
+
+### Bug Fixes
+
+* **battery-widget:** treat null battery temp as unavailable ([db31cd0](https://github.com/robotnikz/Sunflow/commit/db31cd0020661760d127b5deedae58c54653f8d0))
+
+
+### Features
+
+* **temperature:** keep battery temp only and add historical chart ([6595e92](https://github.com/robotnikz/Sunflow/commit/6595e9237050ff6d67daf846f9a4d3f68c59de95))
+
 # [1.14.0](https://github.com/robotnikz/Sunflow/compare/v1.13.8...v1.14.0) (2026-02-16)
 
 
