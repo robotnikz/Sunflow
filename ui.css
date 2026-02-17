@@ -137,9 +137,30 @@ html[data-theme='light'] .bg-white { background-color: #334155 !important; }
 html[data-theme='light'] .text-slate-100 { color: #0f172a !important; }
 html[data-theme='light'] .text-slate-200 { color: #111827 !important; }
 html[data-theme='light'] .text-slate-300 { color: #334155 !important; }
-html[data-theme='light'] .text-slate-400 { color: #475569 !important; }
-html[data-theme='light'] .text-slate-500 { color: #64748b !important; }
+html[data-theme='light'] .text-slate-400 { color: #334155 !important; }
+html[data-theme='light'] .text-slate-500 { color: #475569 !important; }
 html[data-theme='light'] .text-slate-600 { color: #64748b !important; }
+
+/* Make yellow accent consistent/readable in light mode */
+html[data-theme='light'] .text-yellow-200,
+html[data-theme='light'] .text-yellow-300,
+html[data-theme='light'] .text-yellow-400 { color: rgb(234, 179, 8) !important; }
+html[data-theme='light'] .fill-yellow-400 { fill: rgb(234, 179, 8) !important; }
+
+/* Darker red accent + readable red callouts in light mode */
+html[data-theme='light'] .text-red-200,
+html[data-theme='light'] .text-red-300,
+html[data-theme='light'] .text-red-400,
+html[data-theme='light'] .text-red-500 { color: #b91c1c !important; }
+
+html[data-theme='light'] .bg-red-900\/10 { background-color: rgba(239, 68, 68, 0.08) !important; }
+html[data-theme='light'] .bg-red-900\/30 { background-color: rgba(239, 68, 68, 0.14) !important; }
+html[data-theme='light'] .bg-red-900\/50 { background-color: rgba(239, 68, 68, 0.18) !important; }
+
+html[data-theme='light'] .border-red-900\/30 { border-color: rgba(185, 28, 28, 0.30) !important; }
+html[data-theme='light'] .border-red-800\/50 { border-color: rgba(185, 28, 28, 0.35) !important; }
+html[data-theme='light'] .border-red-700\/40 { border-color: rgba(185, 28, 28, 0.30) !important; }
+html[data-theme='light'] .border-red-700 { border-color: rgba(185, 28, 28, 0.35) !important; }
 
 html[data-theme='light'] .border-slate-900 { border-color: #cbd5e1 !important; }
 html[data-theme='light'] .border-slate-800 { border-color: #e2e8f0 !important; }
