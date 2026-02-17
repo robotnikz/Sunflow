@@ -124,8 +124,8 @@ const PowerFlow: React.FC<PowerFlowProps> = memo(({ power, soc }) => {
         {/* --- NODES --- */}
 
         {/* CENTER HUB */}
-        <circle cx={cx} cy={cy} r="15" fill="#1e293b" stroke="#64748b" strokeWidth="2" />
-        <circle cx={cx} cy={cy} r="6" fill="#94a3b8" className="animate-pulse" />
+        <circle cx={cx} cy={cy} r="15" fill="var(--sf-flow-hub-fill)" stroke="var(--sf-flow-hub-stroke)" strokeWidth="2" />
+        <circle cx={cx} cy={cy} r="6" fill="var(--sf-flow-hub-pulse)" className="animate-pulse" />
 
       </svg>
 

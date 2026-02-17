@@ -6,6 +6,11 @@ import { getTariffs, addTariff, deleteTariff, getExpenses, addExpense, deleteExp
 import { ICON_MAP } from './SmartRecommendations';
 import CsvImporter from './CsvImporter';
 import { useToast } from './Toaster';
+import {
+    getThemeMode as loadThemeMode,
+    setThemeMode as saveThemeMode,
+    type ThemeMode,
+} from '../services/uiPreferences';
 
 interface SettingsModalProps {
   currentConfig: SystemConfig;
@@ -16,6 +21,8 @@ interface SettingsModalProps {
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, onClose, initialTab }) => {
     const { push } = useToast();
+
+    const [themeMode, setThemeMode] = useState<ThemeMode>(() => loadThemeMode());
   // Initialize state robustly immediately to prevent crashes on first render
   const [formData, setFormData] = useState<SystemConfig>(() => {
       // Define defaults
@@ -155,6 +162,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
         };
     });
   }, [currentConfig]);
+
+  // Keep selectors in sync if storage changes (multi-tab)
+  useEffect(() => {
+      const onStorage = (e: StorageEvent) => {
+          if (e.key === 'sunflow_theme_mode') setThemeMode(loadThemeMode());
+      };
+      window.addEventListener('storage', onStorage);
+      return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   // New Tariff State
   const [newTariff, setNewTariff] = useState<Partial<Tariff>>({ 
@@ -718,7 +734,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
         
         {/* Header */}
         <div className="p-6 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
-                    <h2 id="sunflow-settings-title" className="text-xl font-bold text-white">System Settings</h2>
+                                        <h2 id="sunflow-settings-title" className="text-xl font-bold text-white">System Settings</h2>
                     <button aria-label="Close settings" onClick={onClose} className="text-slate-400 hover:text-white">
             <X size={24} />
           </button>
@@ -966,6 +982,29 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                     </div>
                  </div>
               </div>
+
+              <div className="space-y-4 pt-4">
+                 <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2 flex items-center gap-2"><SunMedium size={18}/> Appearance</h3>
+                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-2">Theme</label>
+                        <select
+                            value={themeMode}
+                            onChange={(e) => {
+                                const next = e.target.value as ThemeMode;
+                                setThemeMode(next);
+                                saveThemeMode(next);
+                            }}
+                            className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
+                        >
+                            <option value="system">System</option>
+                            <option value="dark">Dark</option>
+                            <option value="light">Light</option>
+                        </select>
+                    </div>
+                 </div>
+              </div>
+
               <div className="space-y-4 pt-4">
                  <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2 flex items-center gap-2"><SunMedium size={18}/> Solcast API (Forecasting)</h3>
                  <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-700/50 mb-2">

@@ -1,11 +1,12 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Settings, RefreshCw, AlertCircle, Sun, Battery, Zap, Home, Download } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Settings, RefreshCw, AlertCircle, Sun, Battery, Zap, Home, Download, Moon } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import SettingsModal from './components/SettingsModal';
 import { useToast } from './components/Toaster';
 import { InverterData, SystemConfig, SystemInfo } from './types';
 import { getRealtimeData, getConfig, saveConfig, getSystemInfo } from './services/api';
+import { addThemeListener, getThemeMode, resolveTheme, setThemeMode, type ThemeMode } from './services/uiPreferences';
 
 const App: React.FC = () => {
   const { push } = useToast();
@@ -19,6 +20,8 @@ const App: React.FC = () => {
     'general' | 'notifications' | 'tariffs' | 'expenses' | 'appliances' | 'history' | 'import' | undefined
   >(undefined);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+
+  const [themeMode, setThemeModeState] = useState<ThemeMode>(() => getThemeMode());
   
   // Trigger to force dashboard refresh after settings change
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
@@ -79,6 +82,24 @@ const App: React.FC = () => {
     const interval = setInterval(fetchData, 5000); // Poll every 5 seconds
     return () => clearInterval(interval);
   }, [config, fetchData]);
+
+  useEffect(() => {
+    // Keep in sync with SettingsModal changes.
+    return addThemeListener(() => setThemeModeState(getThemeMode()));
+  }, []);
+
+  const resolvedTheme = useMemo(() => resolveTheme(themeMode), [themeMode]);
+
+  const themeUi = useMemo(() => {
+    if (resolvedTheme === 'dark') return { label: 'Dark', icon: <Moon size={20} /> };
+    return { label: 'Light', icon: <Sun size={20} /> };
+  }, [resolvedTheme]);
+
+  const toggleTheme = () => {
+    const next: ThemeMode = resolvedTheme === 'dark' ? 'light' : 'dark';
+    setThemeModeState(next);
+    setThemeMode(next);
+  };
 
   const handleSaveConfig = async (newConfig: SystemConfig) => {
     try {
@@ -142,19 +163,28 @@ const App: React.FC = () => {
                 <span>Last Updated</span>
                 <span className="text-slate-300">{lastUpdated.toLocaleTimeString()}</span>
               </div>
+
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-full transition-colors"
+                aria-label={`Theme: ${themeUi.label}. Click to switch.`}
+              >
+                {themeUi.icon}
+              </button>
               
               <button 
                 onClick={() => fetchData()}
-                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
-                title="Refresh Data"
+                className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-full transition-colors"
+                aria-label="Refresh Data"
               >
                 <RefreshCw size={20} />
               </button>
               
               <button 
                 onClick={() => openSettings()}
-                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
-                title="Settings"
+                className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-full transition-colors"
+                aria-label="Settings"
               >
                 <Settings size={20} />
               </button>

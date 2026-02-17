@@ -1,0 +1,209 @@
+:root {
+  --sf-bg: #0f172a; /* slate-900 */
+  --sf-fg: #e2e8f0; /* slate-200 */
+  --sf-scroll-track: #1e293b;
+  --sf-scroll-thumb: #475569;
+  --sf-scroll-thumb-hover: #64748b;
+
+  --sf-flow-hub-fill: #1e293b;   /* slate-800 */
+  --sf-flow-hub-stroke: #64748b; /* slate-500 */
+  --sf-flow-hub-pulse: #94a3b8;  /* slate-400 */
+
+  --sf-chart-grid: rgba(148, 163, 184, 0.20); /* slate-400 */
+  --sf-chart-axis: #94a3b8; /* slate-400 */
+  --sf-chart-axis-strong: #64748b; /* slate-500 */
+  --sf-tooltip-bg: rgba(15, 23, 42, 0.95);
+  --sf-tooltip-border: rgba(148, 163, 184, 0.25);
+}
+
+html[data-theme='light'] {
+  --sf-bg: #f8fafc; /* slate-50 */
+  --sf-fg: #0f172a; /* slate-900 */
+  --sf-scroll-track: #e2e8f0; /* slate-200 */
+  --sf-scroll-thumb: #94a3b8; /* slate-400 */
+  --sf-scroll-thumb-hover: #64748b; /* slate-500 */
+
+  --sf-flow-hub-fill: #ffffff;
+  --sf-flow-hub-stroke: #cbd5e1; /* slate-300 */
+  --sf-flow-hub-pulse: #475569;  /* slate-600 */
+
+  --sf-chart-grid: rgba(15, 23, 42, 0.10);
+  --sf-chart-axis: #475569; /* slate-600 */
+  --sf-chart-axis-strong: #334155; /* slate-700 */
+  --sf-tooltip-bg: rgba(255, 255, 255, 0.98);
+  --sf-tooltip-border: rgba(15, 23, 42, 0.12);
+}
+
+/*
+  SunFlow uses Tailwind utility classes with a dark palette as defaults.
+  To support a light theme without rewriting every component, we override the
+  most common slate background/text/border utilities when light mode is active.
+*/
+
+html[data-theme='light'] .bg-slate-900 { background-color: #f8fafc !important; }
+html[data-theme='light'] .bg-slate-900\/95 { background-color: rgba(248, 250, 252, 0.95) !important; }
+html[data-theme='light'] .bg-slate-900\/80 { background-color: rgba(248, 250, 252, 0.80) !important; }
+html[data-theme='light'] .bg-slate-900\/60 { background-color: rgba(248, 250, 252, 0.60) !important; }
+html[data-theme='light'] .bg-slate-900\/50 { background-color: rgba(248, 250, 252, 0.50) !important; }
+html[data-theme='light'] .bg-slate-900\/40 { background-color: rgba(248, 250, 252, 0.40) !important; }
+html[data-theme='light'] .bg-slate-900\/30 { background-color: rgba(248, 250, 252, 0.30) !important; }
+html[data-theme='light'] .bg-slate-900\/10 { background-color: rgba(248, 250, 252, 0.10) !important; }
+
+html[data-theme='light'] .bg-slate-800 { background-color: #ffffff !important; }
+html[data-theme='light'] .bg-slate-800\/80 { background-color: rgba(255, 255, 255, 0.80) !important; }
+html[data-theme='light'] .bg-slate-800\/60 { background-color: rgba(255, 255, 255, 0.60) !important; }
+html[data-theme='light'] .bg-slate-800\/50 { background-color: rgba(255, 255, 255, 0.50) !important; }
+html[data-theme='light'] .bg-slate-800\/40 { background-color: rgba(255, 255, 255, 0.40) !important; }
+
+html[data-theme='light'] .bg-slate-750 { background-color: #f1f5f9 !important; }
+html[data-theme='light'] .bg-slate-700 { background-color: #f1f5f9 !important; }
+html[data-theme='light'] .bg-slate-700\/50 { background-color: rgba(241, 245, 249, 0.50) !important; }
+html[data-theme='light'] .bg-slate-700\/60 { background-color: rgba(241, 245, 249, 0.60) !important; }
+html[data-theme='light'] .bg-slate-700\/40 { background-color: rgba(241, 245, 249, 0.40) !important; }
+
+html[data-theme='light'] .bg-slate-600 { background-color: #e2e8f0 !important; }
+
+html[data-theme='light'] .bg-slate-950 { background-color: rgba(15, 23, 42, 0.04) !important; }
+html[data-theme='light'] .bg-slate-950\/40 { background-color: rgba(15, 23, 42, 0.06) !important; }
+
+html[data-theme='light'] .bg-white\/20 { background-color: rgba(15, 23, 42, 0.06) !important; }
+
+/* Hover variants: Tailwind encodes these as .hover\:bg-...:hover etc. */
+html[data-theme='light'] .hover\:bg-slate-900:hover { background-color: #f8fafc !important; }
+html[data-theme='light'] .hover\:bg-slate-800:hover { background-color: #f1f5f9 !important; }
+html[data-theme='light'] .hover\:bg-slate-700:hover { background-color: #e2e8f0 !important; }
+
+html[data-theme='light'] .hover\:bg-slate-900\/80:hover { background-color: rgba(248, 250, 252, 0.80) !important; }
+html[data-theme='light'] .hover\:bg-slate-900\/60:hover { background-color: rgba(248, 250, 252, 0.60) !important; }
+html[data-theme='light'] .hover\:bg-slate-900\/50:hover { background-color: rgba(248, 250, 252, 0.50) !important; }
+html[data-theme='light'] .hover\:bg-slate-900\/40:hover { background-color: rgba(248, 250, 252, 0.40) !important; }
+
+html[data-theme='light'] .hover\:bg-slate-800\/50:hover { background-color: rgba(241, 245, 249, 0.50) !important; }
+html[data-theme='light'] .hover\:bg-slate-800\/60:hover { background-color: rgba(241, 245, 249, 0.60) !important; }
+html[data-theme='light'] .hover\:bg-slate-800\/40:hover { background-color: rgba(241, 245, 249, 0.40) !important; }
+
+html[data-theme='light'] .hover\:text-white:hover { color: #0f172a !important; }
+
+/*
+  Keep `text-white` truly white for colored accents (e.g. blue/indigo buttons).
+  Most places where we want dark text in light theme are inside remapped slate panels,
+  so scope the override to those backgrounds.
+*/
+html[data-theme='light'] .bg-slate-900 .text-white,
+html[data-theme='light'] .bg-slate-900.text-white,
+html[data-theme='light'] .bg-slate-900\/95 .text-white,
+html[data-theme='light'] .bg-slate-900\/95.text-white,
+html[data-theme='light'] .bg-slate-900\/80 .text-white,
+html[data-theme='light'] .bg-slate-900\/80.text-white,
+html[data-theme='light'] .bg-slate-900\/60 .text-white,
+html[data-theme='light'] .bg-slate-900\/60.text-white,
+html[data-theme='light'] .bg-slate-900\/50 .text-white,
+html[data-theme='light'] .bg-slate-900\/50.text-white,
+html[data-theme='light'] .bg-slate-900\/40 .text-white,
+html[data-theme='light'] .bg-slate-900\/40.text-white,
+html[data-theme='light'] .bg-slate-900\/30 .text-white,
+html[data-theme='light'] .bg-slate-900\/30.text-white,
+html[data-theme='light'] .bg-slate-900\/10 .text-white,
+html[data-theme='light'] .bg-slate-900\/10.text-white,
+html[data-theme='light'] .bg-slate-800 .text-white,
+html[data-theme='light'] .bg-slate-800.text-white,
+html[data-theme='light'] .bg-slate-800\/80 .text-white,
+html[data-theme='light'] .bg-slate-800\/80.text-white,
+html[data-theme='light'] .bg-slate-800\/60 .text-white,
+html[data-theme='light'] .bg-slate-800\/60.text-white,
+html[data-theme='light'] .bg-slate-800\/50 .text-white,
+html[data-theme='light'] .bg-slate-800\/50.text-white,
+html[data-theme='light'] .bg-slate-800\/40 .text-white,
+html[data-theme='light'] .bg-slate-800\/40.text-white,
+html[data-theme='light'] .bg-slate-750 .text-white,
+html[data-theme='light'] .bg-slate-750.text-white,
+html[data-theme='light'] .bg-slate-700 .text-white,
+html[data-theme='light'] .bg-slate-700.text-white,
+html[data-theme='light'] .bg-slate-700\/60 .text-white,
+html[data-theme='light'] .bg-slate-700\/60.text-white,
+html[data-theme='light'] .bg-slate-700\/50 .text-white,
+html[data-theme='light'] .bg-slate-700\/50.text-white,
+html[data-theme='light'] .bg-slate-700\/40 .text-white,
+html[data-theme='light'] .bg-slate-700\/40.text-white,
+html[data-theme='light'] .bg-slate-600 .text-white,
+html[data-theme='light'] .bg-slate-600.text-white,
+html[data-theme='light'] .bg-slate-950 .text-white,
+html[data-theme='light'] .bg-slate-950.text-white,
+html[data-theme='light'] .bg-slate-950\/40 .text-white { color: #0f172a !important; }
+html[data-theme='light'] .bg-slate-950\/40.text-white { color: #0f172a !important; }
+
+/* Toggle knob etc. (Only used in one place currently) */
+html[data-theme='light'] .bg-white { background-color: #334155 !important; }
+html[data-theme='light'] .text-slate-100 { color: #0f172a !important; }
+html[data-theme='light'] .text-slate-200 { color: #111827 !important; }
+html[data-theme='light'] .text-slate-300 { color: #334155 !important; }
+html[data-theme='light'] .text-slate-400 { color: #475569 !important; }
+html[data-theme='light'] .text-slate-500 { color: #64748b !important; }
+html[data-theme='light'] .text-slate-600 { color: #64748b !important; }
+
+html[data-theme='light'] .border-slate-900 { border-color: #cbd5e1 !important; }
+html[data-theme='light'] .border-slate-800 { border-color: #e2e8f0 !important; }
+html[data-theme='light'] .border-slate-700 { border-color: #e2e8f0 !important; }
+html[data-theme='light'] .border-slate-700\/60 { border-color: rgba(226, 232, 240, 0.60) !important; }
+html[data-theme='light'] .border-slate-700\/50 { border-color: rgba(226, 232, 240, 0.50) !important; }
+html[data-theme='light'] .border-slate-600 { border-color: #cbd5e1 !important; }
+
+/* Accent info boxes (used in Settings tabs) */
+html[data-theme='light'] .bg-blue-900\/20 { background-color: rgba(59, 130, 246, 0.08) !important; }
+html[data-theme='light'] .border-blue-800 { border-color: rgba(37, 99, 235, 0.25) !important; }
+html[data-theme='light'] .text-blue-200 { color: #1e40af !important; }
+
+html[data-theme='light'] .bg-emerald-900\/20 { background-color: rgba(16, 185, 129, 0.08) !important; }
+html[data-theme='light'] .border-emerald-800 { border-color: rgba(5, 150, 105, 0.25) !important; }
+html[data-theme='light'] .text-emerald-200 { color: #065f46 !important; }
+
+html[data-theme='light'] .bg-purple-900\/20 { background-color: rgba(168, 85, 247, 0.08) !important; }
+html[data-theme='light'] .border-purple-800 { border-color: rgba(147, 51, 234, 0.25) !important; }
+html[data-theme='light'] .text-purple-200 { color: #5b21b6 !important; }
+html[data-theme='light'] .text-purple-300\/80 { color: rgba(91, 33, 182, 0.80) !important; }
+
+/* Badge/pill contrast helpers (Strategy + Status badges) */
+html[data-theme='light'] .bg-emerald-900\/30 { background-color: rgba(16, 185, 129, 0.14) !important; }
+html[data-theme='light'] .bg-emerald-900\/40 { background-color: rgba(16, 185, 129, 0.16) !important; }
+html[data-theme='light'] .border-emerald-500\/30 { border-color: rgba(16, 185, 129, 0.45) !important; }
+html[data-theme='light'] .bg-emerald-900\/30.text-emerald-400,
+html[data-theme='light'] .bg-emerald-900\/40.text-emerald-400 { color: #065f46 !important; }
+
+html[data-theme='light'] .bg-amber-900\/30 { background-color: rgba(245, 158, 11, 0.14) !important; }
+html[data-theme='light'] .bg-amber-900\/40 { background-color: rgba(245, 158, 11, 0.16) !important; }
+html[data-theme='light'] .border-amber-500\/30 { border-color: rgba(245, 158, 11, 0.45) !important; }
+html[data-theme='light'] .bg-amber-900\/30.text-amber-400,
+html[data-theme='light'] .bg-amber-900\/40.text-amber-400 { color: #92400e !important; }
+
+/* Small tag-style badges (bg/text/border utility combos) */
+html[data-theme='light'] .bg-emerald-500\/10 { background-color: rgba(16, 185, 129, 0.12) !important; }
+html[data-theme='light'] .border-emerald-500\/20 { border-color: rgba(16, 185, 129, 0.35) !important; }
+html[data-theme='light'] .text-emerald-300 { color: #065f46 !important; }
+
+/* Small helper: in light theme, dim very dark translucent panels */
+html[data-theme='light'] .bg-black\/70 { background-color: rgba(15, 23, 42, 0.40) !important; }
+
+/* Keep yellow accent readable */
+html[data-theme='light'] .selection\:text-slate-900::selection { color: #0f172a !important; }
+
+/* Recharts global theming (grid/axis/tooltip) */
+.recharts-cartesian-grid line,
+.recharts-cartesian-grid path {
+  stroke: var(--sf-chart-grid) !important;
+}
+
+.recharts-text,
+.recharts-cartesian-axis-tick-value {
+  fill: var(--sf-chart-axis) !important;
+}
+
+.recharts-label {
+  fill: var(--sf-chart-axis-strong) !important;
+}
+
+.recharts-default-tooltip {
+  background-color: var(--sf-tooltip-bg) !important;
+  border: 1px solid var(--sf-tooltip-border) !important;
+  border-radius: 10px !important;
+}
+

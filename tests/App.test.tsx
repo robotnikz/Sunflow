@@ -57,6 +57,6 @@ describe('SunFlow App Integration', () => {
     });
 
     // Prüfen, ob der Settings-Button gerendert wurde (Teil des Dashboards)
-    expect(screen.getByTitle(/Settings/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument();
   });
 });

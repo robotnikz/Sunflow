@@ -182,9 +182,6 @@ const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state, capaci
                             {isCharging ? 'Full in' : 'Empty in'} <span className="text-slate-200 font-bold">{timeString}</span>
                         </span>
                     </div>
-                    {isDischarging && reserve > 0 && (
-                        <span className="text-[10px] text-slate-500">incl. {Math.round(reserve)}% reserve</span>
-                    )}
                 </div>
             )}
             {!timeString && soc < 100 && soc > 0 && (
@@ -192,12 +189,17 @@ const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state, capaci
             )}
         </div>
 
-        {batteryTemp !== null && (
-            <div className="w-full mt-2 flex items-center justify-center gap-3 text-[10px] text-slate-400">
-                <div className="flex items-center gap-1 bg-slate-900/50 px-2 py-1 rounded-full border border-slate-700/50">
-                    <Thermometer size={11} className="text-emerald-400" />
-                    <span>Battery: <span className="text-slate-200">{batteryTemp !== null ? `${batteryTemp.toFixed(1)}°C` : 'n/a'}</span></span>
-                </div>
+        {(batteryTemp !== null || (isDischarging && reserve > 0)) && (
+            <div className="w-full mt-1 flex items-center justify-center gap-2 text-[10px] text-slate-400 flex-wrap">
+                {isDischarging && reserve > 0 && (
+                    <span className="text-slate-500">incl. {Math.round(reserve)}% reserve</span>
+                )}
+                {batteryTemp !== null && (
+                    <div className="flex items-center gap-1 bg-slate-900/50 px-2 py-1 rounded-full border border-slate-700/50">
+                        <Thermometer size={11} className="text-emerald-400" />
+                        <span>Battery: <span className="text-slate-200">{batteryTemp !== null ? `${batteryTemp.toFixed(1)}°C` : 'n/a'}</span></span>
+                    </div>
+                )}
             </div>
         )}
 
