@@ -10,16 +10,10 @@ interface BatteryWidgetProps {
     reserveSocPct?: number; // Minimum reserve that should not be treated as usable energy
     temperatures?: {
         battery?: number | null;
-        inverter?: number | null;
     };
-    temperatureHistory?: Array<{
-        ts: number;
-        battery: number | null;
-        inverter: number | null;
-    }>;
 }
 
-const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state, capacity = 10, reserveSocPct = 0, temperatures, temperatureHistory = [] }) => {
+const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state, capacity = 10, reserveSocPct = 0, temperatures }) => {
   // --- CONFIG ---
   const radius = 80;
   const stroke = 12;
@@ -45,66 +39,6 @@ const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state, capaci
   const powerKw = Math.abs(power) / 1000;
     const reserve = Math.min(100, Math.max(0, Number.isFinite(Number(reserveSocPct)) ? Number(reserveSocPct) : 0));
     const batteryTemp = Number.isFinite(Number(temperatures?.battery)) ? Number(temperatures?.battery) : null;
-    const inverterTemp = Number.isFinite(Number(temperatures?.inverter)) ? Number(temperatures?.inverter) : null;
-    const hasTempReadings = batteryTemp !== null || inverterTemp !== null;
-
-    const tempSeries = React.useMemo(() => {
-        const source = temperatureHistory || [];
-        if (source.length < 2) {
-            return {
-                batteryPoints: '',
-                inverterPoints: '',
-                hasBatteryLine: false,
-                hasInverterLine: false,
-            };
-        }
-
-        const values = source.flatMap(p => [p.battery, p.inverter]).filter(v => Number.isFinite(Number(v))) as number[];
-        if (values.length < 2) {
-            return {
-                batteryPoints: '',
-                inverterPoints: '',
-                hasBatteryLine: false,
-                hasInverterLine: false,
-            };
-        }
-
-        const minV = Math.min(...values);
-        const maxV = Math.max(...values);
-        const span = Math.max(1, maxV - minV);
-
-        const toY = (v: number) => {
-            const normalized = (v - minV) / span;
-            return 26 - (normalized * 20); // 6..26 inside 32px height
-        };
-
-        const makePoints = (key: 'battery' | 'inverter') => {
-            const valid = source
-                .map((p, idx) => ({ idx, value: p[key] }))
-                .filter(p => Number.isFinite(Number(p.value))) as Array<{ idx: number; value: number }>;
-
-            if (valid.length < 2) return '';
-            const denom = Math.max(1, source.length - 1);
-
-            return valid
-                .map(p => {
-                    const x = 4 + ((p.idx / denom) * 92); // 4..96
-                    const y = toY(p.value);
-                    return `${x.toFixed(2)},${y.toFixed(2)}`;
-                })
-                .join(' ');
-        };
-
-        const batteryPoints = makePoints('battery');
-        const inverterPoints = makePoints('inverter');
-
-        return {
-            batteryPoints,
-            inverterPoints,
-            hasBatteryLine: batteryPoints.length > 0,
-            hasInverterLine: inverterPoints.length > 0,
-        };
-    }, [temperatureHistory]);
 
   // Determine Colors
   const getColors = () => {
@@ -254,49 +188,18 @@ const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state, capaci
             )}
         </div>
 
-        {hasTempReadings && (
+        {batteryTemp !== null && (
             <div className="w-full mt-2 flex items-center justify-center gap-3 text-[10px] text-slate-400">
                 <div className="flex items-center gap-1 bg-slate-900/50 px-2 py-1 rounded-full border border-slate-700/50">
                     <Thermometer size={11} className="text-emerald-400" />
                     <span>Battery: <span className="text-slate-200">{batteryTemp !== null ? `${batteryTemp.toFixed(1)}°C` : 'n/a'}</span></span>
                 </div>
-                <div className="flex items-center gap-1 bg-slate-900/50 px-2 py-1 rounded-full border border-slate-700/50">
-                    <Thermometer size={11} className="text-blue-400" />
-                    <span>Inverter: <span className="text-slate-200">{inverterTemp !== null ? `${inverterTemp.toFixed(1)}°C` : 'n/a'}</span></span>
-                </div>
             </div>
         )}
 
-        {(tempSeries.hasBatteryLine || tempSeries.hasInverterLine) && (
-            <div className="w-full mt-2 bg-slate-900/40 border border-slate-700/50 rounded-lg px-2 py-2">
-                <div className="text-[10px] text-slate-500 mb-1 uppercase tracking-wide">Temp Trend</div>
-                <svg viewBox="0 0 100 32" className="w-full h-10">
-                    <line x1="4" y1="26" x2="96" y2="26" stroke="#334155" strokeWidth="0.8" />
-                    {tempSeries.hasBatteryLine && (
-                        <polyline
-                            fill="none"
-                            stroke="#34d399"
-                            strokeWidth="1.8"
-                            points={tempSeries.batteryPoints}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                        />
-                    )}
-                    {tempSeries.hasInverterLine && (
-                        <polyline
-                            fill="none"
-                            stroke="#60a5fa"
-                            strokeWidth="1.8"
-                            points={tempSeries.inverterPoints}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                        />
-                    )}
-                </svg>
-                <div className="mt-1 flex items-center gap-3 text-[10px] text-slate-500">
-                    <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-emerald-400"></span>Battery</span>
-                    <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-blue-400"></span>Inverter</span>
-                </div>
+        {batteryTemp === null && (
+            <div className="w-full mt-2 text-center text-[10px] text-slate-500">
+                Battery temperature unavailable
             </div>
         )}
 

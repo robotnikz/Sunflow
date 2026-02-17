@@ -5,6 +5,7 @@ import PowerFlow from './PowerFlow';
 import EnergyChart from './EnergyChart';
 import BatteryChart from './BatteryChart';
 import EfficiencyChart from './EfficiencyChart';
+import BatteryTemperatureChart from './BatteryTemperatureChart';
 import StatsCard from './StatsCard';
 import EnergyDonut from './EnergyDonut';
 import BatteryWidget from './BatteryWidget';
@@ -16,7 +17,7 @@ import BatteryHealthWidget from './BatteryHealthWidget';
 import ScenarioPlanner from './ScenarioPlanner';
 import DynamicTariffComparison from './DynamicTariffComparison';
 import { getHistory, getRoiData, getForecast, getBatteryHealth, getTariffs } from '../services/api';
-import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp, ShieldCheck, Download, ChevronLeft, ChevronRight, History, CheckCircle2, AlertTriangle, Settings as SettingsIcon, Bell, Plug, CloudSun, X } from 'lucide-react';
+import { Sun, Zap, Home, PiggyBank, Calendar, ArrowRight, Battery, BarChart3, Leaf, TrendingUp, ShieldCheck, Download, ChevronLeft, ChevronRight, History, CheckCircle2, AlertTriangle, Settings as SettingsIcon, Bell, Plug, CloudSun, X, Thermometer } from 'lucide-react';
 
 const SETUP_CHECKLIST_DISMISS_KEY = 'sunflow.setupChecklist.dismissed';
 
@@ -26,12 +27,6 @@ interface DashboardProps {
   error: string | null;
   refreshTrigger: number; // Increment this to force reload of historical/ROI data
     onOpenSettings?: (tab?: 'general' | 'notifications' | 'tariffs' | 'expenses' | 'appliances' | 'history' | 'import') => void;
-}
-
-interface TemperatureSample {
-    ts: number;
-    battery: number | null;
-    inverter: number | null;
 }
 
 export interface WeatherData {
@@ -78,7 +73,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [batteryHealth, setBatteryHealth] = useState<BatteryHealthData | null>(null);
   const [loadingHist, setLoadingHist] = useState(false);
-    const [temperatureHistory, setTemperatureHistory] = useState<TemperatureSample[]>([]);
   
   // Rate Limit Flag for UI Hint
   const [solcastRateLimited, setSolcastRateLimited] = useState(false);
@@ -224,29 +218,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
       setLoadingHist(false);
     }
   };
-
-    useEffect(() => {
-        const batteryTempRaw = data?.temperatures?.battery;
-        const inverterTempRaw = data?.temperatures?.inverter;
-        const batteryTemp = Number.isFinite(Number(batteryTempRaw)) ? Number(batteryTempRaw) : null;
-        const inverterTemp = Number.isFinite(Number(inverterTempRaw)) ? Number(inverterTempRaw) : null;
-
-        if (batteryTemp === null && inverterTemp === null) return;
-
-        const sample: TemperatureSample = {
-            ts: Date.now(),
-            battery: batteryTemp,
-            inverter: inverterTemp,
-        };
-
-        const cutoff = Date.now() - (30 * 60 * 1000);
-        setTemperatureHistory(prev => {
-            const retained = prev.filter(p => p.ts >= cutoff);
-            const next = [...retained, sample];
-            const maxPoints = 360;
-            return next.length > maxPoints ? next.slice(next.length - maxPoints) : next;
-        });
-    }, [data?.temperatures?.battery, data?.temperatures?.inverter]);
 
   const getTimeLabel = () => {
     const now = new Date();
@@ -587,7 +558,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                 capacity={config.batteryCapacity || 10}
                      reserveSocPct={config.smartUsage?.reserveSocPct}
                      temperatures={data.temperatures}
-                     temperatureHistory={temperatureHistory}
              />
           </div>
         </div>
@@ -890,6 +860,16 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                             <EfficiencyChart history={history.chart} timeRange={timeRange} />
                         </div>
                     </div>
+
+                    {/* Battery Temperature Chart */}
+                    <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-lg h-[250px] flex flex-col">
+                        <h3 className="text-slate-400 text-sm font-medium mb-6 flex items-center gap-2 shrink-0">
+                            <Thermometer size={16}/> Battery Temperature History
+                        </h3>
+                        <div className="flex-1 min-h-0 w-full">
+                            <BatteryTemperatureChart history={history.chart} timeRange={timeRange} />
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -907,6 +887,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
             </div>
             <div className="lg:col-span-2 space-y-6">
                 <SkeletonCard height="h-[400px]" />
+                <SkeletonCard height="h-[250px]" />
                 <SkeletonCard height="h-[250px]" />
                 <SkeletonCard height="h-[250px]" />
             </div>

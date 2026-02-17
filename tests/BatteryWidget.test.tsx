@@ -5,8 +5,6 @@ import BatteryWidget from '../components/BatteryWidget';
 import React from 'react';
 
 // Mock Lucide icons that are used
-import { Battery } from 'lucide-react';
-
 describe('BatteryWidget Component', () => {
     it('zeigt SOC korrekt an', () => {
         // Power=0 -> Idle
@@ -53,36 +51,26 @@ describe('BatteryWidget Component', () => {
                 power={0}
                 state="idle"
                 capacity={10}
-                temperatures={{ battery: 28.4, inverter: 41.2 }}
+                temperatures={{ battery: 28.4 }}
             />
         );
 
         expect(screen.getByText(/Battery:/i)).toBeInTheDocument();
-        expect(screen.getByText(/Inverter:/i)).toBeInTheDocument();
         expect(screen.getByText('28.4°C')).toBeInTheDocument();
-        expect(screen.getByText('41.2°C')).toBeInTheDocument();
+        expect(screen.queryByText(/Inverter:/i)).not.toBeInTheDocument();
     });
 
-    it('zeigt Temperaturverlauf als Graph an, wenn Historie vorhanden ist', () => {
-        const now = Date.now();
+    it('zeigt Hinweis, wenn keine Batterietemperatur verfügbar ist', () => {
         render(
             <BatteryWidget
                 soc={55}
                 power={0}
                 state="idle"
                 capacity={10}
-                temperatures={{ battery: 28.4, inverter: 41.2 }}
-                temperatureHistory={[
-                    { ts: now - 15000, battery: 27.9, inverter: 40.6 },
-                    { ts: now - 10000, battery: 28.1, inverter: 40.8 },
-                    { ts: now - 5000, battery: 28.3, inverter: 41.0 },
-                    { ts: now, battery: 28.4, inverter: 41.2 },
-                ]}
+                temperatures={{ battery: null }}
             />
         );
 
-        expect(screen.getByText(/Temp Trend/i)).toBeInTheDocument();
-        expect(screen.getByText(/^Battery$/i)).toBeInTheDocument();
-        expect(screen.getByText(/^Inverter$/i)).toBeInTheDocument();
+        expect(screen.getByText(/Battery temperature unavailable/i)).toBeInTheDocument();
     });
 });

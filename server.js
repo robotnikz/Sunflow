@@ -362,6 +362,14 @@ const db = new sqlite3.Database(DB_FILE, (err) => {
                 }
             });
 
+            db.run("ALTER TABLE energy_log ADD COLUMN battery_temp REAL", (err) => {
+                if (err) {
+                    if (!err.message.includes("duplicate column name")) {
+                        console.error("Migration error (battery_temp):", err.message);
+                    }
+                }
+            });
+
             db.run(`CREATE INDEX IF NOT EXISTS idx_timestamp ON energy_log(timestamp)`, (err) => {
                 if (err) console.error('DB init error (idx_timestamp):', err.message);
             });
@@ -694,19 +702,40 @@ const fetchFroniusData = async (ip) => {
     }
 
     try {
-        const url = new URL('http://127.0.0.1/solar_api/v1/GetPowerFlowRealtimeData.fcgi');
-        url.hostname = host;
-        if (port) url.port = port;
+        const getEndpoint = async (endpointPath) => {
+            const url = new URL(`http://127.0.0.1${endpointPath}`);
+            url.hostname = host;
+            if (port) url.port = port;
+            const response = await axios.get(url.toString(), { timeout: 3000 });
+            return response.data;
+        };
 
-        const response = await axios.get(url.toString(), { timeout: 3000 });
+        const [powerFlowResult, inverterRealtimeResult, storageRealtimeResult] = await Promise.allSettled([
+            getEndpoint('/solar_api/v1/GetPowerFlowRealtimeData.fcgi'),
+            getEndpoint('/solar_api/v1/GetInverterRealtimeData.cgi?Scope=System'),
+            getEndpoint('/solar_api/v1/GetStorageRealtimeData.cgi?Scope=System')
+        ]);
+
+        const powerFlowData = powerFlowResult.status === 'fulfilled' ? powerFlowResult.value : null;
+        if (!powerFlowData || !powerFlowData.Body || !powerFlowData.Body.Data) {
+            return null;
+        }
+
+        const bodyData = powerFlowData.Body.Data;
+        if (inverterRealtimeResult.status === 'fulfilled' && inverterRealtimeResult.value?.Body?.Data) {
+            bodyData.InverterRealtimeData = inverterRealtimeResult.value.Body.Data;
+        }
+        if (storageRealtimeResult.status === 'fulfilled' && storageRealtimeResult.value?.Body?.Data) {
+            bodyData.StorageRealtimeData = storageRealtimeResult.value.Body.Data;
+        }
         
         // Update Cache
         inverterCache = {
             timestamp: now,
-            data: response.data
+            data: powerFlowData
         };
         
-        return response.data;
+        return powerFlowData;
     } catch (error) {
         return null;
     }
@@ -753,22 +782,13 @@ const findNumericByPathMatch = (source, matchers) => {
 const extractRealtimeTemperatures = (rawData) => {
     const data = rawData?.Body?.Data;
     if (!data || typeof data !== 'object') {
-        return { battery: null, inverter: null };
+        return { battery: null };
     }
-
-    const inverters = data?.Inverters || {};
-    const inverterKey = Object.keys(inverters)[0];
-    const inverterNode = inverterKey ? inverters[inverterKey] : null;
 
     const batteryTemp =
         findNumericByPathMatch(data, [/(battery|akku|storage)/i, /(temp|temperature)/i]) ?? null;
 
-    const inverterTemp =
-        findNumericByPathMatch(inverterNode || data, [/(inverter|inv)/i, /(temp|temperature)/i]) ??
-        findNumericByPathMatch(inverterNode || data, [/(temp|temperature)/i]) ??
-        null;
-
-    return { battery: batteryTemp, inverter: inverterTemp };
+    return { battery: batteryTemp };
 };
 
 // Helper: Get Local SQLite-compatible Timestamp (YYYY-MM-DD HH:MM:SS)
@@ -990,6 +1010,8 @@ if (!IS_TEST) setInterval(async () => {
     if (!config.inverterIp) return;
 
     const rawData = await fetchFroniusData(config.inverterIp);
+    const realtimeTemps = extractRealtimeTemperatures(rawData);
+    const batteryTemp = Number.isFinite(Number(realtimeTemps?.battery)) ? Number(realtimeTemps.battery) : null;
     
     let p_pv = 0, p_load = 0, p_grid = 0, p_batt = 0, soc = 0, e_day = 0;
     let statusCode = 0; // 0 = Offline
@@ -1226,8 +1248,8 @@ if (!IS_TEST) setInterval(async () => {
 
     // Insert with Explicit LOCAL TIMESTAMP
     const timestamp = getLocalTimestamp();
-    const stmt = db.prepare(`INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, energy_day_prod, status_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
-    stmt.run(timestamp, p_pv, p_load, p_grid, p_batt, soc, e_day, statusCode, (err) => {
+    const stmt = db.prepare(`INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, energy_day_prod, status_code, battery_temp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    stmt.run(timestamp, p_pv, p_load, p_grid, p_batt, soc, e_day, statusCode, batteryTemp, (err) => {
         if (err) {
             console.error('Failed to insert energy_log row:', err.message);
         }
@@ -1762,7 +1784,7 @@ app.get('/api/data', async (req, res) => {
         energy: { today: { production: 0, consumption: 0 } },
         autonomy: 0,
         selfConsumption: 0,
-        temperatures: { battery: null, inverter: null }
+        temperatures: { battery: null }
     };
 
     if (rawData && rawData.Body && rawData.Body.Data) {
@@ -2548,7 +2570,7 @@ app.get('/api/history', (req, res) => {
             SELECT * FROM (
                 SELECT 
                     timestamp,
-                    power_pv, power_load, power_grid, power_battery, soc, status_code,
+                    power_pv, power_load, power_grid, power_battery, soc, status_code, battery_temp,
                     NULL as production_wh, NULL as grid_consumption_wh, NULL as grid_feed_in_wh, 
                     NULL as battery_charge_wh, NULL as battery_discharge_wh, NULL as load_wh,
                     1 as is_high_res
@@ -2559,7 +2581,7 @@ app.get('/api/history', (req, res) => {
                 
                 SELECT 
                     timestamp,
-                    NULL as power_pv, NULL as power_load, NULL as power_grid, NULL as power_battery, NULL as soc, NULL as status_code,
+                    NULL as power_pv, NULL as power_load, NULL as power_grid, NULL as power_battery, NULL as soc, NULL as status_code, NULL as battery_temp,
                     production_wh, grid_consumption_wh, grid_feed_in_wh, 
                     battery_charge_wh, battery_discharge_wh, load_wh,
                     0 as is_high_res
@@ -2681,7 +2703,7 @@ app.get('/api/history', (req, res) => {
                          key = `${rowDate.getFullYear()}-${String(rowDate.getMonth() + 1).padStart(2, '0')}-${String(rowDate.getDate()).padStart(2, '0')} 00:00:00`;
                     }
 
-                    if (!groups[key]) groups[key] = { p: 0, c: 0, g_in: 0, g_out: 0, b_c: 0, b_d: 0, socTotal: 0, count: 0 };
+                    if (!groups[key]) groups[key] = { p: 0, c: 0, g_in: 0, g_out: 0, b_c: 0, b_d: 0, socTotal: 0, tempTotal: 0, tempCount: 0, count: 0 };
                     
                     let p, c, i, e, bc, bd, s;
                     if (r.grid_consumption_wh !== null && r.grid_consumption_wh !== undefined) {
@@ -2717,6 +2739,10 @@ app.get('/api/history', (req, res) => {
                     groups[key].b_c += bc;
                     groups[key].b_d += bd;
                     groups[key].socTotal += s;
+                    if (r.battery_temp !== null && r.battery_temp !== undefined && Number.isFinite(Number(r.battery_temp))) {
+                        groups[key].tempTotal += Number(r.battery_temp);
+                        groups[key].tempCount += 1;
+                    }
                     groups[key].count++;
                 });
 
@@ -2730,6 +2756,7 @@ app.get('/api/history', (req, res) => {
                         grid: Math.round((g.g_in - g.g_out) / 10) / 100,
                         battery: Math.round((g.b_d - g.b_c) / 10) / 100,
                         soc: Math.round(g.socTotal / n),
+                        batteryTemp: g.tempCount > 0 ? Math.round((g.tempTotal / g.tempCount) * 10) / 10 : null,
                         autonomy: g.c > 0 ? Math.round(Math.max(0, g.c - g.g_in) / g.c * 100) : 0,
                         selfConsumption: g.p > 0 ? Math.round(Math.max(0, g.p - g.g_out) / g.p * 100) : 0,
                         is_aggregated: true // Flag for frontend
@@ -2743,6 +2770,7 @@ app.get('/api/history', (req, res) => {
 
                 for (let i = 0; i < rows.length; i += adaptiveGroupBy) {
                     let chunkPv = 0, chunkCons = 0, chunkGrid = 0, chunkBatt = 0, chunkSoc = 0;
+                    let chunkBatteryTemp = 0, chunkBatteryTempCount = 0;
                     let chunkAutonomy = 0, chunkSelfCon = 0;
                     let count = 0;
                     const startTime = rows[i].timestamp;
@@ -2761,6 +2789,10 @@ app.get('/api/history', (req, res) => {
                         chunkGrid += pGrid;
                         chunkBatt += pBatt;
                         chunkSoc += r.soc || 0;
+                        if (r.battery_temp !== null && r.battery_temp !== undefined && Number.isFinite(Number(r.battery_temp))) {
+                            chunkBatteryTemp += Number(r.battery_temp);
+                            chunkBatteryTempCount++;
+                        }
 
                         let pImp = pGrid > 0 ? pGrid : 0;
                         let pExp = pGrid < 0 ? Math.abs(pGrid) : 0;
@@ -2782,6 +2814,7 @@ app.get('/api/history', (req, res) => {
                             grid: Math.round(chunkGrid / count),
                             battery: Math.round(chunkBatt / count),
                             soc: Math.round(chunkSoc / count),
+                            batteryTemp: chunkBatteryTempCount > 0 ? Math.round((chunkBatteryTemp / chunkBatteryTempCount) * 10) / 10 : null,
                             autonomy: Math.round(chunkAutonomy / count),
                             selfConsumption: Math.round(chunkSelfCon / count),
                             status: status

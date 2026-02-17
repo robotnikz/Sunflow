@@ -206,7 +206,6 @@ export interface InverterData {
   selfConsumption: number; // Realtime %
   temperatures?: {
     battery?: number | null;
-    inverter?: number | null;
   };
 }
 
@@ -230,6 +229,7 @@ export interface HistoryData {
     soc: number;
     grid: number;   // Positive = Import, Negative = Export
     battery: number; // Positive = Discharging, Negative = Charging
+    batteryTemp?: number | null;
     autonomy: number; // %
     selfConsumption: number; // %
     status: number; // 0=Offline, 1=Running, 2=Error, 3=Idle
