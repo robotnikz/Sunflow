@@ -1,3 +1,10 @@
+## [1.17.2](https://github.com/robotnikz/Sunflow/compare/v1.17.1...v1.17.2) (2026-02-17)
+
+
+### Bug Fixes
+
+* **theme:** polish light mode accents ([3ca4cf8](https://github.com/robotnikz/Sunflow/commit/3ca4cf8ff720385d0542b5a2e084e4457821883e))
+
 ## [1.17.1](https://github.com/robotnikz/Sunflow/compare/v1.17.0...v1.17.1) (2026-02-17)
 
 
