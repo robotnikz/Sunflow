@@ -260,23 +260,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
     const currencyTabIcon = useMemo(() => {
         switch (formData.currency) {
             case 'EUR':
-                return <Euro size={16} />;
+                return <Euro size={16} className="block h-4 w-4 shrink-0" />;
             case 'GBP':
-                return <PoundSterling size={16} />;
+                return <PoundSterling size={16} className="block h-4 w-4 shrink-0" />;
             default:
-                return <DollarSign size={16} />;
+                return <DollarSign size={16} className="block h-4 w-4 shrink-0" />;
         }
     }, [formData.currency]);
 
     const tabMeta = useMemo(() => {
         return [
-            { key: 'general' as const, label: t('General'), icon: <Sliders size={16} /> },
-            { key: 'notifications' as const, label: t('Notifications'), icon: <Bell size={16} /> },
-            { key: 'appliances' as const, label: t('Appliances'), icon: <Plug size={16} /> },
+            { key: 'general' as const, label: t('General'), icon: <Sliders size={16} className="block h-4 w-4 shrink-0" /> },
+            { key: 'notifications' as const, label: t('Notifications'), icon: <Bell size={16} className="block h-4 w-4 shrink-0" /> },
+            { key: 'appliances' as const, label: t('Appliances'), icon: <Plug size={16} className="block h-4 w-4 shrink-0" /> },
             { key: 'tariffs' as const, label: t('Tariffs'), icon: currencyTabIcon },
-            { key: 'expenses' as const, label: t('Expenses'), icon: <TrendingUp size={16} /> },
-            { key: 'history' as const, label: t('Calibration'), icon: <History size={16} /> },
-            { key: 'import' as const, label: t('Data Import'), icon: <Upload size={16} /> },
+            { key: 'expenses' as const, label: t('Expenses'), icon: <TrendingUp size={16} className="block h-4 w-4 shrink-0" /> },
+            { key: 'history' as const, label: t('Calibration'), icon: <History size={16} className="block h-4 w-4 shrink-0" /> },
+            { key: 'import' as const, label: t('Data Import'), icon: <Upload size={16} className="block h-4 w-4 shrink-0" /> },
         ];
     }, [currencyTabIcon, t]);
 
@@ -749,7 +749,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
 
         {/* Tabs */}
                 <div
-                    className="flex border-b border-slate-700 bg-slate-900/30 overflow-x-auto"
+                    className="sf-scrollbar-none flex h-12 min-h-12 max-h-12 flex-nowrap items-stretch gap-1 px-2 border-b border-slate-700 bg-slate-900/30 overflow-x-auto overflow-y-hidden"
                     role="tablist"
                     aria-label={t('Settings sections')}
                     aria-orientation="horizontal"
@@ -771,11 +771,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                                 aria-controls={panelId}
                                 tabIndex={isActive ? 0 : -1}
                                 onClick={() => { setActiveTab(t.key); focusTab(t.key); }}
-                                className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap transition-colors flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-yellow-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
-                                    isActive ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-200'
+                                className={`flex-none shrink-0 min-w-max h-full px-4 text-sm font-medium leading-none whitespace-nowrap overflow-hidden transition-colors flex items-center justify-center gap-2 border-b-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-yellow-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 sm:flex-1 sm:min-w-0 ${
+                                    isActive ? 'text-yellow-500 border-yellow-500' : 'text-slate-400 hover:text-slate-200 border-transparent'
                                 }`}
                             >
-                                {t.icon} {t.label}
+                                <span className="w-4 h-4 shrink-0 flex items-center justify-center">{t.icon}</span>
+                                <span>{t.label}</span>
                             </button>
                         );
                     })}
@@ -828,7 +829,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                         }}
                         aria-invalid={!!fieldErrors.systemStartDate}
                         aria-describedby={fieldErrors.systemStartDate ? `${FIELD_IDS.systemStartDate}-error` : undefined}
-                        className={`w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500 ${fieldErrors.systemStartDate ? 'border-red-500 focus:border-red-500' : ''}`}
+                        className={`w-full min-w-0 max-w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500 ${fieldErrors.systemStartDate ? 'border-red-500 focus:border-red-500' : ''}`}
                         required
                     />
                     {fieldErrors.systemStartDate && (
@@ -1320,7 +1321,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
               <form onSubmit={handleAddTariff} className="bg-slate-900/50 p-4 rounded-xl border border-slate-700">
                   <h3 className="text-slate-300 text-sm font-bold mb-3 flex items-center gap-2"><Plus size={16} className="text-green-400"/> {t('Add Tariff Change')}</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div><label className="text-xs text-slate-400 block mb-1">{t('Valid From')}</label><input type="date" required value={newTariff.validFrom} onChange={e => setNewTariff({...newTariff, validFrom: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white"/></div>
+                      <div><label className="text-xs text-slate-400 block mb-1">{t('Valid From')}</label><input type="date" required value={newTariff.validFrom} onChange={e => setNewTariff({...newTariff, validFrom: e.target.value})} className="w-full min-w-0 max-w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white"/></div>
                       <div>
                           <label className="text-xs text-slate-400 block mb-1">{t('Grid Cost / kWh')}</label>
                           <input type="number" step="0.001" required value={newTariff.costPerKwh} onChange={e => setNewTariff({...newTariff, costPerKwh: parseFloat(e.target.value)})} className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/>
@@ -1399,7 +1400,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                         <div className="space-y-6">
                 <div className="bg-slate-900/50 rounded-xl border border-slate-700 overflow-hidden"><div className="px-4 py-3 bg-slate-800/50 border-b border-slate-700 flex items-center justify-between"><h3 className="text-slate-300 text-sm font-bold flex items-center gap-2"><TrendingUp size={16} className="text-blue-400"/> {t('Advanced Forecast Parameters')}</h3><button onClick={handleConfigSubmit} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded text-white transition">{t('Update Params')}</button></div><div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-6"><div><label className="block text-xs font-bold text-slate-400 mb-1">{t('Module Degradation (% per year)')}</label><input type="number" step="0.1" value={formData.degradationRate} onChange={(e) => setFormData({...formData, degradationRate: parseFloat(e.target.value)})} className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/><p className="text-xs text-slate-400 mt-1">{t('PV modules lose efficiency over time. Default: 0.5%.')}</p></div><div><label className="block text-xs font-bold text-slate-400 mb-1">{t('Expense Inflation (% per year)')}</label><input type="number" step="0.1" value={formData.inflationRate} onChange={(e) => setFormData({...formData, inflationRate: parseFloat(e.target.value)})} className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/><p className="text-xs text-slate-400 mt-1">{t('Annual increase in recurring maintenance costs. Default: 2.0%.')}</p></div></div></div>
                 <div className="bg-emerald-900/20 border border-emerald-800 p-4 rounded-lg"><p className="text-sm text-emerald-200">{t('Track your system costs (CAPEX) and recurring maintenance (OPEX) to calculate your Return on Investment.')}</p></div>
-                <form onSubmit={handleAddExpense} className="bg-slate-900/50 p-4 rounded-xl border border-slate-700"><h3 className="text-slate-300 text-sm font-bold mb-3 flex items-center gap-2"><Plus size={16} className="text-green-400"/> {t('Add Expense')}</h3><div className="grid grid-cols-1 md:grid-cols-4 gap-3"><div className="md:col-span-2"><label className="text-xs text-slate-400 block mb-1">{t('Description')}</label><input type="text" placeholder={t('e.g. Initial Installation')} required value={newExpense.name} onChange={e => setNewExpense({...newExpense, name: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white"/></div><div><label className="text-xs text-slate-400 block mb-1">{t('Amount')}</label><input type="number" step="0.01" required value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: parseFloat(e.target.value)})} className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/></div><div><label className="text-xs text-slate-400 block mb-1">{t('Type')}</label><select value={newExpense.type} onChange={e => setNewExpense({...newExpense, type: e.target.value as any})} className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white"><option value="one_time">{t('One-time')}</option><option value="yearly">{t('Yearly (Recurring)')}</option></select></div><div className="md:col-span-4"><label className="text-xs text-slate-400 block mb-1">{t('Date Incurred (or Start Date for Yearly)')}</label><input type="date" required value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white"/></div></div><button type="submit" className="mt-3 w-full py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium rounded transition">{t('Add Expense')}</button></form>
+                <form onSubmit={handleAddExpense} className="bg-slate-900/50 p-4 rounded-xl border border-slate-700"><h3 className="text-slate-300 text-sm font-bold mb-3 flex items-center gap-2"><Plus size={16} className="text-green-400"/> {t('Add Expense')}</h3><div className="grid grid-cols-1 md:grid-cols-4 gap-3"><div className="md:col-span-2"><label className="text-xs text-slate-400 block mb-1">{t('Description')}</label><input type="text" placeholder={t('e.g. Initial Installation')} required value={newExpense.name} onChange={e => setNewExpense({...newExpense, name: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white"/></div><div><label className="text-xs text-slate-400 block mb-1">{t('Amount')}</label><input type="number" step="0.01" required value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: parseFloat(e.target.value)})} className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/></div><div><label className="text-xs text-slate-400 block mb-1">{t('Type')}</label><select value={newExpense.type} onChange={e => setNewExpense({...newExpense, type: e.target.value as any})} className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white"><option value="one_time">{t('One-time')}</option><option value="yearly">{t('Yearly (Recurring)')}</option></select></div><div className="md:col-span-4"><label className="text-xs text-slate-400 block mb-1">{t('Date Incurred (or Start Date for Yearly)')}</label><input type="date" required value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="w-full min-w-0 max-w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white"/></div></div><button type="submit" className="mt-3 w-full py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium rounded transition">{t('Add Expense')}</button></form>
                 <div className="space-y-2"><h3 className="text-slate-400 text-sm font-bold">{t('Expense Log')}</h3><div className="border border-slate-700 rounded-xl overflow-hidden"><table className="w-full text-sm text-left text-slate-300"><thead className="text-xs text-slate-400 uppercase bg-slate-900"><tr><th className="px-4 py-3">{t('Expense')}</th><th className="px-4 py-3">{t('Type')}</th><th className="px-4 py-3">{t('Date')}</th><th className="px-4 py-3 text-right">{t('Amount')}</th><th className="px-4 py-3 text-right">{t('Action')}</th></tr></thead><tbody className="divide-y divide-slate-700 bg-slate-800">{expenses.map((e) => (<tr key={e.id} className="hover:bg-slate-750"><td className="px-4 py-3 font-medium text-white">{e.name}</td><td className="px-4 py-3"><span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${e.type === 'yearly' ? 'bg-blue-900/50 text-blue-300' : 'bg-slate-700 text-slate-300'}`}>{e.type === 'yearly' ? t('Yearly') : t('One-time')}</span></td><td className="px-4 py-3 text-slate-400">{e.date}</td><td className="px-4 py-3 text-right text-red-300">{getCurrencySymbol()}{e.amount.toLocaleString(locale)}</td><td className="px-4 py-3 text-right"><button type="button" onClick={() => e.id && handleDeleteExpense(e.id)} className="text-slate-400 hover:text-red-400 transition" aria-label={t('Delete')} title={t('Delete')}><Trash2 size={16} /></button></td></tr>))}</tbody></table></div></div>
             </div>
                     </div>

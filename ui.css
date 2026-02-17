@@ -1,9 +1,17 @@
+@import "tailwindcss";
+
 :root {
   --sf-bg: #0f172a; /* slate-900 */
   --sf-fg: #e2e8f0; /* slate-200 */
   --sf-scroll-track: #1e293b;
   --sf-scroll-thumb: #475569;
   --sf-scroll-thumb-hover: #64748b;
+
+  --sf-gauge-track: #1e293b; /* slate-800 */
+
+  --sf-ring-remaining: #1e293b; /* slate-800 */
+  --sf-ring-label: #f1f5f9; /* slate-100 */
+  --sf-ring-label-filter: drop-shadow(0px 2px 2px rgba(0,0,0,0.5));
 
   --sf-flow-hub-fill: #1e293b;   /* slate-800 */
   --sf-flow-hub-stroke: #64748b; /* slate-500 */
@@ -22,6 +30,12 @@ html[data-theme='light'] {
   --sf-scroll-track: #e2e8f0; /* slate-200 */
   --sf-scroll-thumb: #94a3b8; /* slate-400 */
   --sf-scroll-thumb-hover: #64748b; /* slate-500 */
+
+  --sf-gauge-track: #ffffff;
+
+  --sf-ring-remaining: #ffffff;
+  --sf-ring-label: #0f172a;
+  --sf-ring-label-filter: none;
 
   --sf-flow-hub-fill: #ffffff;
   --sf-flow-hub-stroke: #cbd5e1; /* slate-300 */
@@ -203,6 +217,22 @@ html[data-theme='light'] .text-blue-200 { color: #1e40af !important; }
 html[data-theme='light'] .bg-emerald-900\/20 { background-color: rgba(16, 185, 129, 0.08) !important; }
 html[data-theme='light'] .border-emerald-800 { border-color: rgba(5, 150, 105, 0.25) !important; }
 html[data-theme='light'] .text-emerald-200 { color: #065f46 !important; }
+
+/*
+  Some UI elements sit inside remapped slate panels but need white text on
+  accent-colored backgrounds (e.g. labels inside status bars).
+*/
+html[data-theme='light'] .sf-force-white { color: #ffffff !important; }
+
+/* Utility: keep horizontal scroll without changing layout height (Windows scrollbars) */
+.sf-scrollbar-none {
+  -ms-overflow-style: none; /* IE/old Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+.sf-scrollbar-none::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
 
 html[data-theme='light'] .bg-purple-900\/20 { background-color: rgba(168, 85, 247, 0.08) !important; }
 html[data-theme='light'] .border-purple-800 { border-color: rgba(147, 51, 234, 0.25) !important; }

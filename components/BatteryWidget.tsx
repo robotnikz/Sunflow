@@ -121,7 +121,7 @@ const BatteryWidget: React.FC<BatteryWidgetProps> = ({ soc, power, state, capaci
 
                 {/* Background Track */}
                 <circle
-                    stroke="#1e293b" // slate-800
+                    stroke="var(--sf-gauge-track, #1e293b)"
                     strokeWidth={stroke}
                     strokeLinecap="round"
                     fill="transparent"
