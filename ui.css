@@ -162,6 +162,24 @@ html[data-theme='light'] .border-purple-800 { border-color: rgba(147, 51, 234, 0
 html[data-theme='light'] .text-purple-200 { color: #5b21b6 !important; }
 html[data-theme='light'] .text-purple-300\/80 { color: rgba(91, 33, 182, 0.80) !important; }
 
+/* Badge/pill contrast helpers (Strategy + Status badges) */
+html[data-theme='light'] .bg-emerald-900\/30 { background-color: rgba(16, 185, 129, 0.14) !important; }
+html[data-theme='light'] .bg-emerald-900\/40 { background-color: rgba(16, 185, 129, 0.16) !important; }
+html[data-theme='light'] .border-emerald-500\/30 { border-color: rgba(16, 185, 129, 0.45) !important; }
+html[data-theme='light'] .bg-emerald-900\/30.text-emerald-400,
+html[data-theme='light'] .bg-emerald-900\/40.text-emerald-400 { color: #065f46 !important; }
+
+html[data-theme='light'] .bg-amber-900\/30 { background-color: rgba(245, 158, 11, 0.14) !important; }
+html[data-theme='light'] .bg-amber-900\/40 { background-color: rgba(245, 158, 11, 0.16) !important; }
+html[data-theme='light'] .border-amber-500\/30 { border-color: rgba(245, 158, 11, 0.45) !important; }
+html[data-theme='light'] .bg-amber-900\/30.text-amber-400,
+html[data-theme='light'] .bg-amber-900\/40.text-amber-400 { color: #92400e !important; }
+
+/* Small tag-style badges (bg-*/text-*/border-* combos) */
+html[data-theme='light'] .bg-emerald-500\/10 { background-color: rgba(16, 185, 129, 0.12) !important; }
+html[data-theme='light'] .border-emerald-500\/20 { border-color: rgba(16, 185, 129, 0.35) !important; }
+html[data-theme='light'] .text-emerald-300 { color: #065f46 !important; }
+
 /* Small helper: in light theme, dim very dark translucent panels */
 html[data-theme='light'] .bg-black\/70 { background-color: rgba(15, 23, 42, 0.40) !important; }
 
