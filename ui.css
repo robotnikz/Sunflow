@@ -124,6 +124,20 @@ html[data-theme='light'] .border-slate-700\/60 { border-color: rgba(226, 232, 24
 html[data-theme='light'] .border-slate-700\/50 { border-color: rgba(226, 232, 240, 0.50) !important; }
 html[data-theme='light'] .border-slate-600 { border-color: #cbd5e1 !important; }
 
+/* Accent info boxes (used in Settings tabs) */
+html[data-theme='light'] .bg-blue-900\/20 { background-color: rgba(59, 130, 246, 0.08) !important; }
+html[data-theme='light'] .border-blue-800 { border-color: rgba(37, 99, 235, 0.25) !important; }
+html[data-theme='light'] .text-blue-200 { color: #1e40af !important; }
+
+html[data-theme='light'] .bg-emerald-900\/20 { background-color: rgba(16, 185, 129, 0.08) !important; }
+html[data-theme='light'] .border-emerald-800 { border-color: rgba(5, 150, 105, 0.25) !important; }
+html[data-theme='light'] .text-emerald-200 { color: #065f46 !important; }
+
+html[data-theme='light'] .bg-purple-900\/20 { background-color: rgba(168, 85, 247, 0.08) !important; }
+html[data-theme='light'] .border-purple-800 { border-color: rgba(147, 51, 234, 0.25) !important; }
+html[data-theme='light'] .text-purple-200 { color: #5b21b6 !important; }
+html[data-theme='light'] .text-purple-300\/80 { color: rgba(91, 33, 182, 0.80) !important; }
+
 /* Small helper: in light theme, dim very dark translucent panels */
 html[data-theme='light'] .bg-black\/70 { background-color: rgba(15, 23, 42, 0.40) !important; }
 
