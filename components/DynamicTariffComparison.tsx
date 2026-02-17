@@ -3,6 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { CalendarDays, MapPin, Sliders, TrendingDown, TrendingUp, Info, RefreshCw, ArrowRight } from 'lucide-react';
 import type { AwattarComparisonResponse, SystemConfig, AwattarComparePeriod } from '../types';
 import { getAwattarComparison } from '../services/api';
+import { useI18n } from '../services/i18n';
 
 type UiPeriod = AwattarComparePeriod | 'custom';
 
@@ -22,15 +23,16 @@ const currencySymbolFor = (currency: string | undefined) => {
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
-const formatTickDate = (ymd: string) => {
-  // ymd = YYYY-MM-DD
-  const d = new Date(`${ymd}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return ymd;
-  return d.toLocaleDateString([], { month: 'short', day: '2-digit' });
-};
-
 const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config }) => {
+  const { t, locale } = useI18n();
   const currencySymbol = currencySymbolFor(config.currency);
+
+  const formatTickDate = (ymd: string) => {
+    // ymd = YYYY-MM-DD
+    const d = new Date(`${ymd}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return ymd;
+    return d.toLocaleDateString(locale, { month: 'short', day: '2-digit' });
+  };
 
   const STORAGE_KEY = 'sunflow.awattar.compare';
   const RESULT_KEY = 'sunflow.awattar.compare.result';
@@ -149,7 +151,7 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
     } catch (e: any) {
       setResult(null);
       saveResultLocal(null);
-      setError(e?.message || 'Failed to load comparison');
+      setError(e?.message || t('Failed to load comparison'));
     } finally {
       setLoading(false);
     }
@@ -201,10 +203,10 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
       <div className="bg-slate-900 border border-slate-600 p-3 rounded-lg shadow-2xl">
         <div className="text-xs text-slate-400 font-semibold mb-2 border-b border-slate-700 pb-1">{label}</div>
         <div className="space-y-1 text-xs">
-          <div className="flex justify-between gap-6"><span className="text-slate-400">Fixed net</span><span className="text-slate-100 font-mono">{currencySymbol} {Number(fixed || 0).toFixed(2)}</span></div>
-          <div className="flex justify-between gap-6"><span className="text-slate-400">Dynamic net</span><span className="text-slate-100 font-mono">{currencySymbol} {Number(dyn || 0).toFixed(2)}</span></div>
-          <div className="flex justify-between gap-6"><span className="text-slate-400">Delta (dyn-fixed)</span><span className={`font-mono ${Number(delta || 0) <= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{currencySymbol} {Number(delta || 0).toFixed(2)}</span></div>
-          <div className="flex justify-between gap-6"><span className="text-slate-400">Cum. delta</span><span className={`font-mono ${Number(cum || 0) <= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{currencySymbol} {Number(cum || 0).toFixed(2)}</span></div>
+          <div className="flex justify-between gap-6"><span className="text-slate-400">{t('Fixed net')}</span><span className="text-slate-100 font-mono">{currencySymbol} {Number(fixed || 0).toFixed(2)}</span></div>
+          <div className="flex justify-between gap-6"><span className="text-slate-400">{t('Dynamic net')}</span><span className="text-slate-100 font-mono">{currencySymbol} {Number(dyn || 0).toFixed(2)}</span></div>
+          <div className="flex justify-between gap-6"><span className="text-slate-400">{t('Delta (dyn-fixed)')}</span><span className={`font-mono ${Number(delta || 0) <= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{currencySymbol} {Number(delta || 0).toFixed(2)}</span></div>
+          <div className="flex justify-between gap-6"><span className="text-slate-400">{t('Cum. delta')}</span><span className={`font-mono ${Number(cum || 0) <= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{currencySymbol} {Number(cum || 0).toFixed(2)}</span></div>
         </div>
       </div>
     );
@@ -221,8 +223,8 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
             <TrendingUp className="text-white" size={24} />
           </div>
           <div className="text-left">
-            <div className="text-white font-bold text-lg">Dynamic Tariff Comparison (aWATTar)</div>
-            <div className="text-indigo-200 text-sm">See if a dynamic tariff would have been cheaper</div>
+            <div className="text-white font-bold text-lg">{t('Dynamic Tariff Comparison (aWATTar)')}</div>
+            <div className="text-indigo-200 text-sm">{t('See if a dynamic tariff would have been cheaper')}</div>
           </div>
         </div>
         <ArrowRight className="text-white opacity-50 group-hover:opacity-100 transition-opacity" />
@@ -239,18 +241,18 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
         onClick={() => setIsOpen(false)}
         className="absolute top-6 right-6 px-3 py-2 rounded-lg border bg-slate-900/40 border-slate-700 text-slate-300 hover:bg-slate-900/60 transition-colors text-sm font-medium"
       >
-        Close
+        {t('Close')}
       </button>
 
       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 pr-24">
         <div>
           <h2 className="text-2xl font-bold text-white flex items-center gap-2">
             <TrendingUp className="text-purple-400" />
-            Dynamic Tariff Comparison
+            {t('Dynamic Tariff Comparison')}
           </h2>
           <p className="text-slate-400 text-sm mt-1 flex items-center gap-2">
             <Info size={14} className="text-slate-400" />
-            {'aWATTar provides market (exchange) prices. Add “Surcharge” + VAT to approximate your all-in retail tariff.'}
+            {t('aWATTar provides market (exchange) prices. Add “Surcharge” + VAT to approximate your all-in retail tariff.')}
           </p>
         </div>
 
@@ -266,7 +268,7 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
             }`}
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-            {loading ? 'Calculating…' : 'Run comparison'}
+            {loading ? t('Calculating…') : t('Run comparison')}
           </button>
         </div>
       </div>
@@ -276,7 +278,7 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
         <div className="lg:col-span-5 bg-slate-900/40 border border-slate-700/50 rounded-xl p-4">
           <div className="text-xs text-slate-400 font-semibold mb-3 flex items-center gap-2">
             <CalendarDays size={14} className="text-slate-400" />
-            Time window
+            {t('Time window')}
           </div>
 
           <div className="flex flex-wrap bg-slate-900 rounded-lg p-1 border border-slate-700">
@@ -291,7 +293,7 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
                 }`}
               >
-                {PERIOD_LABEL[p]}
+                {t(PERIOD_LABEL[p])}
               </button>
             ))}
           </div>
@@ -299,7 +301,7 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
           {period === 'custom' && (
             <div className="mt-3 grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-slate-400 font-bold uppercase">From</label>
+                <label className="text-xs text-slate-400 font-bold uppercase">{t('From')}</label>
                 <input
                   type="date"
                   value={from}
@@ -308,7 +310,7 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-400 font-bold uppercase">To</label>
+                <label className="text-xs text-slate-400 font-bold uppercase">{t('To')}</label>
                 <input
                   type="date"
                   value={to}
@@ -318,11 +320,11 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
               </div>
               {!canApply && (
                 <div className="col-span-2 text-xs text-amber-300">
-                  Select both dates to run a custom window.
+                  {t('Select both dates to run a custom window.')}
                 </div>
               )}
               <div className="col-span-2 text-xs text-slate-400">
-                Note: “To” is treated as inclusive in the UI.
+                {t('Note: “To” is treated as inclusive in the UI.')}
               </div>
             </div>
           )}
@@ -331,11 +333,11 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
         <div className="lg:col-span-4 bg-slate-900/40 border border-slate-700/50 rounded-xl p-4">
           <div className="text-xs text-slate-400 font-semibold mb-3 flex items-center gap-2">
             <MapPin size={14} className="text-slate-400" />
-            Location
+            {t('Location')}
           </div>
 
           <div>
-            <label className="text-xs text-slate-400 font-bold uppercase">Country</label>
+            <label className="text-xs text-slate-400 font-bold uppercase">{t('Country')}</label>
             <select
               value={country}
               onChange={e => setCountry(e.target.value as any)}
@@ -344,19 +346,19 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
               <option value="DE">DE</option>
               <option value="AT">AT</option>
             </select>
-            <div className="text-xs text-slate-400 mt-1">aWATTar is country-based (DE/AT).</div>
+            <div className="text-xs text-slate-400 mt-1">{t('aWATTar is country-based (DE/AT).')}</div>
           </div>
         </div>
 
         <div className="lg:col-span-3 bg-slate-900/40 border border-slate-700/50 rounded-xl p-4">
           <div className="text-xs text-slate-400 font-semibold mb-3 flex items-center gap-2">
             <Sliders size={14} className="text-slate-400" />
-            Price add-ons
+            {t('Price add-ons')}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-slate-400 font-bold uppercase">Surcharge (ct/kWh)</label>
+              <label className="text-xs text-slate-400 font-bold uppercase">{t('Surcharge (ct/kWh)')}</label>
               <input
                 type="number"
                 step="0.1"
@@ -365,11 +367,11 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
                 className="mt-1 w-full bg-slate-800 border border-slate-600 text-white text-sm rounded px-3 py-1.5 focus:border-indigo-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
               <div className="text-xs text-slate-400 mt-1">
-                Added to the market price before VAT. Typical use: fees, margin, balancing costs, etc.
+                {t('Added to the market price before VAT. Typical use: fees, margin, balancing costs, etc.')}
               </div>
             </div>
             <div>
-              <label className="text-xs text-slate-400 font-bold uppercase">VAT (%)</label>
+              <label className="text-xs text-slate-400 font-bold uppercase">{t('VAT (%)')}</label>
               <input
                 type="number"
                 step="0.1"
@@ -378,11 +380,11 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
                 className="mt-1 w-full bg-slate-800 border border-slate-600 text-white text-sm rounded px-3 py-1.5 focus:border-indigo-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
               <div className="text-xs text-slate-400 mt-1">
-                Applied on top: (market + surcharge) × (1 + VAT).
+                {t('Applied on top: (market + surcharge) × (1 + VAT).')}
               </div>
             </div>
             <div className="col-span-2 text-xs text-slate-400">
-              Tip: set VAT to 20% (AT) / 19% (DE). Example: market 10ct + surcharge 5ct @ 19% VAT ⇒ ~17.85ct/kWh.
+              {t('Tip: set VAT to 20% (AT) / 19% (DE). Example: market 10ct + surcharge 5ct @ 19% VAT ⇒ ~17.85ct/kWh.')}
             </div>
           </div>
         </div>
@@ -398,7 +400,7 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
 
         {!result && !loading && !error && (
           <div className="bg-slate-900/40 border border-slate-700/50 text-slate-400 p-4 rounded-xl text-sm">
-            Run the comparison to see how much you would have paid with a dynamic tariff.
+            {t('Run the comparison to see how much you would have paid with a dynamic tariff.')}
           </div>
         )}
 
@@ -406,40 +408,42 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-slate-900/40 border border-slate-700/50 rounded-xl p-4">
-                <div className="text-xs text-slate-400 font-bold uppercase">Fixed net cost</div>
+                <div className="text-xs text-slate-400 font-bold uppercase">{t('Fixed net cost')}</div>
                 <div className="text-2xl font-bold text-slate-100 mt-1">
                   {currencySymbol} {result.totals.fixed.net.toFixed(2)}
                 </div>
-                <div className="text-xs text-slate-400 mt-1">Import − feed-in revenue</div>
+                <div className="text-xs text-slate-400 mt-1">{t('Import − feed-in revenue')}</div>
               </div>
               <div className="bg-slate-900/40 border border-slate-700/50 rounded-xl p-4">
-                <div className="text-xs text-slate-400 font-bold uppercase">Dynamic net cost</div>
+                <div className="text-xs text-slate-400 font-bold uppercase">{t('Dynamic net cost')}</div>
                 <div className="text-2xl font-bold text-slate-100 mt-1">
                   {currencySymbol} {result.totals.dynamic.net.toFixed(2)}
                 </div>
-                <div className="text-xs text-slate-400 mt-1">aWATTar + add-ons</div>
+                <div className="text-xs text-slate-400 mt-1">{t('aWATTar + add-ons')}</div>
               </div>
               <div className="bg-slate-900/40 border border-slate-700/50 rounded-xl p-4">
-                <div className="text-xs text-slate-400 font-bold uppercase">Difference</div>
+                <div className="text-xs text-slate-400 font-bold uppercase">{t('Difference')}</div>
                 <div className={`text-2xl font-bold mt-1 flex items-center gap-2 ${summary.delta <= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                   {summary.delta <= 0 ? <TrendingDown size={18} /> : <TrendingUp size={18} />}
                   {currencySymbol} {summary.delta.toFixed(2)}
                 </div>
                 <div className="text-xs text-slate-400 mt-1">
-                  {summary.delta <= 0 ? `You would have saved ~${currencySymbol} ${summary.savings.toFixed(2)}` : `You would have paid ~${currencySymbol} ${summary.extra.toFixed(2)} more`}
+                  {summary.delta <= 0
+                    ? `${t('You would have saved ~')} ${currencySymbol} ${summary.savings.toFixed(2)}`
+                    : `${t('You would have paid ~')} ${currencySymbol} ${summary.extra.toFixed(2)} ${t('more')}`}
                 </div>
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
               <span className="bg-slate-900/60 border border-slate-700/50 px-2 py-1 rounded">
-                Range: {result.range.from.substring(0, 10)} → {result.range.to.substring(0, 10)}
+                {t('Range')}: {result.range.from.substring(0, 10)} → {result.range.to.substring(0, 10)}
               </span>
               <span className="bg-slate-900/60 border border-slate-700/50 px-2 py-1 rounded">
-                Coverage: {summary.coverage}% ({result.coverage.hoursUsed}/{result.coverage.hoursWithEnergy} hours)
+                {t('Coverage')}: {summary.coverage}% ({result.coverage.hoursUsed}/{result.coverage.hoursWithEnergy} {t('hours')})
               </span>
               <span className="bg-slate-900/60 border border-slate-700/50 px-2 py-1 rounded">
-                Assumptions: +{(result as any).assumptions.surchargeCt}ct, VAT {(result as any).assumptions.vatPercent}%
+                {t('Assumptions')}: +{(result as any).assumptions.surchargeCt}ct, {t('VAT')} {(result as any).assumptions.vatPercent}%
               </span>
             </div>
 
@@ -451,9 +455,9 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
                   <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} tickFormatter={(v) => `${currencySymbol}${v}`} />
                   <Tooltip content={<CustomTooltip />} cursor={{ fill: '#334155', opacity: 0.35 }} isAnimationActive={false} />
                   <Legend />
-                  <Bar dataKey="fixedNet" name="Fixed" fill="#60A5FA" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="dynamicNet" name="Dynamic" fill="#A78BFA" radius={[4, 4, 0, 0]} />
-                  <Line type="monotone" dataKey="cumDelta" name="Cum. delta" stroke="#34D399" strokeWidth={2} dot={false} />
+                  <Bar dataKey="fixedNet" name={t('Fixed')} fill="#60A5FA" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="dynamicNet" name={t('Dynamic')} fill="#A78BFA" radius={[4, 4, 0, 0]} />
+                  <Line type="monotone" dataKey="cumDelta" name={t('Cum. delta')} stroke="#34D399" strokeWidth={2} dot={false} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>

@@ -2,6 +2,7 @@
 import React from 'react';
 import { Smartphone, Laptop, Tv, Gamepad2, Coffee, Utensils, Shirt, Car, Zap, ArrowUp, BatteryWarning, SunMedium, Battery, CheckCircle2, Hourglass, Leaf, Wind, Monitor, Lightbulb, Speaker, Refrigerator, Fan, AlertOctagon } from 'lucide-react';
 import { ForecastData, Appliance } from '../types';
+import { useI18n } from '../services/i18n';
 
 interface SmartRecommendationsProps {
   power: {
@@ -58,6 +59,7 @@ const currencySymbolFor = (currency: string | undefined) => {
 const clampNumber = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
 const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc, forecast, solcastRateLimited, todayProduction, isDay, sunriseIso, sunsetIso, batteryCapacity, appliances, hasSolcastKey, reserveSocPct, currency, gridCostPerKwh }) => {
+    const { t } = useI18n();
     const deviceList = (appliances || []).filter(app => Number(app?.watts || 0) > 0);
     const currencySymbol = currencySymbolFor(currency);
 
@@ -185,7 +187,7 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
         <div>
            <h3 className="text-slate-400 text-sm font-medium flex items-center gap-2">
               <Zap size={16} className={totalAvailablePower > 0 ? "text-yellow-400 fill-yellow-400" : "text-slate-500"} />
-              Smart Usage
+                  {t('Smart Usage')}
            </h3>
            <div className="mt-1 flex flex-col">
               <div className="flex items-baseline gap-1">
@@ -193,7 +195,7 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
                         {totalAvailablePower > 0 ? `${Math.round(totalAvailablePower)} W` : (isDay && aboveReserveKwh > 0 ? `${aboveReserveKwh.toFixed(1)} kWh` : '0 W')}
                     </span>
                     <span className="text-xs text-slate-400 font-medium">
-                        {totalAvailablePower > 0 ? 'Free' : (isDay && aboveReserveKwh > 0 ? 'Above reserve' : 'Free')}
+                        {totalAvailablePower > 0 ? t('Free') : (isDay && aboveReserveKwh > 0 ? t('Above reserve') : t('Free'))}
                     </span>
               </div>
 
@@ -201,13 +203,13 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
                   <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0 text-xs leading-tight">
                       {batteryCapacityKwh > 0 && (
                           <span className="text-slate-400">
-                              Reserve: <span className="text-slate-300">{Math.round(reservePct)}%</span>
+                              {t('Reserve')}: <span className="text-slate-300">{Math.round(reservePct)}%</span>
                           </span>
                       )}
                       {divertableAmount > 0 && (
                           <span className="flex items-center gap-1 text-blue-400">
                               <CheckCircle2 size={10} />
-                              <span>Buffering {Math.round(divertableAmount)}W</span>
+                              <span>{t('Buffering')} {Math.round(divertableAmount)}W</span>
                           </span>
                       )}
                   </div>
@@ -227,25 +229,25 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
             }`}>
                 {isBatterySafe ? <CheckCircle2 size={12}/> : <BatteryWarning size={12}/>}
                 <span>
-                    {isBatterySafe ? "Battery Safe" : "Battery Priority"}
+                    {isBatterySafe ? t('Battery Safe') : t('Battery Priority')}
                 </span>
             </div>
             
             {/* 2. Forecast vs Battery Need */}
             <div className="flex items-center gap-2 text-xs bg-slate-900/60 px-2 py-1 rounded-md border border-slate-700/50">
-                <div className="flex items-center gap-1" title={hasAnyForecastData ? `Remaining Solar Forecast Today (Solcast)` : "Forecast data unavailable"}>
+                <div className="flex items-center gap-1" title={hasAnyForecastData ? t('Remaining Solar Forecast Today (Solcast)') : t('Forecast data unavailable')}>
                     <SunMedium size={10} className={hasAnyForecastData ? "text-yellow-500" : "text-slate-600"}/> 
                     <span className="text-slate-300">
                         {hasAnyForecastData ? `+${Math.round(forecastRemainingKwh)}k` : '--'}
                     </span>
                     {solcastRateLimited && (
-                        <span title="Solcast API Limit Reached (Using cached data if available)">
+                        <span title={t('Solcast API Limit Reached (Using cached data if available)')}>
                             <AlertOctagon size={10} className="text-red-500 animate-pulse" />
                         </span>
                     )}
                 </div>
-                <span className="text-xs text-slate-400">vs</span>
-                <div className="flex items-center gap-1" title="Energy needed to reach your reserve target">
+                <span className="text-xs text-slate-400">{t('vs')}</span>
+                <div className="flex items-center gap-1" title={t('Energy needed to reach your reserve target')}>
                     <Battery size={10} className="text-blue-400"/> 
                     <span className="text-slate-300">-{Math.round(kwhToReachReserve)}k</span>
                 </div>
@@ -261,24 +263,24 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
                 {energyBlocked ? (
                     <>
                          <Leaf size={32} className="text-amber-500 mb-2" />
-                         <p className="text-sm text-amber-400 font-medium">Conserve Energy</p>
+                         <p className="text-sm text-amber-400 font-medium">{t('Conserve Energy')}</p>
                                  <p className="text-xs text-slate-400 mt-1 max-w-[200px]">
-                            Not enough sun left today to refill battery if devices run now.
+                            {t('Not enough sun left today to refill battery if devices run now.')}
                          </p>
                     </>
                 ) : batteryBlocked ? (
                     <>
                         <Hourglass size={32} className="text-amber-500 mb-2" />
-                        <p className="text-sm text-amber-400 font-medium">Charging Storage</p>
+                        <p className="text-sm text-amber-400 font-medium">{t('Charging Storage')}</p>
                         <p className="text-xs text-slate-400 mt-1 max-w-[200px]">
-                            {Math.round(batteryCharging)}W is flowing to battery. Waiting for surplus...
+                            {Math.round(batteryCharging)}W {t('is flowing to battery. Waiting for surplus...')}
                         </p>
                     </>
                 ) : (
                     <>
                         <Zap size={32} className="text-slate-600 mb-2" />
-                        <p className="text-sm text-slate-400">No surplus available.</p>
-                        <p className="text-xs text-slate-600 mt-1">Wait for sun or reduce load.</p>
+                        <p className="text-sm text-slate-400">{t('No surplus available.')}</p>
+                        <p className="text-xs text-slate-600 mt-1">{t('Wait for sun or reduce load.')}</p>
                     </>
                 )}
              </div>
@@ -300,13 +302,13 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
 
                     const sourceBadge = (() => {
                         if (isUsingReserve) {
-                            return { label: 'Battery Reserve', cls: 'bg-purple-500/10 text-purple-300 border-purple-500/20' };
+                            return { label: t('Battery Reserve'), cls: 'bg-purple-500/10 text-purple-300 border-purple-500/20' };
                         }
                         if (app.watts <= gridExport) {
-                            return { label: 'Grid Export', cls: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' };
+                            return { label: t('Grid Export'), cls: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' };
                         }
                         if (totalAvailablePower > 0 && isUsingDiverted) {
-                            return { label: 'Battery Divert', cls: 'bg-blue-500/10 text-blue-300 border-blue-500/20' };
+                            return { label: t('Battery Divert'), cls: 'bg-blue-500/10 text-blue-300 border-blue-500/20' };
                         }
                         return null;
                     })();
@@ -321,7 +323,7 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
                                     <div>
                                         <span className="text-sm font-medium text-slate-200 block leading-tight">{app.name}</span>
                                                                                 <span className="text-xs text-slate-400">
-                                                                                    ~{runKwh} kWh/run
+                                                                                    ~{runKwh} {t('kWh/run')}
                                                                                     {hasCost && runCost !== null && (
                                                                                         <>
                                                                                             {' '}• ≈ {currencySymbol}{runCost.toFixed(2)}
@@ -329,7 +331,7 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
                                                                                     )}
                                                                                     {hasBatteryEq && batteryPct !== null && (
                                                                                         <>
-                                                                                            {' '}• ~{Math.round(batteryPct)}% battery
+                                                                                            {' '}• ~{Math.round(batteryPct)}% {t('battery')}
                                                                                         </>
                                                                                     )}
                                                                                 </span>
@@ -368,7 +370,7 @@ const SmartRecommendations: React.FC<SmartRecommendationsProps> = ({ power, soc,
                             <ArrowUp size={12} />
                          </div>
                          <div className="text-xs text-slate-400">
-                            Need <strong>+{Math.max(0, nextUp.watts - Math.round(usablePower))} W</strong> for <span className="text-slate-300">{nextUp.name}</span>
+                                     {t('Need')} <strong>+{Math.max(0, nextUp.watts - Math.round(usablePower))} W</strong> {t('for')} <span className="text-slate-300">{nextUp.name}</span>
                          </div>
                     </div>
                 )}

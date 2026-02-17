@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend, BarChart, Bar, Cell } from 'recharts';
+import { useI18n } from '../services/i18n';
 
 interface EnergyChartProps {
   history: Array<{
@@ -15,12 +16,24 @@ interface EnergyChartProps {
 }
 
 const EnergyChart: React.FC<EnergyChartProps> = ({ history, timeRange }) => {
+  const { t, locale } = useI18n();
   if (history.length === 0) {
-    return <div className="flex items-center justify-center h-full text-slate-400">No historical data available yet.</div>;
+    return <div className="flex items-center justify-center h-full text-slate-400">{t('No historical data available yet.')}</div>;
   }
 
   const isAggregated = history[0]?.is_aggregated || ['week', 'month', 'year'].includes(timeRange);
-  const unit = isAggregated ? 'kWh' : 'Watts';
+  const unit = isAggregated ? 'kWh' : t('Watts');
+
+  const labelForSeries = (seriesKey: string, gridValue?: number): string => {
+    if (seriesKey === 'Grid') return isAggregated ? t('Grid Balance') : t('Grid Power');
+    if (seriesKey === 'Battery') {
+      if (typeof gridValue === 'number') return gridValue > 0 ? t('Discharged') : t('Charged');
+      return t('Battery');
+    }
+    if (seriesKey === 'Production') return t('Production');
+    if (seriesKey === 'Consumption') return t('Consumption');
+    return seriesKey;
+  };
 
   // Dynamic Tick Formatting based on selected timeRange
   const formatTick = (ts: string) => {
@@ -28,19 +41,19 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history, timeRange }) => {
     
     switch(timeRange) {
         case 'hour':
-            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
         case 'day':
-            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
         case 'week':
-            return d.toLocaleDateString([], { weekday: 'short', day: '2-digit' });
+        return d.toLocaleDateString(locale, { weekday: 'short', day: '2-digit' });
         case 'month':
-            return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
+        return d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' });
         case 'year':
-            return d.toLocaleDateString([], { month: 'short' });
+        return d.toLocaleDateString(locale, { month: 'short' });
         case 'custom':
-            return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
+        return d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' });
         default:
-            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
     }
   };
 
@@ -69,8 +82,8 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history, timeRange }) => {
 
     const d = new Date(label);
     const dateStr = isAggregated 
-        ? (timeRange === 'year' ? d.toLocaleDateString([], { month: 'long', year: 'numeric' }) : d.toLocaleDateString())
-        : d.toLocaleString();
+      ? (timeRange === 'year' ? d.toLocaleDateString(locale, { month: 'long', year: 'numeric' }) : d.toLocaleDateString(locale))
+      : d.toLocaleString(locale);
 
     return (
       <div className="bg-slate-900 border border-slate-600 p-3 rounded-lg shadow-2xl antialiased" style={{ boxShadow: '0 10px 30px -10px rgba(0,0,0,0.8)' }}>
@@ -83,17 +96,17 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history, timeRange }) => {
             const name = entry.name;
             const absVal = Math.round(Math.abs(val) * 100) / 100;
             
-            let labelText = name;
+            let labelText = labelForSeries(name, val);
             let textColor = '#e2e8f0';
 
             if (name === 'Production') textColor = '#FACC15'; 
             else if (name === 'Consumption') textColor = '#60A5FA'; 
             else if (name === 'Battery') {
               textColor = '#C084FC'; 
-              labelText = val > 0 ? "Discharged" : "Charged";
+              labelText = val > 0 ? t('Discharged') : t('Charged');
             } else if (name === 'Grid') {
-              if (val > 0) { textColor = '#F87171'; labelText = "Imported"; }
-              else { textColor = '#34D399'; labelText = "Exported"; }
+              if (val > 0) { textColor = '#F87171'; labelText = t('Imported'); }
+              else { textColor = '#34D399'; labelText = t('Exported'); }
             }
 
             return (
@@ -129,7 +142,7 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history, timeRange }) => {
                 className={`w-3 h-3 rounded-full ${isGrid ? 'bg-gradient-to-r from-red-500 to-green-500' : ''}`}
               />
               <span className={`text-sm font-bold ${textColorClass} ${isGrid ? 'bg-clip-text text-transparent bg-gradient-to-r from-red-400 to-green-400' : ''}`}>
-                {isGrid ? (isAggregated ? 'Grid Balance' : 'Grid Power') : entry.value}
+                {isGrid ? (isAggregated ? t('Grid Balance') : t('Grid Power')) : labelForSeries(entry.value)}
               </span>
             </div>
           );
@@ -200,7 +213,7 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ history, timeRange }) => {
           stroke="#94a3b8" 
           fontSize={11} 
           tickLine={false} 
-          label={{ value: 'Watts', angle: -90, position: 'insideLeft', fill: '#64748b' }} 
+          label={{ value: t('Watts'), angle: -90, position: 'insideLeft', fill: '#64748b' }} 
         />
         
         <Tooltip 

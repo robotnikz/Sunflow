@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { Upload, FileText, Check, AlertCircle, Database, ArrowRight, Loader2, RotateCcw } from 'lucide-react';
 import { previewCsv, importCsv, CsvPreview } from '../services/api';
 import Papa from 'papaparse';
+import { useI18n } from '../services/i18n';
 
 interface CsvImporterProps {
     onSuccess?: () => void;
 }
 
 const CsvImporter: React.FC<CsvImporterProps> = ({ onSuccess }) => {
+    const { t } = useI18n();
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [file, setFile] = useState<File | null>(null);
     const [preview, setPreview] = useState<CsvPreview | null>(null);
@@ -323,7 +325,7 @@ const CsvImporter: React.FC<CsvImporterProps> = ({ onSuccess }) => {
                 complete: async (results) => {
                     try {
                         const rows = results.data as string[][];
-                        if (rows.length < 2) throw new Error("File is empty");
+                        if (rows.length < 2) throw new Error(t('File is empty'));
                         
                         const headerRow = rows[0];
                         const dates = headerRow.slice(3);
@@ -428,7 +430,7 @@ const CsvImporter: React.FC<CsvImporterProps> = ({ onSuccess }) => {
         <div className="bg-slate-900 rounded-xl border border-slate-700 p-6 h-full overflow-y-auto">
             <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
                 <Database className="text-blue-400" />
-                Data Import
+                {t('Data Import')}
             </h3>
 
             {/* STEP 1: UPLOAD */}
@@ -441,8 +443,8 @@ const CsvImporter: React.FC<CsvImporterProps> = ({ onSuccess }) => {
                         onChange={handleFileSelect}
                     />
                     <Upload size={48} className="text-slate-400 mb-4" />
-                    <p className="text-slate-300 font-medium">Click to upload CSV</p>
-                    <p className="text-slate-400 text-sm mt-2">Support for Home Assistant (Energy Panel), Fronius, InfluxDB</p>
+                    <p className="text-slate-300 font-medium">{t('Click to upload CSV')}</p>
+                    <p className="text-slate-400 text-sm mt-2">{t('Support for Home Assistant (Energy Panel), Fronius, InfluxDB')}</p>
                     {loading && <Loader2 className="animate-spin text-blue-400 mt-4" />}
                 </div>
             )}
@@ -454,15 +456,15 @@ const CsvImporter: React.FC<CsvImporterProps> = ({ onSuccess }) => {
                         <div className="bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-lg flex gap-3 text-emerald-200 text-sm">
                             <RotateCcw className="shrink-0" />
                             <div>
-                                <strong>Home Assistant Format Detected</strong>
-                                <p className="opacity-80 mt-1">Found column-based Daily Energy data. This will be automatically converted to <strong>hourly average power</strong> for the dashboard history.</p>
+                                <strong>{t('Home Assistant Format Detected')}</strong>
+                                <p className="opacity-80 mt-1">{t('Found column-based Daily Energy data. This will be automatically converted to')} <strong>{t('hourly average power')}</strong> {t('for the dashboard history.')}</p>
                             </div>
                         </div>
                     )}
                     
                     <div className="flex items-center gap-2 text-slate-400 text-sm">
                         <FileText size={16} />
-                        File: <span className="text-white">{file?.name}</span>
+                        {t('File:')} <span className="text-white">{file?.name}</span>
                     </div>
 
                      {/* MAPPING UI - Adapts to Pivoted Mode */}
@@ -470,12 +472,12 @@ const CsvImporter: React.FC<CsvImporterProps> = ({ onSuccess }) => {
                     {!isPivoted && preview && (
                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {[
-                                { key: 'timestamp', label: 'Timestamp (Required)', required: true },
-                                { key: 'power_pv', label: 'PV Power (Watts)', required: false },
-                                { key: 'power_load', label: 'Consumption (Watts)', required: false },
-                                { key: 'power_grid', label: 'Grid Power (Watts, +Imp/-Exp)', required: false },
-                                { key: 'power_battery', label: 'Battery Power (Watts)', required: false },
-                                { key: 'soc', label: 'Battery State of Charge (%)', required: false },
+                                { key: 'timestamp', label: t('Timestamp (Required)'), required: true },
+                                { key: 'power_pv', label: t('PV Power (Watts)'), required: false },
+                                { key: 'power_load', label: t('Consumption (Watts)'), required: false },
+                                { key: 'power_grid', label: t('Grid Power (Watts, +Imp/-Exp)'), required: false },
+                                { key: 'power_battery', label: t('Battery Power (Watts)'), required: false },
+                                { key: 'soc', label: t('Battery State of Charge (%)'), required: false },
                             ].map((field) => (
                                 <div key={field.key} className="bg-slate-800 p-3 rounded-lg border border-slate-700">
                                     <label className="block text-xs font-bold text-slate-400 uppercase mb-2">{field.label}</label>
@@ -484,7 +486,7 @@ const CsvImporter: React.FC<CsvImporterProps> = ({ onSuccess }) => {
                                         value={mapping[field.key as keyof typeof mapping]}
                                         onChange={(e) => setMapping({...mapping, [field.key]: e.target.value})}
                                     >
-                                        <option value="">-- Ignore --</option>
+                                        <option value="">{t('-- Ignore --')}</option>
                                         {preview.headers.map(h => <option key={h} value={h}>{h}</option>)}
                                     </select>
                                 </div>
@@ -495,12 +497,12 @@ const CsvImporter: React.FC<CsvImporterProps> = ({ onSuccess }) => {
                    {isPivoted && (
                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {[
-                                { key: 'pivoted_pv', label: 'Solar Production', desc: 'Total PV Energy (kWh) - e.g. sensor.solar_yield' },
-                                { key: 'pivoted_load', label: 'Home Consumption', desc: 'Total House Load (kWh) - e.g. calculated_consumption' },
-                                { key: 'pivoted_grid_in', label: 'Grid Import', desc: 'Energy form Grid (kWh) - e.g. sensor.grid_consumption' },
-                                { key: 'pivoted_grid_out', label: 'Grid Export', desc: 'Energy to Grid (kWh) - e.g. sensor.grid_return' },
-                                { key: 'pivoted_bat_charge', label: 'Battery Charge', desc: 'Energy into Battery (kWh) - e.g. sensor.battery_in' },
-                                { key: 'pivoted_bat_discharge', label: 'Battery Discharge', desc: 'Energy from Battery (kWh) - e.g. sensor.battery_out' },
+                                { key: 'pivoted_pv', label: t('Solar Production'), desc: t('Total PV Energy (kWh) - e.g. sensor.solar_yield') },
+                                { key: 'pivoted_load', label: t('Home Consumption'), desc: t('Total House Load (kWh) - e.g. calculated_consumption') },
+                                { key: 'pivoted_grid_in', label: t('Grid Import'), desc: t('Energy from Grid (kWh) - e.g. sensor.grid_consumption') },
+                                { key: 'pivoted_grid_out', label: t('Grid Export'), desc: t('Energy to Grid (kWh) - e.g. sensor.grid_return') },
+                                { key: 'pivoted_bat_charge', label: t('Battery Charge'), desc: t('Energy into Battery (kWh) - e.g. sensor.battery_in') },
+                                { key: 'pivoted_bat_discharge', label: t('Battery Discharge'), desc: t('Energy from Battery (kWh) - e.g. sensor.battery_out') },
                             ].map((field) => (
                                 <div key={field.key} className="bg-slate-800 p-3 rounded-lg border border-slate-700">
                                     <label className="block text-xs font-bold text-slate-400 uppercase mb-2">{field.label}</label>
@@ -510,7 +512,7 @@ const CsvImporter: React.FC<CsvImporterProps> = ({ onSuccess }) => {
                                         value={mapping[field.key as keyof typeof mapping]}
                                         onChange={(e) => setMapping({...mapping, [field.key]: e.target.value})}
                                     >
-                                        <option value="">-- Select Entity --</option>
+                                        <option value="">{t('-- Select Entity --')}</option>
                                         {availableEntities.map(e => <option key={e} value={e}>{e}</option>)}
                                     </select>
                                 </div>
@@ -521,12 +523,12 @@ const CsvImporter: React.FC<CsvImporterProps> = ({ onSuccess }) => {
                     {isPivoted && pivotedPreview.length > 0 && (
                         <div className="bg-slate-800 rounded-lg p-4 border border-slate-700 space-y-4">
                              <h4 className="text-sm font-bold text-slate-300 mb-2 uppercase">
-                                {previewMode === 'daily' ? 'Daily Preview' : 'Monthly Summary'}
+                                          {previewMode === 'daily' ? t('Daily Preview') : t('Monthly Summary')}
                              </h4>
 
                              {pivotTotals && (
                                 <div className="p-4 border rounded-lg bg-slate-800/50 border-slate-700">
-                                    <h4 className="font-semibold text-slate-300 mb-2">Total kWh Summary</h4>
+                                                                        <h4 className="font-semibold text-slate-300 mb-2">{t('Total kWh Summary')}</h4>
                                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 text-sm">
                                       {Object.entries(pivotTotals).map(([key, value]) => (
                                         <div key={key} className="p-2 bg-slate-700/50 rounded">
@@ -542,15 +544,15 @@ const CsvImporter: React.FC<CsvImporterProps> = ({ onSuccess }) => {
                                  <table className="w-full text-xs text-left">
                                      <thead>
                                          <tr className="text-slate-400 border-b border-slate-700">
-                                             <th className="py-2 px-2 sticky left-0 bg-slate-800">{previewMode === 'daily' ? 'Date' : 'Month'}</th>
-                                             <th className="py-2 px-2">Solar</th>
-                                             <th className="py-2 px-2">Home Consumption</th>
-                                             <th className="py-2 px-2">Grid Import</th>
-                                             <th className="py-2 px-2">Grid Export</th>
-                                             <th className="py-2 px-2">Net Grid</th>
-                                             <th className="py-2 px-2">Battery Charge</th>
-                                             <th className="py-2 px-2">Battery Discharge</th>
-                                             <th className="py-2 px-2">Net Battery</th>
+                                             <th className="py-2 px-2 sticky left-0 bg-slate-800">{previewMode === 'daily' ? t('Date') : t('Month')}</th>
+                                             <th className="py-2 px-2">{t('Solar')}</th>
+                                             <th className="py-2 px-2">{t('Home Consumption')}</th>
+                                             <th className="py-2 px-2">{t('Grid Import')}</th>
+                                             <th className="py-2 px-2">{t('Grid Export')}</th>
+                                             <th className="py-2 px-2">{t('Net Grid')}</th>
+                                             <th className="py-2 px-2">{t('Battery Charge')}</th>
+                                             <th className="py-2 px-2">{t('Battery Discharge')}</th>
+                                             <th className="py-2 px-2">{t('Net Battery')}</th>
                                          </tr>
                                      </thead>
                                      <tbody>
@@ -559,30 +561,30 @@ const CsvImporter: React.FC<CsvImporterProps> = ({ onSuccess }) => {
                                                  <td className="py-2 px-2 sticky left-0 bg-slate-800 font-medium text-slate-400">{row.date}</td>
                                                  <td className="py-2 px-2">
                                                      <div className="text-yellow-400">{row.solarProduction.sourceKwh.toFixed(2)} kWh</div>
-                                                     <div className="text-xs text-slate-400">~{row.solarProduction.avgWatts.toFixed(0)} W avg</div>
+                                                     <div className="text-xs text-slate-400">~{row.solarProduction.avgWatts.toFixed(0)} W {t('avg')}</div>
                                                  </td>
                                                  <td className="py-2 px-2">
                                                      <div className="text-blue-400">{row.homeConsumption.sourceKwh.toFixed(2)} kWh</div>
-                                                     <div className="text-xs text-slate-400">~{row.homeConsumption.avgWatts.toFixed(0)} W avg</div>
+                                                     <div className="text-xs text-slate-400">~{row.homeConsumption.avgWatts.toFixed(0)} W {t('avg')}</div>
                                                  </td>
                                                  <td className="py-2 px-2">
                                                      <div className="text-red-400">{row.gridImport.sourceKwh.toFixed(2)} kWh</div>
-                                                     <div className="text-xs text-slate-400">~{row.gridImport.avgWatts.toFixed(0)} W avg</div>
+                                                     <div className="text-xs text-slate-400">~{row.gridImport.avgWatts.toFixed(0)} W {t('avg')}</div>
                                                  </td>
                                                  <td className="py-2 px-2">
                                                      <div className="text-emerald-400">{row.gridExport.sourceKwh.toFixed(2)} kWh</div>
-                                                     <div className="text-xs text-slate-400">~{row.gridExport.avgWatts.toFixed(0)} W avg</div>
+                                                     <div className="text-xs text-slate-400">~{row.gridExport.avgWatts.toFixed(0)} W {t('avg')}</div>
                                                  </td>
                                                   <td className="py-2 px-2">
                                                      <div className={`font-bold ${row.netGridWatts >= 0 ? 'text-red-400' : 'text-emerald-400'}`}>{row.netGridWatts.toFixed(0)} W</div>
                                                  </td>
                                                  <td className="py-2 px-2">
                                                      <div className="text-emerald-400">{row.batteryCharge.sourceKwh.toFixed(2)} kWh</div>
-                                                     <div className="text-xs text-slate-400">~{row.batteryCharge.avgWatts.toFixed(0)} W avg</div>
+                                                     <div className="text-xs text-slate-400">~{row.batteryCharge.avgWatts.toFixed(0)} W {t('avg')}</div>
                                                  </td>
                                                  <td className="py-2 px-2">
                                                      <div className="text-yellow-400">{row.batteryDischarge.sourceKwh.toFixed(2)} kWh</div>
-                                                     <div className="text-xs text-slate-400">~{row.batteryDischarge.avgWatts.toFixed(0)} W avg</div>
+                                                     <div className="text-xs text-slate-400">~{row.batteryDischarge.avgWatts.toFixed(0)} W {t('avg')}</div>
                                                  </td>
                                                  <td className="py-2 px-2">
                                                      <div className={`font-bold ${row.netBatteryWatts >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{row.netBatteryWatts.toFixed(0)} W</div>
@@ -599,7 +601,7 @@ const CsvImporter: React.FC<CsvImporterProps> = ({ onSuccess }) => {
                         <div className="flex items-center gap-3">
                             <InfoBox />
                             <div className="text-sm text-blue-300">
-                                {isPivoted ? 'Data will be expanded to 24 data points per day.' : 'Rows with duplicate timestamps will be skipped.'}
+                                {isPivoted ? t('Data will be expanded to 24 data points per day.') : t('Rows with duplicate timestamps will be skipped.')}
                             </div>
                         </div>
                         <button 
@@ -608,7 +610,7 @@ const CsvImporter: React.FC<CsvImporterProps> = ({ onSuccess }) => {
                             className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {loading && <Loader2 className="animate-spin" size={16} />}
-                            {loading ? 'Processing...' : 'Start Import'}
+                            {loading ? t('Processing...') : t('Start Import')}
                             <ArrowRight size={16} />
                         </button>
                     </div>
@@ -621,11 +623,11 @@ const CsvImporter: React.FC<CsvImporterProps> = ({ onSuccess }) => {
                     <div className="inline-flex p-4 bg-emerald-500/10 rounded-full text-emerald-400 mb-4">
                         <Check size={48} />
                     </div>
-                    <h4 className="text-2xl font-bold text-white mb-2">Import Complete</h4>
+                    <h4 className="text-2xl font-bold text-white mb-2">{t('Import Complete')}</h4>
                     <p className="text-slate-400 mb-6">
-                        Successfully imported <span className="text-white font-bold">{result.imported}</span> data points.
+                        {t('Successfully imported')} <span className="text-white font-bold">{result.imported}</span> {t('data points.')}
                         <br />
-                        <span className="text-red-400">{result.failed}</span> rows failed or were duplicates.
+                        <span className="text-red-400">{result.failed}</span> {t('rows failed or were duplicates.')}
                     </p>
                     <button 
                         onClick={() => { 
@@ -640,7 +642,7 @@ const CsvImporter: React.FC<CsvImporterProps> = ({ onSuccess }) => {
                         }}
                         className="bg-slate-700 hover:bg-slate-600 text-white px-6 py-2 rounded-lg"
                     >
-                        Import Another File
+                        {t('Import Another File')}
                     </button>
                 </div>
             )}

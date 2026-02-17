@@ -4,6 +4,7 @@ import App from './App';
 import { ToastProvider } from './components/Toaster';
 import './ui.css';
 import { initUiPreferences } from './services/uiPreferences';
+import { I18nProvider } from './services/i18n';
 
 initUiPreferences();
 
@@ -15,8 +16,10 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <ToastProvider>
-      <App />
-    </ToastProvider>
+    <I18nProvider>
+      <ToastProvider>
+        <App />
+      </ToastProvider>
+    </I18nProvider>
   </React.StrictMode>
 );
