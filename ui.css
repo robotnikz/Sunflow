@@ -175,7 +175,7 @@ html[data-theme='light'] .border-amber-500\/30 { border-color: rgba(245, 158, 11
 html[data-theme='light'] .bg-amber-900\/30.text-amber-400,
 html[data-theme='light'] .bg-amber-900\/40.text-amber-400 { color: #92400e !important; }
 
-/* Small tag-style badges (bg-*/text-*/border-* combos) */
+/* Small tag-style badges (bg/text/border utility combos) */
 html[data-theme='light'] .bg-emerald-500\/10 { background-color: rgba(16, 185, 129, 0.12) !important; }
 html[data-theme='light'] .border-emerald-500\/20 { border-color: rgba(16, 185, 129, 0.35) !important; }
 html[data-theme='light'] .text-emerald-300 { color: #065f46 !important; }
