@@ -1029,12 +1029,12 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                 className="w-full bg-gradient-to-r from-indigo-700/60 to-purple-700/60 hover:from-indigo-600/60 hover:to-purple-600/60 p-4 rounded-xl shadow-lg border border-white/10 flex items-center justify-between group transition-all"
             >
                 <div className="flex items-center gap-3">
-                    <div className="p-2 bg-white/20 rounded-lg">
+                    <div className="p-2 bg-white/30 rounded-lg">
                         <Calculator className="text-white" size={24} />
                     </div>
                     <div className="text-left">
                         <div className="text-white font-bold text-lg">{t('Scenario Planner')}</div>
-                        <div className="text-indigo-200 text-sm">{t('Simulate Upgrades & ROI')}</div>
+                        <div className="sf-force-white text-sm">{t('Simulate Upgrades & ROI')}</div>
                     </div>
                 </div>
                 <ArrowRight className="text-white opacity-50 group-hover:opacity-100 transition-opacity" />

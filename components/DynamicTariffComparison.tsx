@@ -219,12 +219,12 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
         className="w-full bg-gradient-to-r from-indigo-700/60 to-purple-700/60 hover:from-indigo-600/60 hover:to-purple-600/60 p-4 rounded-xl shadow-lg border border-white/10 flex items-center justify-between group transition-all"
       >
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-white/20 rounded-lg">
+          <div className="p-2 bg-white/30 rounded-lg">
             <TrendingUp className="text-white" size={24} />
           </div>
           <div className="text-left">
             <div className="text-white font-bold text-lg">{t('Dynamic Tariff Comparison (aWATTar)')}</div>
-            <div className="text-indigo-200 text-sm">{t('See if a dynamic tariff would have been cheaper')}</div>
+            <div className="sf-force-white text-sm">{t('See if a dynamic tariff would have been cheaper')}</div>
           </div>
         </div>
         <ArrowRight className="text-white opacity-50 group-hover:opacity-100 transition-opacity" />
@@ -299,7 +299,7 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
           </div>
 
           {period === 'custom' && (
-            <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-slate-400 font-bold uppercase">{t('From')}</label>
                 <input
@@ -358,7 +358,7 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-slate-400 font-bold uppercase">{t('Surcharge (ct/kWh)')}</label>
+              <label className="h-8 flex items-end leading-4 text-xs text-slate-200 font-bold uppercase">{t('Surcharge (ct/kWh)')}</label>
               <input
                 type="number"
                 step="0.1"
@@ -371,7 +371,7 @@ const DynamicTariffComparison: React.FC<{ config: SystemConfig }> = ({ config })
               </div>
             </div>
             <div>
-              <label className="text-xs text-slate-400 font-bold uppercase">{t('VAT (%)')}</label>
+              <label className="h-8 flex items-end leading-4 text-xs text-slate-200 font-bold uppercase">{t('VAT (%)')}</label>
               <input
                 type="number"
                 step="0.1"

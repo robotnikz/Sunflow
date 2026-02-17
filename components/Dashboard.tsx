@@ -245,7 +245,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
         case 'day': {
             const d = new Date(now);
             d.setDate(d.getDate() + timeOffset);
-                        return d.toLocaleDateString(locale, { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+                        return d.toLocaleDateString(locale, { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
         }
         case 'week': {
             const refDate = new Date(now);
@@ -544,7 +544,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                  {t('Live Power Flow')}
           </div>
           {/* Centering Wrapper */}
-          <div className="flex-1 w-full flex items-center justify-center p-4">
+             <div className="flex-1 w-full flex items-center justify-center p-4 pt-16 lg:pt-4">
              <PowerFlow power={data.power} soc={data.battery.soc} />
           </div>
         </div>
@@ -686,7 +686,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                                                             <button 
                                                                 onClick={() => setTimeOffset(prev => prev + 1)}
                                                                 disabled={timeOffset >= 0}
-                                                                aria-describedby={timeOffset >= 0 ? 'time-nav-latest-hint' : undefined}
                                                                 className={`p-1.5 rounded-md transition-colors ${timeOffset >= 0 ? 'text-slate-600 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
                                                                 title={t('Next Period')}
                                                             >
@@ -694,22 +693,14 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                                                             </button>
                                                     </span>
                                             </div>
-                                            {timeOffset >= 0 && (
-                                                <span
-                                                    id="time-nav-latest-hint"
-                                                    className="text-xs text-slate-400"
-                                                >
-                                                    {t('Latest period')}
-                                                </span>
-                                            )}
                                     </div>
                 )}
-                <div className="flex flex-wrap bg-slate-900 rounded-lg p-1 border border-slate-700">
+                <div className="flex flex-nowrap overflow-x-auto max-w-full bg-slate-900 rounded-lg p-1 border border-slate-700">
                     {(['hour', 'day', 'week', 'month', 'year', 'custom'] as TimeRange[]).map((range) => (
                         <button
                             key={range}
                             onClick={() => { setTimeRange(range); setTimeOffset(0); }}
-                            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                            className={`shrink-0 whitespace-nowrap px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
                                 timeRange === range 
                                 ? 'bg-slate-700 text-white shadow ring-1 ring-slate-600' 
                                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -734,24 +725,24 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
 
         {/* Custom Date Range Picker */}
         {timeRange === 'custom' && (
-            <div className="flex flex-col sm:flex-row items-center justify-end gap-3 bg-slate-900/50 p-3 rounded-lg border border-slate-700/50 animate-fade-in">
+            <div className="flex flex-col sm:flex-row items-center justify-end gap-3 max-w-full bg-slate-900/50 p-3 rounded-lg border border-slate-700/50 animate-fade-in">
                 <span className="text-sm text-slate-400">{t('Interval:')}</span>
                 <input 
                     type="date" 
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="bg-slate-800 border border-slate-600 text-white text-sm rounded px-3 py-1.5 focus:border-yellow-500 focus:outline-none"
+                    className="w-full sm:w-auto min-w-0 max-w-full bg-slate-800 border border-slate-600 text-white text-sm rounded px-3 py-1.5 focus:border-yellow-500 focus:outline-none"
                 />
                 <ArrowRight size={16} className="text-slate-400" />
                 <input 
                     type="date" 
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="bg-slate-800 border border-slate-600 text-white text-sm rounded px-3 py-1.5 focus:border-yellow-500 focus:outline-none"
+                    className="w-full sm:w-auto min-w-0 max-w-full bg-slate-800 border border-slate-600 text-white text-sm rounded px-3 py-1.5 focus:border-yellow-500 focus:outline-none"
                 />
                 <button 
                     onClick={fetchHistory}
-                    className="bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-medium px-4 py-1.5 rounded ml-2 transition-colors shadow-lg shadow-yellow-900/20"
+                    className="w-full sm:w-auto bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-medium px-4 py-1.5 rounded sm:ml-2 transition-colors shadow-lg shadow-yellow-900/20"
                 >
                     {t('Apply')}
                 </button>

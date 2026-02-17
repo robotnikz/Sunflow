@@ -34,14 +34,15 @@ const EnergyDonut: React.FC<EnergyDonutProps> = ({ percentage, color }) => {
                 paddingAngle={5}
             >
                 <Cell key="cell-val" fill={color} />
-                <Cell key="cell-rem" fill="#1e293b" /> {/* slate-800 darker */}
+                <Cell key="cell-rem" fill="var(--sf-ring-remaining, #1e293b)" />
                 <Label
                     value={`${val.toFixed(0)}%`}
                     position="center"
-                    className="font-bold fill-slate-100"
+                  className="font-bold"
                     style={{ 
                         fontSize: '1.2rem', 
-                        filter: 'drop-shadow(0px 2px 2px rgba(0,0,0,0.5))',
+                    fill: 'var(--sf-ring-label, #f1f5f9)',
+                    filter: 'var(--sf-ring-label-filter, drop-shadow(0px 2px 2px rgba(0,0,0,0.5)))',
                         fontWeight: 700
                     }}
                 />

@@ -87,7 +87,7 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
   const errorSegments = createSegments(
     (p) => p.status === 2 ? 'error' : 'ok',
     (val) => val === 'error' ? t('Error') : t('Flawless'),
-    (val) => val === 'error' ? 'bg-red-500/80' : 'bg-emerald-600/80'
+    (val) => val === 'error' ? 'bg-red-500' : 'bg-emerald-600'
   );
 
   const statusSegments = createSegments(
@@ -104,17 +104,17 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
       return t('Running');
     },
     (val) => {
-        if (val === 'offline') return 'bg-slate-600';
-        if (val === 'idle') return 'bg-blue-900/60'; // Dark Blue for Idle/Standby
+      if (val === 'offline') return 'bg-slate-500';
+      if (val === 'idle') return 'bg-blue-900/80'; // Dark Blue for Idle/Standby
         if (val === 'error') return 'bg-red-500';
-        return 'bg-emerald-600/80';
+      return 'bg-emerald-600';
     }
   );
 
   const batterySegments = createSegments(
     (p) => p.soc > 0 ? 'active' : 'idle',
     (val) => val === 'active' ? t('Active') : t('Idle'),
-    (val) => val === 'active' ? 'bg-emerald-600/80' : 'bg-slate-700'
+    (val) => val === 'active' ? 'bg-emerald-600' : 'bg-slate-500'
   );
 
   const ticks = totalPoints > 0 ? [
@@ -135,7 +135,7 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ history }) => {
                     title={`${seg.label} (${Math.round(seg.width)}%)`}
                 >
                     {seg.width > 10 && (
-                        <span className="text-xs font-bold text-white/90 drop-shadow-md">{seg.label}</span>
+                      <span className="text-xs font-bold sf-force-white drop-shadow-md">{seg.label}</span>
                     )}
                 </div>
             ))}
