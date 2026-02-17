@@ -1,4 +1,22 @@
-# SunFlow Security Checklist (Self-hosting)
+# Security Policy
+
+Thanks for helping keep SunFlow secure.
+
+## Reporting a vulnerability
+
+Please do **not** open a public GitHub issue for security reports.
+
+Instead, use GitHub Security Advisories:
+- https://github.com/robotnikz/Sunflow/security/advisories
+  - Click **Report a vulnerability**
+
+Include (if possible):
+- A clear description of the issue and its impact
+- Reproduction steps / PoC (if safe)
+- Affected version(s) / image tag(s)
+- Relevant logs (please redact secrets)
+
+## SunFlow Security Checklist (Self-hosting)
 
 This checklist is meant as a practical “before you expose it beyond your LAN” guide.
 
