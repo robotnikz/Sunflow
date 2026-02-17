@@ -16,9 +16,17 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
     <style>
+      :root {
+        --sf-bg: #0f172a; /* slate-900 */
+        --sf-fg: #e2e8f0; /* slate-200 */
+        --sf-scroll-track: #1e293b;
+        --sf-scroll-thumb: #475569;
+        --sf-scroll-thumb-hover: #64748b;
+      }
+
       body {
-        background-color: #0f172a; /* slate-900 */
-        color: #e2e8f0; /* slate-200 */
+        background-color: var(--sf-bg);
+        color: var(--sf-fg);
         font-family: 'Inter', sans-serif; /* Applied globally */
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
@@ -30,14 +38,14 @@
         height: 8px;
       }
       ::-webkit-scrollbar-track {
-        background: #1e293b; 
+        background: var(--sf-scroll-track);
       }
       ::-webkit-scrollbar-thumb {
-        background: #475569; 
+        background: var(--sf-scroll-thumb);
         border-radius: 4px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #64748b; 
+        background: var(--sf-scroll-thumb-hover);
       }
       
       /* Animations */
