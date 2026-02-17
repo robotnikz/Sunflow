@@ -162,6 +162,32 @@ html[data-theme='light'] .border-red-800\/50 { border-color: rgba(185, 28, 28, 0
 html[data-theme='light'] .border-red-700\/40 { border-color: rgba(185, 28, 28, 0.30) !important; }
 html[data-theme='light'] .border-red-700 { border-color: rgba(185, 28, 28, 0.35) !important; }
 
+/* Yellow hint panels (e.g. Solcast + setup checklist accents) */
+html[data-theme='light'] .bg-yellow-900\/10 { background-color: rgba(234, 179, 8, 0.10) !important; }
+
+/* Handle Tailwind `text-white/90` inside remapped light slate surfaces */
+html[data-theme='light'] .bg-slate-900 .text-white\/90,
+html[data-theme='light'] .bg-slate-900\/95 .text-white\/90,
+html[data-theme='light'] .bg-slate-900\/80 .text-white\/90,
+html[data-theme='light'] .bg-slate-900\/60 .text-white\/90,
+html[data-theme='light'] .bg-slate-900\/50 .text-white\/90,
+html[data-theme='light'] .bg-slate-900\/40 .text-white\/90,
+html[data-theme='light'] .bg-slate-900\/30 .text-white\/90,
+html[data-theme='light'] .bg-slate-900\/10 .text-white\/90,
+html[data-theme='light'] .bg-slate-800 .text-white\/90,
+html[data-theme='light'] .bg-slate-800\/80 .text-white\/90,
+html[data-theme='light'] .bg-slate-800\/60 .text-white\/90,
+html[data-theme='light'] .bg-slate-800\/50 .text-white\/90,
+html[data-theme='light'] .bg-slate-800\/40 .text-white\/90,
+html[data-theme='light'] .bg-slate-750 .text-white\/90,
+html[data-theme='light'] .bg-slate-700 .text-white\/90,
+html[data-theme='light'] .bg-slate-700\/60 .text-white\/90,
+html[data-theme='light'] .bg-slate-700\/50 .text-white\/90,
+html[data-theme='light'] .bg-slate-700\/40 .text-white\/90,
+html[data-theme='light'] .bg-slate-600 .text-white\/90,
+html[data-theme='light'] .bg-slate-950 .text-white\/90,
+html[data-theme='light'] .bg-slate-950\/40 .text-white\/90 { color: #0f172a !important; }
+
 html[data-theme='light'] .border-slate-900 { border-color: #cbd5e1 !important; }
 html[data-theme='light'] .border-slate-800 { border-color: #e2e8f0 !important; }
 html[data-theme='light'] .border-slate-700 { border-color: #e2e8f0 !important; }
