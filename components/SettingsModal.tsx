@@ -1365,11 +1365,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                               </div>
                               <div className="grid grid-cols-2 gap-x-2 text-xs text-slate-400 border-t border-slate-700/30 pt-1">
                                   <div>
-                                      Tier 1 Share ({Math.min(100, (calcTier1Limit / (formData.systemCapacity || 1))*100).toFixed(1)}%):
+                                      {t('Tier 1 Share')} ({Math.min(100, (calcTier1Limit / (formData.systemCapacity || 1))*100).toFixed(1)}%):
                                       <br/><span className="text-white font-mono">{(calcTestKwh * Math.min(1, calcTier1Limit / (formData.systemCapacity || 1))).toFixed(0)} kWh</span>
                                   </div>
                                   <div>
-                                      Tier 2 Share ({Math.max(0, 100 - (calcTier1Limit / (formData.systemCapacity || 1))*100).toFixed(1)}%):
+                                      {t('Tier 2 Share')} ({Math.max(0, 100 - (calcTier1Limit / (formData.systemCapacity || 1))*100).toFixed(1)}%):
                                       <br/><span className="text-white font-mono">{(calcTestKwh * (1 - Math.min(1, calcTier1Limit / (formData.systemCapacity || 1)))).toFixed(0)} kWh</span>
                                   </div>
                               </div>

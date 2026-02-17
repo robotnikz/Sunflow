@@ -1,6 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+let ts = null;
+try {
+	const mod = await import('typescript');
+	ts = mod.default ?? mod;
+} catch {
+	// TypeScript is optional for this script; if unavailable, we fall back to regex heuristics.
+}
+
 const root = process.cwd();
 
 const EXCLUDED_DIRS = new Set([
@@ -29,6 +37,18 @@ function walk(dir, out = []) {
 
 function norm(text) {
 	return text.replace(/\s+/g, ' ').trim();
+}
+
+const VISIBLE_ATTRS = new Set(['title', 'aria-label', 'placeholder', 'alt']);
+
+function shouldIgnoreHardcodedText(val) {
+	const text = norm(val);
+	if (!text) return true;
+	if (text.length < 2) return true;
+	if (/^[\d\W]+$/.test(text)) return true;
+	if (/^(?:W|kW|kWh|%|°C)$/i.test(text)) return true;
+	if (/^(?:https?:\/\/|#)/.test(text)) return true;
+	return false;
 }
 
 function unescapeTsSingleQuoted(text) {
@@ -79,9 +99,8 @@ const hardcoded = [];
 
 // t('...') / t("...")
 const tCall = /\bt\(\s*(['"])(.*?)\1\s*\)/g;
-// Common literal UI attributes that should be localized.
+// Fallback regex-based scan (used only when TypeScript AST parsing isn't available).
 const literalAttr = /\b(?:title|aria-label|placeholder|alt)=\"([^\"]+)\"/g;
-// Basic JSX text detector (best-effort; will have false positives).
 const jsxText = />\s*([^<{][^<{]{1,120}?)\s*</g;
 
 for (const filePath of tsxFiles) {
@@ -95,28 +114,52 @@ for (const filePath of tsxFiles) {
 		usedKeys.set(key, (usedKeys.get(key) ?? 0) + 1);
 	}
 
-	literalAttr.lastIndex = 0;
-	while ((m = literalAttr.exec(txt))) {
-		const val = norm(m[1]);
-		if (!val) continue;
-		if (val.includes('{') || val.includes('}')) continue;
-		if (/^(?:https?:\/\/|#)/.test(val)) continue;
-		if (/^\d/.test(val)) continue;
-		// Heuristic: ignore very short and common units.
-		if (val.length < 2) continue;
-		hardcoded.push({ file: rel(filePath), kind: 'attr', text: val });
-	}
+	if (ts) {
+		const sourceFile = ts.createSourceFile(filePath, txt, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+		const add = (kind, text, pos) => {
+			if (shouldIgnoreHardcodedText(text)) return;
+			const { line } = sourceFile.getLineAndCharacterOfPosition(pos);
+			hardcoded.push({ file: rel(filePath), kind, line: line + 1, text: norm(text) });
+		};
+		const visit = (node) => {
+			if (node.kind === ts.SyntaxKind.JsxText) {
+				add('jsx', node.getText(sourceFile), node.getStart(sourceFile));
+			} else if (node.kind === ts.SyntaxKind.JsxExpression) {
+				const expr = node.expression;
+				if (expr && (ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr))) {
+					add('jsx-expr', expr.text, expr.getStart(sourceFile));
+				}
+			} else if (node.kind === ts.SyntaxKind.JsxAttribute) {
+				const name = node.name?.text;
+				if (name && VISIBLE_ATTRS.has(name) && node.initializer) {
+					if (ts.isStringLiteral(node.initializer)) {
+						add(`attr:${name}`, node.initializer.text, node.initializer.getStart(sourceFile));
+					} else if (ts.isJsxExpression(node.initializer)) {
+						const expr = node.initializer.expression;
+						if (expr && (ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr))) {
+							add(`attr:${name}`, expr.text, expr.getStart(sourceFile));
+						}
+					}
+				}
+			}
+			ts.forEachChild(node, visit);
+		};
+		visit(sourceFile);
+	} else {
+		literalAttr.lastIndex = 0;
+		while ((m = literalAttr.exec(txt))) {
+			const val = m[1];
+			if (shouldIgnoreHardcodedText(val)) continue;
+			hardcoded.push({ file: rel(filePath), kind: 'attr', text: norm(val) });
+		}
 
-	jsxText.lastIndex = 0;
-	while ((m = jsxText.exec(txt))) {
-		const val = norm(m[1]);
-		if (!val) continue;
-		if (val.includes('{') || val.includes('}')) continue;
-		if (/^[\d\W]+$/.test(val)) continue;
-		if (val.length < 2) continue;
-		// Ignore common units-only chunks.
-		if (/^(?:W|kW|kWh|%|°C)$/i.test(val)) continue;
-		hardcoded.push({ file: rel(filePath), kind: 'jsx', text: val });
+		jsxText.lastIndex = 0;
+		while ((m = jsxText.exec(txt))) {
+			const val = m[1];
+			if (val.includes('{') || val.includes('}')) continue;
+			if (shouldIgnoreHardcodedText(val)) continue;
+			hardcoded.push({ file: rel(filePath), kind: 'jsx', text: norm(val) });
+		}
 	}
 }
 
@@ -131,6 +174,7 @@ if (missingDe.length > 200) console.log(`... (${missingDe.length - 200} more)`);
 
 console.log('\nPotential hardcoded UI strings (sample, may include false positives):');
 for (const item of hardcoded.slice(0, 200)) {
-	console.log(` - ${item.file} [${item.kind}] ${item.text}`);
+	const loc = item.line ? `:${item.line}` : '';
+	console.log(` - ${item.file}${loc} [${item.kind}] ${item.text}`);
 }
 if (hardcoded.length > 200) console.log(`... (${hardcoded.length - 200} more)`);

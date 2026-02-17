@@ -1485,7 +1485,7 @@ const ScenarioPlanner: React.FC<ScenarioPlannerProps> = ({ config }) => {
                                             <div>
                                                 <div className="flex items-center justify-between mb-2">
                                                     <div className="text-xs font-bold uppercase text-slate-400">{t('ROI (Current Sliders)')}</div>
-                                                    <div className="text-xs text-slate-400">PV +{addedPvPercent}% · Storage +{addedBatteryKwh} kWh</div>
+                                                    <div className="text-xs text-slate-400">PV +{addedPvPercent}% · {t('Storage')} +{addedBatteryKwh} kWh</div>
                                                 </div>
 
                                                 <div className="flex items-center justify-between">

@@ -93,9 +93,9 @@ const App: React.FC = () => {
   const resolvedTheme = useMemo(() => resolveTheme(themeMode), [themeMode]);
 
   const themeUi = useMemo(() => {
-    if (resolvedTheme === 'dark') return { label: 'Dark', icon: <Moon size={20} /> };
-    return { label: 'Light', icon: <Sun size={20} /> };
-  }, [resolvedTheme]);
+    if (resolvedTheme === 'dark') return { label: t('Dark'), icon: <Moon size={20} /> };
+    return { label: t('Light'), icon: <Sun size={20} /> };
+  }, [resolvedTheme, t]);
 
   const toggleTheme = () => {
     const next: ThemeMode = resolvedTheme === 'dark' ? 'light' : 'dark';
@@ -115,7 +115,7 @@ const App: React.FC = () => {
       setRefreshTrigger(prev => prev + 1);
     } catch (e) {
       console.error(e);
-      push({ type: 'error', title: 'Save failed', message: 'Failed to save settings. Please try again.' });
+      push({ type: 'error', title: t('Save failed'), message: t('Failed to save settings. Please try again.') });
     }
   };
 
@@ -153,7 +153,7 @@ const App: React.FC = () => {
                         className="ml-2 flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors bg-blue-900/30 px-2 py-0.5 rounded-full border border-blue-800/50"
                     >
                         <Download size={10} />
-                        New: v{systemInfo.latestVersion}
+                        {t('New:')} v{systemInfo.latestVersion}
                     </a>
                   )}
                 </div>
@@ -170,7 +170,7 @@ const App: React.FC = () => {
                 type="button"
                 onClick={toggleTheme}
                 className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-full transition-colors"
-                aria-label={`Theme: ${themeUi.label}. Click to switch.`}
+                aria-label={`${t('Theme:')} ${themeUi.label}. ${t('Click to switch.')}`}
               >
                 {themeUi.icon}
               </button>
