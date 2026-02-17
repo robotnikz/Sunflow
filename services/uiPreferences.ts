@@ -1,10 +1,14 @@
 export type ThemeMode = 'system' | 'dark' | 'light';
+export type LanguageMode = 'system' | 'en' | 'de';
 
 const THEME_KEY = 'sunflow_theme_mode';
+const LANGUAGE_KEY = 'sunflow_language_mode';
 
 const THEME_EVENT = 'sunflow:theme';
+const LANGUAGE_EVENT = 'sunflow:language';
 
 type ResolvedTheme = 'dark' | 'light';
+type ResolvedLanguage = 'en' | 'de';
 
 function safeGet(key: string): string | null {
   try {
@@ -28,10 +32,23 @@ export function getThemeMode(): ThemeMode {
   return 'system';
 }
 
+export function getLanguageMode(): LanguageMode {
+  const raw = safeGet(LANGUAGE_KEY);
+  if (raw === 'en' || raw === 'de' || raw === 'system') return raw;
+  // Keep existing behavior stable: default UI remains English unless user opts in.
+  return 'en';
+}
+
 export function resolveTheme(mode: ThemeMode): ResolvedTheme {
   if (mode === 'dark' || mode === 'light') return mode;
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 'dark';
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+export function resolveLanguage(mode: LanguageMode): ResolvedLanguage {
+  if (mode === 'en' || mode === 'de') return mode;
+  const navLang = typeof navigator !== 'undefined' ? (navigator.language || '') : '';
+  return navLang.toLowerCase().startsWith('de') ? 'de' : 'en';
 }
 
 export function applyThemeMode(mode: ThemeMode): void {
@@ -40,10 +57,22 @@ export function applyThemeMode(mode: ThemeMode): void {
   document.documentElement.dataset.theme = resolved;
 }
 
+export function applyLanguageMode(mode: LanguageMode): void {
+  const resolved = resolveLanguage(mode);
+  document.documentElement.dataset.languageMode = mode;
+  document.documentElement.lang = resolved;
+}
+
 export function setThemeMode(mode: ThemeMode): void {
   safeSet(THEME_KEY, mode);
   applyThemeMode(mode);
   window.dispatchEvent(new Event(THEME_EVENT));
+}
+
+export function setLanguageMode(mode: LanguageMode): void {
+  safeSet(LANGUAGE_KEY, mode);
+  applyLanguageMode(mode);
+  window.dispatchEvent(new Event(LANGUAGE_EVENT));
 }
 
 let themeMediaQuery: MediaQueryList | null = null;
@@ -52,6 +81,7 @@ let themeListenerInstalled = false;
 export function initUiPreferences(): void {
   // Apply stored preferences immediately.
   applyThemeMode(getThemeMode());
+  applyLanguageMode(getLanguageMode());
 
   // React to OS theme changes when in system mode.
   if (!themeListenerInstalled && typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
@@ -76,5 +106,10 @@ export function initUiPreferences(): void {
 export function addThemeListener(fn: () => void): () => void {
   window.addEventListener(THEME_EVENT, fn);
   return () => window.removeEventListener(THEME_EVENT, fn);
+}
+
+export function addLanguageListener(fn: () => void): () => void {
+  window.addEventListener(LANGUAGE_EVENT, fn);
+  return () => window.removeEventListener(LANGUAGE_EVENT, fn);
 }
 

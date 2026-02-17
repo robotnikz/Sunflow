@@ -6,10 +6,14 @@ import { getTariffs, addTariff, deleteTariff, getExpenses, addExpense, deleteExp
 import { ICON_MAP } from './SmartRecommendations';
 import CsvImporter from './CsvImporter';
 import { useToast } from './Toaster';
+import { useI18n } from '../services/i18n';
 import {
     getThemeMode as loadThemeMode,
     setThemeMode as saveThemeMode,
     type ThemeMode,
+    getLanguageMode as loadLanguageMode,
+    setLanguageMode as saveLanguageMode,
+    type LanguageMode,
 } from '../services/uiPreferences';
 
 interface SettingsModalProps {
@@ -21,8 +25,10 @@ interface SettingsModalProps {
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, onClose, initialTab }) => {
     const { push } = useToast();
+        const { t } = useI18n();
 
     const [themeMode, setThemeMode] = useState<ThemeMode>(() => loadThemeMode());
+    const [languageMode, setLanguageMode] = useState<LanguageMode>(() => loadLanguageMode());
   // Initialize state robustly immediately to prevent crashes on first render
   const [formData, setFormData] = useState<SystemConfig>(() => {
       // Define defaults
@@ -167,6 +173,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
   useEffect(() => {
       const onStorage = (e: StorageEvent) => {
           if (e.key === 'sunflow_theme_mode') setThemeMode(loadThemeMode());
+          if (e.key === 'sunflow_language_mode') setLanguageMode(loadLanguageMode());
       };
       window.addEventListener('storage', onStorage);
       return () => window.removeEventListener('storage', onStorage);
@@ -263,15 +270,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
 
     const tabMeta = useMemo(() => {
         return [
-            { key: 'general' as const, label: 'General', icon: <Sliders size={16} /> },
-            { key: 'notifications' as const, label: 'Notifications', icon: <Bell size={16} /> },
-            { key: 'appliances' as const, label: 'Appliances', icon: <Plug size={16} /> },
-            { key: 'tariffs' as const, label: 'Tariffs', icon: currencyTabIcon },
-            { key: 'expenses' as const, label: 'Expenses', icon: <TrendingUp size={16} /> },
-            { key: 'history' as const, label: 'Calibration', icon: <History size={16} /> },
-            { key: 'import' as const, label: 'Data Import', icon: <Upload size={16} /> },
+            { key: 'general' as const, label: t('General'), icon: <Sliders size={16} /> },
+            { key: 'notifications' as const, label: t('Notifications'), icon: <Bell size={16} /> },
+            { key: 'appliances' as const, label: t('Appliances'), icon: <Plug size={16} /> },
+            { key: 'tariffs' as const, label: t('Tariffs'), icon: currencyTabIcon },
+            { key: 'expenses' as const, label: t('Expenses'), icon: <TrendingUp size={16} /> },
+            { key: 'history' as const, label: t('Calibration'), icon: <History size={16} /> },
+            { key: 'import' as const, label: t('Data Import'), icon: <Upload size={16} /> },
         ];
-    }, [currencyTabIcon]);
+    }, [currencyTabIcon, t]);
 
     const focusTab = (tab: SettingsTab) => {
         tabButtonRefs.current[tab]?.focus();
@@ -424,7 +431,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
     if (exportMode === 'fixed') {
         if (!Number.isFinite(fixedW) || fixedW <= 0) {
             setActiveTab('general');
-            push({ type: 'warning', title: 'Invalid export cap', message: 'Please enter a positive export cap in watts, or switch to “Off (100%)” / “Estimated”.' });
+            push({ type: 'warning', title: t('Invalid export cap'), message: t('Please enter a positive export cap in watts, or switch to “Off (100%)” / “Estimated”.') });
             return;
         }
     }
@@ -460,14 +467,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
 
       if (!draftWebhook && !savedWebhook) {
           setActiveTab('notifications');
-          setFieldErrors(prev => ({ ...prev, discordWebhook: 'Please enter a Discord Webhook URL first.' }));
-          push({ type: 'warning', title: 'Missing webhook', message: 'Enter and save a Discord Webhook URL first.' });
+          setFieldErrors(prev => ({ ...prev, discordWebhook: t('Please enter a Discord Webhook URL first.') }));
+          push({ type: 'warning', title: t('Missing webhook'), message: t('Enter and save a Discord Webhook URL first.') });
           return;
       }
 
       // To prevent SSRF and keep backend strict, /api/test-notification only tests the persisted config.
       if (draftWebhook && draftWebhook !== savedWebhook) {
-          push({ type: 'info', title: 'Save required', message: 'Please save settings first, then test the notification.' });
+          push({ type: 'info', title: t('Save required'), message: t('Please save settings first, then test the notification.') });
           return;
       }
       
@@ -477,10 +484,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({})
           });
-          if(res.ok) push({ type: 'success', title: 'Sent', message: 'Test notification sent. Check your Discord channel.' });
+          if(res.ok) push({ type: 'success', title: t('Sent'), message: t('Test notification sent. Check your Discord channel.') });
           else throw new Error("Failed");
       } catch(e) {
-          push({ type: 'error', title: 'Send failed', message: 'Failed to send test notification. Check the URL and server logs.' });
+          push({ type: 'error', title: t('Send failed'), message: t('Failed to send test notification. Check the URL and server logs.') });
       }
   };
 
@@ -734,7 +741,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
         
         {/* Header */}
         <div className="p-6 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
-                                        <h2 id="sunflow-settings-title" className="text-xl font-bold text-white">System Settings</h2>
+                                        <h2 id="sunflow-settings-title" className="text-xl font-bold text-white">{t('System Settings')}</h2>
                     <button aria-label="Close settings" onClick={onClose} className="text-slate-400 hover:text-white">
             <X size={24} />
           </button>
@@ -786,9 +793,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                     >
                     <form onSubmit={handleConfigSubmit} className="space-y-6">
               <div className="space-y-4">
-                  <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2">Connection & Date</h3>
+                                    <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2">{t('Connection & Date')}</h3>
                   <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-2">Inverter IP Address</label>
+                                        <label className="block text-sm font-medium text-slate-400 mb-2">{t('Inverter IP Address')}</label>
                     <input
                         id={FIELD_IDS.inverterIp}
                         type="text"
@@ -810,7 +817,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                     )}
                   </div>
                   <div>
-                                        <label className="block text-sm font-medium text-slate-400 mb-2">System Start Date</label>
+                                        <label className="block text-sm font-medium text-slate-400 mb-2">{t('System Start Date')}</label>
                     <input
                         id={FIELD_IDS.systemStartDate}
                         type="date"
@@ -829,10 +836,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                             {fieldErrors.systemStartDate}
                         </p>
                     )}
-                                        <p className="text-xs text-slate-400 mt-1">Used to calculate the timeline for recurring costs.</p>
+                                                                                <p className="text-xs text-slate-400 mt-1">{t('Used to calculate the timeline for recurring costs.')}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-2">Currency Symbol</label>
+                                        <label className="block text-sm font-medium text-slate-400 mb-2">{t('Currency Symbol')}</label>
                     <select value={formData.currency} onChange={(e) => setFormData({...formData, currency: e.target.value})} className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500">
                         <option value="EUR">EUR (€)</option>
                         <option value="USD">USD ($)</option>
@@ -841,10 +848,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                   </div>
               </div>
               <div className="space-y-4 pt-4">
-                 <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2 flex items-center gap-2"><MapPin size={18}/> Location & Capacity</h3>
+                                 <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2 flex items-center gap-2"><MapPin size={18}/> {t('Location & Capacity')}</h3>
                  <div className="grid grid-cols-2 gap-4">
                      <div>
-                        <label className="block text-sm font-medium text-slate-400 mb-2">Latitude</label>
+                                                <label className="block text-sm font-medium text-slate-400 mb-2">{t('Latitude')}</label>
                         <input
                             id={FIELD_IDS.latitude}
                             type="text"
@@ -865,7 +872,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                         )}
                      </div>
                      <div>
-                        <label className="block text-sm font-medium text-slate-400 mb-2">Longitude</label>
+                                <label className="block text-sm font-medium text-slate-400 mb-2">{t('Longitude')}</label>
                         <input
                             id={FIELD_IDS.longitude}
                             type="text"
@@ -887,16 +894,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                      </div>
                  </div>
                  <div className="grid grid-cols-2 gap-4">
-                    <div><label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2"><Zap size={14} className="text-yellow-500"/> Solar Capacity (kWp)</label><input type="number" step="0.1" value={formData.systemCapacity || ''} onChange={(e) => setFormData({...formData, systemCapacity: parseFloat(e.target.value)})} placeholder="e.g. 10.5" className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" /></div>
-                    <div><label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2"><Battery size={14} className="text-emerald-500"/> Battery Size (kWh)</label><input type="number" step="0.1" value={formData.batteryCapacity || ''} onChange={(e) => setFormData({...formData, batteryCapacity: parseFloat(e.target.value)})} placeholder="e.g. 7.7" className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" /></div>
+                          <div><label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2"><Zap size={14} className="text-yellow-500"/> {t('Solar Capacity (kWp)')}</label><input type="number" step="0.1" value={formData.systemCapacity || ''} onChange={(e) => setFormData({...formData, systemCapacity: parseFloat(e.target.value)})} placeholder={t('e.g. 10.5')} className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" /></div>
+                          <div><label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2"><Battery size={14} className="text-emerald-500"/> {t('Battery Size (kWh)')}</label><input type="number" step="0.1" value={formData.batteryCapacity || ''} onChange={(e) => setFormData({...formData, batteryCapacity: parseFloat(e.target.value)})} placeholder={t('e.g. 7.7')} className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" /></div>
                  </div>
               </div>
 
               <div className="space-y-4 pt-4">
-                 <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2 flex items-center gap-2"><ArrowRight size={18}/> Grid Export</h3>
+                 <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2 flex items-center gap-2"><ArrowRight size={18}/> {t('Grid Export')}</h3>
                  <div className="grid grid-cols-2 gap-4">
                      <div>
-                         <label className="block text-sm font-medium text-slate-400 mb-2">Export cap</label>
+                         <label className="block text-sm font-medium text-slate-400 mb-2">{t('Export cap')}</label>
                          <select
                              value={formData.exportCap?.mode ?? 'estimated'}
                              onChange={(e) => {
@@ -911,16 +918,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                              }}
                              className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
                          >
-                             <option value="estimated">Estimated (from history)</option>
-                             <option value="none">Off (100%)</option>
-                             <option value="fixed">Fixed (W)</option>
+                             <option value="estimated">{t('Estimated (from history)')}</option>
+                             <option value="none">{t('Off (100%)')}</option>
+                             <option value="fixed">{t('Fixed (W)')}</option>
                          </select>
                          <p className="text-xs text-slate-400 mt-1">
-                             Controls export limitation used in the Scenario Planner upgrade simulator.
+                             {t('Controls export limitation used in the Scenario Planner upgrade simulator.')}
                          </p>
                      </div>
                      <div>
-                         <label className="block text-sm font-medium text-slate-400 mb-2">Fixed cap (W)</label>
+                         <label className="block text-sm font-medium text-slate-400 mb-2">{t('Fixed cap (W)')}</label>
                          <input
                              type="number"
                              step="50"
@@ -937,21 +944,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                                      }
                                  });
                              }}
-                             placeholder="e.g. 5350"
+                             placeholder={t('e.g. 5350')}
                              className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500 disabled:opacity-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                          />
                          <p className="text-xs text-slate-400 mt-1">
-                             Tip: If you want no export limit (older installations / other regions), choose “Off (100%)”.
+                             {t('Tip: If you want no export limit (older installations / other regions), choose “Off (100%)”.')}
                          </p>
                      </div>
                  </div>
               </div>
 
               <div className="space-y-4 pt-4">
-                 <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2 flex items-center gap-2"><Sliders size={18}/> Smart Usage</h3>
+                      <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2 flex items-center gap-2"><Sliders size={18}/> {t('Smart Usage')}</h3>
                  <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700/50">
                     <div className="flex items-center justify-between mb-2">
-                        <label className="block text-sm font-medium text-slate-400">Battery Reserve (%)</label>
+                                <label className="block text-sm font-medium text-slate-400">{t('Battery Reserve (%)')}</label>
                         <span className="text-sm font-bold text-slate-200">{Math.round(Number(formData.smartUsage?.reserveSocPct ?? 100))}%</span>
                     </div>
                     <input
@@ -984,10 +991,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
               </div>
 
               <div className="space-y-4 pt-4">
-                 <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2 flex items-center gap-2"><SunMedium size={18}/> Appearance</h3>
+                 <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2 flex items-center gap-2"><SunMedium size={18}/> {t('Appearance')}</h3>
                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-sm font-medium text-slate-400 mb-2">Theme</label>
+                        <label className="block text-sm font-medium text-slate-400 mb-2">{t('Theme')}</label>
                         <select
                             value={themeMode}
                             onChange={(e) => {
@@ -997,24 +1004,40 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                             }}
                             className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
                         >
-                            <option value="system">System</option>
-                            <option value="dark">Dark</option>
-                            <option value="light">Light</option>
+                            <option value="system">{t('System')}</option>
+                            <option value="dark">{t('Dark')}</option>
+                            <option value="light">{t('Light')}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-2">{t('Language')}</label>
+                        <select
+                            value={languageMode}
+                            onChange={(e) => {
+                                const next = e.target.value as LanguageMode;
+                                setLanguageMode(next);
+                                saveLanguageMode(next);
+                            }}
+                            className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
+                        >
+                            <option value="system">{t('System')}</option>
+                            <option value="en">{t('English')}</option>
+                            <option value="de">{t('Deutsch')}</option>
                         </select>
                     </div>
                  </div>
               </div>
 
               <div className="space-y-4 pt-4">
-                 <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2 flex items-center gap-2"><SunMedium size={18}/> Solcast API (Forecasting)</h3>
+                      <h3 className="text-slate-300 font-bold border-b border-slate-700 pb-2 flex items-center gap-2"><SunMedium size={18}/> {t('Solcast API (Forecasting)')}</h3>
                  <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-700/50 mb-2">
-                    <p className="text-xs text-slate-400">Required for Smart Recommendations. Create a free account at <a href="https://solcast.com" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">solcast.com</a> and create a "Rooftop Site".</p>
+                          <p className="text-xs text-slate-400">{t('Required for Smart Recommendations. Create a free account at')} <a href="https://solcast.com" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">solcast.com</a> {t('and create a "Rooftop Site".')}</p>
                  </div>
                  <div><label className="block text-sm font-medium text-slate-400 mb-2">API Key</label><input type="password" value={formData.solcastApiKey || ''} onChange={(e) => setFormData({...formData, solcastApiKey: e.target.value})} placeholder="e.g. XXXXXXXXXXXXXXXXXXXXXXXXXX" className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500" /></div>
                  <div><label className="block text-sm font-medium text-slate-400 mb-2">Site Resource ID</label><input type="text" value={formData.solcastSiteId || ''} onChange={(e) => { let val = e.target.value; const urlMatch = val.match(/rooftop_sites\/([\w-]+)/); if (urlMatch && urlMatch[1]) { val = urlMatch[1]; } setFormData({...formData, solcastSiteId: val}) }} placeholder="e.g. 5a31-c8f1-8dcf-1cf1" className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-500" /><p className="text-xs text-slate-400 mt-1">The ID from your Solcast dashboard (e.g. 5a31...). You can also just paste the full "Resource Link" here, and we'll extract the ID automatically.</p></div>
               </div>
               <div className="pt-4 flex justify-end gap-3">
-                <button type="submit" className="flex items-center gap-2 px-6 py-2 bg-yellow-500 text-slate-900 font-bold rounded-lg hover:bg-yellow-400 transition"><Save size={18} /> Save Settings</button>
+                                <button type="submit" className="flex items-center gap-2 px-6 py-2 bg-yellow-500 text-slate-900 font-bold rounded-lg hover:bg-yellow-400 transition"><Save size={18} /> {t('Save Settings')}</button>
               </div>
                         </form>
                     </div>
@@ -1029,13 +1052,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentConfig, onSave, on
                         <form onSubmit={handleConfigSubmit} className="space-y-6">
                  {/* (Standard Notifications Form) */}
                  <div className="flex items-center justify-between">
-                    <h3 className="text-slate-300 font-bold flex items-center gap-2"><Link2 size={18} className="text-blue-400"/> Discord Integration</h3>
+                    <h3 className="text-slate-300 font-bold flex items-center gap-2"><Link2 size={18} className="text-blue-400"/> {t('Discord Integration')}</h3>
                     <div className="flex items-center gap-2">
-                         <span className="text-sm text-slate-400">Enable</span>
+                         <span className="text-sm text-slate-400">{t('Enable')}</span>
                                                  <button
                                                      type="button"
                                                      role="switch"
-                                                     aria-label="Enable notifications"
+                                                     aria-label={t('Enable notifications')}
                                                      aria-checked={!!formData.notifications?.enabled}
                                                      onClick={() => updateNotification({ enabled: !formData.notifications?.enabled })}
                                                      className={`w-11 h-6 flex items-center rounded-full transition-colors ${formData.notifications?.enabled ? 'bg-green-500' : 'bg-slate-700'}`}

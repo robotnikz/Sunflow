@@ -4,12 +4,14 @@ import { Settings, RefreshCw, AlertCircle, Sun, Battery, Zap, Home, Download, Mo
 import Dashboard from './components/Dashboard';
 import SettingsModal from './components/SettingsModal';
 import { useToast } from './components/Toaster';
+import { useI18n } from './services/i18n';
 import { InverterData, SystemConfig, SystemInfo } from './types';
 import { getRealtimeData, getConfig, saveConfig, getSystemInfo } from './services/api';
 import { addThemeListener, getThemeMode, resolveTheme, setThemeMode, type ThemeMode } from './services/uiPreferences';
 
 const App: React.FC = () => {
   const { push } = useToast();
+  const { t } = useI18n();
   const [data, setData] = useState<InverterData | null>(null);
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
@@ -141,7 +143,7 @@ const App: React.FC = () => {
                 </h1>
                 <div className="flex items-center gap-2 text-xs text-slate-400">
                   <span className={`inline-block w-2 h-2 rounded-full ${error ? 'bg-red-500' : 'bg-green-500'}`}></span>
-                  {error ? 'System Offline' : 'System Operational'}
+                  {error ? t('System Offline') : t('System Operational')}
                   
                   {systemInfo?.updateAvailable && (
                     <a 
@@ -160,7 +162,7 @@ const App: React.FC = () => {
 
             <div className="flex items-center gap-4">
               <div className="hidden md:flex flex-col items-end text-xs text-slate-400">
-                <span>Last Updated</span>
+                <span>{t('Last Updated')}</span>
                 <span className="text-slate-300">{lastUpdated.toLocaleTimeString()}</span>
               </div>
 
@@ -176,7 +178,7 @@ const App: React.FC = () => {
               <button 
                 onClick={() => fetchData()}
                 className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-full transition-colors"
-                aria-label="Refresh Data"
+                aria-label={t('Refresh Data')}
               >
                 <RefreshCw size={20} />
               </button>
@@ -184,7 +186,7 @@ const App: React.FC = () => {
               <button 
                 onClick={() => openSettings()}
                 className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-full transition-colors"
-                aria-label="Settings"
+                aria-label={t('Settings')}
               >
                 <Settings size={20} />
               </button>
@@ -198,17 +200,17 @@ const App: React.FC = () => {
         {loading && !data ? (
           <div className="flex flex-col items-center justify-center h-96 gap-4 text-slate-500">
             <RefreshCw className="animate-spin" size={48} />
-            <p>Connecting to Fronius Inverter...</p>
+            <p>{t('Connecting to Fronius Inverter...')}</p>
           </div>
         ) : !config?.inverterIp ? (
           <div className="flex flex-col items-center justify-center h-96 gap-4 text-slate-400">
             <Settings size={48} />
-            <p className="text-lg">Please configure your Inverter IP in settings.</p>
+            <p className="text-lg">{t('Please configure your Inverter IP in settings.')}</p>
             <button 
               onClick={() => openSettings('general')}
               className="px-4 py-2 bg-yellow-500 text-slate-900 font-bold rounded hover:bg-yellow-400 transition"
             >
-              Open Settings
+              {t('Open Settings')}
             </button>
           </div>
         ) : (
