@@ -37,6 +37,10 @@ yarn-error.log*
 logs/
 *.log
 
+# Temporary GH CLI body files
+pr-body.md
+issue-*-reply.md
+
 # Database & Local Data (WICHTIG: Damit deine echte DB nicht im Repo landet)
 sunflow-data/
 sunflow-data-*/
