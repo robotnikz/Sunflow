@@ -39,6 +39,7 @@ logs/
 
 # Temporary GH CLI body files
 pr-body.md
+pr-*-body.md
 issue-*-reply.md
 
 # Database & Local Data (WICHTIG: Damit deine echte DB nicht im Repo landet)
