@@ -1,3 +1,10 @@
+## [1.17.4](https://github.com/robotnikz/Sunflow/compare/v1.17.3...v1.17.4) (2026-02-18)
+
+
+### Bug Fixes
+
+* **powerflow:** center live power flow nodes ([#99](https://github.com/robotnikz/Sunflow/issues/99)) ([a449861](https://github.com/robotnikz/Sunflow/commit/a44986136b54295a7413d9b7beb7237ef574ff30))
+
 ## [1.17.3](https://github.com/robotnikz/Sunflow/compare/v1.17.2...v1.17.3) (2026-02-17)
 
 
