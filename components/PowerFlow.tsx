@@ -13,7 +13,7 @@ interface PowerFlowProps {
   soc: number;
 }
 
-const PowerFlow: React.FC<PowerFlowProps> = memo(({ power, soc }) => {
+const PowerFlow: React.FC<PowerFlowProps> = memo(({ power, soc: _soc }) => {
   const { t } = useI18n();
   // Logic
   const isImporting = power.grid > 0;
@@ -58,9 +58,22 @@ const PowerFlow: React.FC<PowerFlowProps> = memo(({ power, soc }) => {
   const leftX = 90;   // 15% of 600
   const rightX = 510; // 85% of 600
 
+  // Keep SVG and HTML overlays perfectly aligned by using the same anchor box.
+  // Percentages match the SVG coordinate choices above (15% / 85% / 50%).
+  const topPct = 15;
+  const bottomPct = 85;
+  const leftPct = 15;
+  const rightPct = 85;
+  const centerPct = 50;
+
+  // Pixel offset for labels away from the node center.
+  // (Node bubble is ~70px tall; this keeps labels clear and stable across breakpoints.)
+  const labelOffsetPx = 64;
+
   return (
-    <div className="relative w-full h-full flex items-center justify-center select-none p-4">
-      <svg className="w-full h-full max-w-2xl max-h-[400px]" viewBox="0 0 600 400" preserveAspectRatio="xMidYMid meet">
+    <div className="w-full h-full flex items-center justify-center select-none p-4">
+      <div className="relative w-full max-w-[600px] aspect-[3/2]">
+        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 600 400" preserveAspectRatio="xMidYMid meet">
         <defs>
             {/* Glow Filters */}
             <filter id="glow-pv" x="-50%" y="-50%" width="200%" height="200%">
@@ -129,74 +142,84 @@ const PowerFlow: React.FC<PowerFlowProps> = memo(({ power, soc }) => {
         <circle cx={cx} cy={cy} r="15" fill="var(--sf-flow-hub-fill)" stroke="var(--sf-flow-hub-stroke)" strokeWidth="2" />
         <circle cx={cx} cy={cy} r="6" fill="var(--sf-flow-hub-pulse)" className="animate-pulse" />
 
-      </svg>
+        </svg>
 
-      {/* --- HTML OVERLAYS --- */}
-      
-      {/* PV NODE */}
-      <div 
-        className="absolute flex flex-col-reverse items-center gap-4"
-        style={{ top: '15%', left: '50%', transform: 'translate(-50%, -50%)' }}
-      >
-        <div className="p-4 rounded-full bg-slate-800/80 backdrop-blur border border-slate-600 shadow-[0_0_20px_rgba(234,179,8,0.2)] transition-transform duration-300 hover:scale-110 z-10 relative">
-             <Sun className="text-yellow-500" size={36} fill={power.pv > 0 ? "currentColor" : "none"} fillOpacity={0.2} />
+        {/* --- HTML OVERLAYS (aligned to the same box as the SVG) --- */}
+
+        {/* PV NODE */}
+        <div className="absolute" style={{ top: `${topPct}%`, left: `${centerPct}%` }}>
+          <div className="absolute -translate-x-1/2 -translate-y-1/2 z-10">
+            <div className="p-4 rounded-full bg-slate-800/80 backdrop-blur border border-slate-600 shadow-[0_0_20px_rgba(234,179,8,0.2)] transition-transform duration-300 hover:scale-110 relative">
+              <Sun className="text-yellow-500" size={36} fill={power.pv > 0 ? "currentColor" : "none"} fillOpacity={0.2} />
+            </div>
+          </div>
+          <div
+            className="absolute left-1/2 flex flex-col items-center gap-1"
+            style={{ top: `-${labelOffsetPx}px`, transform: 'translate(-50%, -100%)' }}
+          >
+            <span className="text-xs text-slate-400 font-medium tracking-wide">{t('SOLAR')}</span>
+            <span className="text-xl font-bold text-yellow-400 drop-shadow-md leading-none whitespace-nowrap">{Math.round(power.pv)} W</span>
+          </div>
         </div>
-        <div className="flex flex-col items-center gap-1 mb-1">
-             <span className="text-xs text-slate-400 font-medium tracking-wide">{t('SOLAR')}</span>
-             <span className="text-xl font-bold text-yellow-400 drop-shadow-md leading-none whitespace-nowrap">{Math.round(power.pv)} W</span>
+
+        {/* LOAD NODE */}
+        <div className="absolute" style={{ top: `${bottomPct}%`, left: `${centerPct}%` }}>
+          <div className="absolute -translate-x-1/2 -translate-y-1/2 z-10">
+            <div className="p-4 rounded-full bg-slate-800/80 backdrop-blur border border-slate-600 shadow-[0_0_20px_rgba(59,130,246,0.2)] transition-transform duration-300 hover:scale-110 relative">
+              <Home className="text-blue-500" size={36} />
+            </div>
+          </div>
+          <div
+            className="absolute left-1/2 flex flex-col items-center gap-1"
+            style={{ top: `${labelOffsetPx}px`, transform: 'translateX(-50%)' }}
+          >
+            <span className="text-xl font-bold text-blue-400 drop-shadow-md leading-none whitespace-nowrap">{Math.round(power.load)} W</span>
+            <span className="text-xs text-slate-400 font-medium tracking-wide whitespace-nowrap">{t('HOME LOAD')}</span>
+          </div>
+        </div>
+
+        {/* BATTERY NODE */}
+        <div className="absolute" style={{ top: `${centerPct}%`, left: `${leftPct}%` }}>
+          <div className="absolute -translate-x-1/2 -translate-y-1/2 z-10">
+            <div className="p-4 rounded-full bg-slate-800/80 backdrop-blur border border-slate-600 shadow-[0_0_20px_rgba(168,85,247,0.3)] transition-all duration-300 hover:scale-110 relative">
+              <Battery className="text-purple-500" size={36} />
+            </div>
+          </div>
+          <div
+            className="absolute left-1/2 flex flex-col items-center gap-1 w-[140px]"
+            style={{ top: `${labelOffsetPx}px`, transform: 'translateX(-50%)' }}
+          >
+            <span className="text-xl font-bold text-purple-400 drop-shadow-md leading-none whitespace-nowrap">{Math.round(batPowerAbs)} W</span>
+            <span className="text-xs text-slate-400 font-medium flex justify-center items-center gap-1">
+              {isCharging ? t('CHARGING') : isDischarging ? t('DRAINING') : t('IDLE')}
+            </span>
+          </div>
+        </div>
+
+        {/* GRID NODE */}
+        <div className="absolute" style={{ top: `${centerPct}%`, left: `${rightPct}%` }}>
+          <div className="absolute -translate-x-1/2 -translate-y-1/2 z-10">
+            <div
+              className={`p-4 rounded-full bg-slate-800/80 backdrop-blur border ${isImporting ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)]' : isExporting ? 'border-green-500 shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'border-slate-600'} transition-all duration-300 hover:scale-110 relative`}
+            >
+              <Zap className={isImporting ? 'text-red-500' : isExporting ? 'text-green-500' : 'text-slate-500'} size={36} fill={power.grid !== 0 ? "currentColor" : "none"} fillOpacity={0.2} />
+            </div>
+          </div>
+          <div
+            className="absolute left-1/2 flex flex-col items-center gap-1 w-[140px]"
+            style={{ top: `${labelOffsetPx}px`, transform: 'translateX(-50%)' }}
+          >
+            <span className={`text-xl font-bold drop-shadow-md leading-none whitespace-nowrap ${isImporting ? 'text-red-400' : isExporting ? 'text-green-400' : 'text-slate-500'}`}>
+              {Math.round(gridPowerAbs)} W
+            </span>
+            <span className={`text-xs font-medium flex justify-center items-center gap-1 ${isImporting ? 'text-red-500' : isExporting ? 'text-green-500' : 'text-slate-500'}`}>
+              {isImporting && <ArrowDown size={12} />}
+              {isExporting && <ArrowUp size={12} />}
+              {t('GRID')}
+            </span>
+          </div>
         </div>
       </div>
-
-      {/* LOAD NODE */}
-      <div 
-        className="absolute flex flex-col items-center gap-4"
-        style={{ top: '85%', left: '50%', transform: 'translate(-50%, -50%)' }}
-      >
-        <div className="p-4 rounded-full bg-slate-800/80 backdrop-blur border border-slate-600 shadow-[0_0_20px_rgba(59,130,246,0.2)] transition-transform duration-300 hover:scale-110 z-10 relative">
-             <Home className="text-blue-500" size={36} />
-        </div>
-        <div className="flex flex-col items-center gap-1 mt-1">
-             <span className="text-xl font-bold text-blue-400 drop-shadow-md leading-none whitespace-nowrap">{Math.round(power.load)} W</span>
-             <span className="text-xs text-slate-400 font-medium tracking-wide">{t('HOME LOAD')}</span>
-        </div>
-      </div>
-
-      {/* BATTERY NODE */}
-      <div 
-        className="absolute flex flex-col items-center gap-4 w-[140px]"
-        style={{ top: '50%', left: '15%', transform: 'translate(-50%, -50%)' }}
-      >
-        <div className="p-4 rounded-full bg-slate-800/80 backdrop-blur border border-slate-600 shadow-[0_0_20px_rgba(168,85,247,0.3)] transition-all duration-300 hover:scale-110 z-10 relative">
-             <Battery className="text-purple-500" size={36} />
-        </div>
-        <div className="flex flex-col items-center gap-1 w-full mt-1">
-             <span className="text-xl font-bold text-purple-400 drop-shadow-md leading-none whitespace-nowrap">{Math.round(batPowerAbs)} W</span>
-             <span className="text-xs text-slate-400 font-medium flex justify-center items-center gap-1">
-               {isCharging ? t('CHARGING') : isDischarging ? t('DRAINING') : t('IDLE')}
-             </span>
-        </div>
-      </div>
-
-      {/* GRID NODE */}
-      <div 
-        className="absolute flex flex-col items-center gap-4 w-[140px]"
-        style={{ top: '50%', left: '85%', transform: 'translate(-50%, -50%)' }}
-      >
-        <div className={`p-4 rounded-full bg-slate-800/80 backdrop-blur border ${isImporting ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)]' : isExporting ? 'border-green-500 shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'border-slate-600'} transition-all duration-300 hover:scale-110 z-10 relative`}>
-             <Zap className={isImporting ? 'text-red-500' : isExporting ? 'text-green-500' : 'text-slate-500'} size={36} fill={power.grid !== 0 ? "currentColor" : "none"} fillOpacity={0.2} />
-        </div>
-        <div className="flex flex-col items-center gap-1 w-full mt-1">
-             <span className={`text-xl font-bold drop-shadow-md leading-none whitespace-nowrap ${isImporting ? 'text-red-400' : isExporting ? 'text-green-400' : 'text-slate-500'}`}>
-                {Math.round(gridPowerAbs)} W
-             </span>
-             <span className={`text-xs font-medium flex justify-center items-center gap-1 ${isImporting ? 'text-red-500' : isExporting ? 'text-green-500' : 'text-slate-500'}`}>
-                {isImporting && <ArrowDown size={12}/>}
-                {isExporting && <ArrowUp size={12}/>}
-               {t('GRID')}
-             </span>
-        </div>
-      </div>
-
     </div>
   );
 });
