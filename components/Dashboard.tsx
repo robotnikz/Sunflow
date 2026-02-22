@@ -654,53 +654,55 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
             </div>
 
       {/* --- SECTION 4: HISTORICAL ANALYSIS CONTROLS --- */}
-      <div className="flex flex-col bg-slate-800/60 backdrop-blur p-2 rounded-xl border border-slate-700/50 mt-4 gap-4 sticky top-[70px] z-20 shadow-lg">
-        
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 w-full sm:w-auto">
+      <div className="flex flex-col bg-slate-800/60 backdrop-blur p-2 rounded-xl border border-slate-700/50 mt-4 gap-3 sticky top-[70px] z-20 shadow-lg overflow-hidden">
+        <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+            <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-4 w-full sm:w-auto min-w-0">
                 <h2 className="text-lg font-semibold text-slate-200 px-2 flex items-center gap-2 shrink-0">
                     <Calendar size={18} className="text-blue-400"/>
-                    {t('Statistics & Analysis')}
+                    <span className="truncate">{t('Statistics & Analysis')}</span>
                 </h2>
-                <div className="px-4 py-1.5 bg-slate-900/80 border border-slate-700/50 rounded-full text-blue-400 text-sm font-bold shadow-inner animate-fade-in flex items-center gap-2">
-                    <History size={14} className="opacity-50"/>
-                    {getTimeLabel()}
+                <div className="px-4 py-1.5 bg-slate-900/80 border border-slate-700/50 rounded-full text-blue-400 text-sm font-bold shadow-inner animate-fade-in flex items-center gap-2 min-w-0 max-w-full">
+                    <History size={14} className="opacity-50 shrink-0"/>
+                    <span className="truncate">{getTimeLabel()}</span>
                 </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="w-full sm:w-auto flex items-center gap-2">
                 {timeRange !== 'custom' && (
-                                    <div className="flex items-center gap-2">
-                                            <div className="flex items-center bg-slate-900 rounded-lg p-1 border border-slate-700">
-                                                    <button 
-                                                        onClick={() => setTimeOffset(prev => prev - 1)}
-                                                        className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
-                                                        title={t('Previous Period')}
-                                                    >
-                                                         <ChevronLeft size={18} />
-                                                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center bg-slate-900 rounded-lg p-1 border border-slate-700">
+                            <button 
+                                onClick={() => setTimeOffset(prev => prev - 1)}
+                                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+                                title={t('Previous Period')}
+                                aria-label={t('Previous Period')}
+                            >
+                                <ChevronLeft size={18} />
+                            </button>
 
-                                                    {/* Disabled buttons typically don't show the title tooltip. Wrap to keep a hint available. */}
-                                                    <span
-                                                        title={timeOffset >= 0 ? t('You are already viewing the latest available period.') : t('Next Period')}
-                                                    >
-                                                            <button 
-                                                                onClick={() => setTimeOffset(prev => prev + 1)}
-                                                                disabled={timeOffset >= 0}
-                                                                className={`p-1.5 rounded-md transition-colors ${timeOffset >= 0 ? 'text-slate-600 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                                                                title={t('Next Period')}
-                                                            >
-                                                                 <ChevronRight size={18} />
-                                                            </button>
-                                                    </span>
-                                            </div>
-                                    </div>
+                            {/* Disabled buttons typically don't show the title tooltip. Wrap to keep a hint available. */}
+                            <span
+                                title={timeOffset >= 0 ? t('You are already viewing the latest available period.') : t('Next Period')}
+                            >
+                                <button 
+                                    onClick={() => setTimeOffset(prev => prev + 1)}
+                                    disabled={timeOffset >= 0}
+                                    className={`p-1.5 rounded-md transition-colors ${timeOffset >= 0 ? 'text-slate-600 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                                    title={t('Next Period')}
+                                    aria-label={t('Next Period')}
+                                >
+                                    <ChevronRight size={18} />
+                                </button>
+                            </span>
+                        </div>
+                    </div>
                 )}
+
                 <div className="flex flex-nowrap overflow-x-auto max-w-full bg-slate-900 rounded-lg p-1 border border-slate-700">
                     {(['hour', 'day', 'week', 'month', 'year', 'custom'] as TimeRange[]).map((range) => (
                         <button
                             key={range}
                             onClick={() => { setTimeRange(range); setTimeOffset(0); }}
-                            className={`shrink-0 whitespace-nowrap px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                            className={`shrink-0 whitespace-nowrap px-3 sm:px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
                                 timeRange === range 
                                 ? 'bg-slate-700 text-white shadow ring-1 ring-slate-600' 
                                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -710,15 +712,16 @@ const Dashboard: React.FC<DashboardProps> = ({ data, config, error, refreshTrigg
                         </button>
                     ))}
                 </div>
-                {/* Export Button */}
+
+                {/* Export Button (desktop/tablet only) */}
                 <button 
                     onClick={handleDownloadCSV}
-                    className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg border border-slate-700 transition-colors"
+                    className="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg border border-slate-700 transition-colors shrink-0"
                     title={t('Export CSV')}
                     aria-label={t('Export CSV')}
                 >
                     <Download size={18} />
-                    <span className="text-sm font-medium sm:hidden">{t('Export')}</span>
+                    <span className="text-sm font-medium">{t('Export')}</span>
                 </button>
             </div>
         </div>
