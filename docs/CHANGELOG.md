@@ -1,3 +1,10 @@
+## [1.17.5](https://github.com/robotnikz/Sunflow/compare/v1.17.4...v1.17.5) (2026-02-22)
+
+
+### Bug Fixes
+
+* **ui:** tidy mobile statistics controls ([3480970](https://github.com/robotnikz/Sunflow/commit/34809702996b6981c1146186117bb44b2744cf5b))
+
 ## [1.17.4](https://github.com/robotnikz/Sunflow/compare/v1.17.3...v1.17.4) (2026-02-18)
 
 
