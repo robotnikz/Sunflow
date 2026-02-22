@@ -1,3 +1,10 @@
+## [1.17.6](https://github.com/robotnikz/Sunflow/compare/v1.17.5...v1.17.6) (2026-02-22)
+
+
+### Bug Fixes
+
+* **ci:** use stable GitHub Actions versions ([1e05549](https://github.com/robotnikz/Sunflow/commit/1e05549971f600a28e4717e3df81fea32f108f4d))
+
 ## [1.17.5](https://github.com/robotnikz/Sunflow/compare/v1.17.4...v1.17.5) (2026-02-22)
 
 
