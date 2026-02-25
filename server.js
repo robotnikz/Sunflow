@@ -168,7 +168,19 @@ if (fs.existsSync(DB_FILE)) {
 // --- SECURITY MIDDLEWARE ---
 // 1. Helmet: Sets various HTTP headers to secure the app
 app.use(helmet({
-    contentSecurityPolicy: false, // Disabled for simple dev/dashboard setup (inline scripts etc)
+    contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+            "base-uri": ["'self'"],
+            "frame-ancestors": ["'none'"],
+            "object-src": ["'none'"],
+            "script-src": ["'self'"],
+            "style-src": ["'self'", "'unsafe-inline'"],
+            "img-src": ["'self'", "data:", "https:"],
+            "font-src": ["'self'", "data:", "https:"],
+            "connect-src": ["'self'"],
+        },
+    },
     crossOriginEmbedderPolicy: false,
 }));
 
