@@ -28,7 +28,7 @@
     "@fontsource/inter": "^5.2.8",
     "@types/multer": "^2.0.0",
     "@types/papaparse": "^5.5.2",
-    "axios": "^1.13.5",
+    "axios": "^1.13.6",
     "compression": "^1.8.1",
     "cors": "^2.8.6",
     "express": "^5.2.1",
