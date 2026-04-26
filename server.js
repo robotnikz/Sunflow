@@ -59,6 +59,14 @@ const IS_MAIN = (() => {
     }
 })();
 
+const clampPercentage = (value) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 0;
+    return Math.min(100, Math.max(0, n));
+};
+
+const roundClampedPercentage = (value) => Math.round(clampPercentage(value));
+
 // Treat DATA_DIR as configuration, but validate any override so filesystem paths are not
 // derived from uncontrolled input (helps CodeQL and avoids accidental writes to unexpected locations).
 const resolveSafeDataDir = (maybeDir) => {
@@ -2690,8 +2698,8 @@ app.get('/api/history', (req, res) => {
             });
 
             const totalSelfPowered = Math.max(0, stats.consumption - stats.imported);
-            stats.autonomy = stats.consumption > 0 ? (totalSelfPowered / stats.consumption) * 100 : 0;
-            stats.selfConsumption = stats.production > 0 ? (totalSelfPowered / stats.production) * 100 : 0;
+            stats.autonomy = stats.consumption > 0 ? clampPercentage((totalSelfPowered / stats.consumption) * 100) : 0;
+            stats.selfConsumption = stats.production > 0 ? clampPercentage((totalSelfPowered / stats.production) * 100) : 0;
 
             const chartData = [];
             
@@ -2769,8 +2777,8 @@ app.get('/api/history', (req, res) => {
                         battery: Math.round((g.b_d - g.b_c) / 10) / 100,
                         soc: Math.round(g.socTotal / n),
                         batteryTemp: g.tempCount > 0 ? Math.round((g.tempTotal / g.tempCount) * 10) / 10 : null,
-                        autonomy: g.c > 0 ? Math.round(Math.max(0, g.c - g.g_in) / g.c * 100) : 0,
-                        selfConsumption: g.p > 0 ? Math.round(Math.max(0, g.p - g.g_out) / g.p * 100) : 0,
+                        autonomy: g.c > 0 ? roundClampedPercentage((Math.max(0, g.c - g.g_in) / g.c) * 100) : 0,
+                        selfConsumption: g.p > 0 ? roundClampedPercentage((Math.max(0, g.p - g.g_out) / g.p) * 100) : 0,
                         is_aggregated: true // Flag for frontend
                     });
                 });
@@ -2809,9 +2817,8 @@ app.get('/api/history', (req, res) => {
                         let pImp = pGrid > 0 ? pGrid : 0;
                         let pExp = pGrid < 0 ? Math.abs(pGrid) : 0;
                         
-                        let ptAuto = (pLoad > 0) ? ((pLoad - pImp) / pLoad) * 100 : 0;
-                        if (ptAuto < 0) ptAuto = 0;
-                        let ptSelf = (pPv > 0) ? ((pPv - pExp) / pPv) * 100 : 0;
+                        const ptAuto = (pLoad > 0) ? clampPercentage(((pLoad - pImp) / pLoad) * 100) : 0;
+                        const ptSelf = (pPv > 0) ? clampPercentage(((pPv - pExp) / pPv) * 100) : 0;
                         
                         chunkAutonomy += ptAuto;
                         chunkSelfCon += ptSelf;
@@ -2827,8 +2834,8 @@ app.get('/api/history', (req, res) => {
                             battery: Math.round(chunkBatt / count),
                             soc: Math.round(chunkSoc / count),
                             batteryTemp: chunkBatteryTempCount > 0 ? Math.round((chunkBatteryTemp / chunkBatteryTempCount) * 10) / 10 : null,
-                            autonomy: Math.round(chunkAutonomy / count),
-                            selfConsumption: Math.round(chunkSelfCon / count),
+                            autonomy: roundClampedPercentage(chunkAutonomy / count),
+                            selfConsumption: roundClampedPercentage(chunkSelfCon / count),
                             status: status
                         });
                     }
