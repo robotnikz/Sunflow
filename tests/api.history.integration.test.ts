@@ -168,6 +168,36 @@ describe('Backend API (history integration)', () => {
     expect(res.body.stats.exported).toBeCloseTo(0.0, 5);
   });
 
+  it('clamps efficiency percentages in high-res history chart to 0..100', async () => {
+    await dbRun(
+      dbPath,
+      'INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, status_code) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      // Export can exceed PV due to battery discharge / meter timing. This used to produce
+      // a massive negative self-consumption value in the efficiency history graph.
+      ['2026-01-01 12:00:00', 100, 500, -5000, 4900, 70, 1],
+    );
+    await dbRun(
+      dbPath,
+      'INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, status_code) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      // Import can exceed current load during measurement noise / source mixing. Autonomy
+      // should still never go below 0%.
+      ['2026-01-01 12:01:00', 500, 100, 1000, -500, 71, 1],
+    );
+
+    const res = await request(app).get('/api/history?range=custom&start=2026-01-01&end=2026-01-01');
+    expect(res.status).toBe(200);
+
+    expect(res.body.chart).toHaveLength(2);
+    for (const point of res.body.chart) {
+      expect(point.autonomy).toBeGreaterThanOrEqual(0);
+      expect(point.autonomy).toBeLessThanOrEqual(100);
+      expect(point.selfConsumption).toBeGreaterThanOrEqual(0);
+      expect(point.selfConsumption).toBeLessThanOrEqual(100);
+    }
+    expect(res.body.chart[0].selfConsumption).toBe(0);
+    expect(res.body.chart[1].autonomy).toBe(0);
+  });
+
   it('excludes rows exactly at the end boundary (timestamp < end)', async () => {
     await dbRun(
       dbPath,
