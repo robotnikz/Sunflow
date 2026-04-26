@@ -18,16 +18,21 @@ RUN npm run build
 FROM node:25-slim
 WORKDIR /app
 
-# Ensure we can reliably drop privileges at runtime.
-# (Some slim images may not include a usable `su` binary by default.)
-RUN apt-get update \
-	&& apt-get install -y --no-install-recommends gosu \
-	&& rm -rf /var/lib/apt/lists/*
+# Build native production dependencies inside the runtime image.
+# sqlite3 ships prebuilt binaries for some Node/glibc combinations; those can require
+# a newer glibc than the slim runtime image provides. Compiling here guarantees the
+# native addon links against this image's own libc.
+ENV npm_config_build_from_source=true
 
-# Install only production dependencies
+# Install only production dependencies.
+# Keep gosu for the entrypoint, then remove native build tooling after npm ci.
 COPY package*.json ./
-RUN npm ci --omit=dev \
-	&& npm cache clean --force
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends gosu python3 make g++ \
+	&& npm ci --omit=dev \
+	&& npm cache clean --force \
+	&& apt-get purge -y --auto-remove python3 make g++ \
+	&& rm -rf /var/lib/apt/lists/*
 
 # Copy built assets from builder stage
 COPY --from=builder /app/dist ./dist
