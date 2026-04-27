@@ -1,3 +1,10 @@
+## [1.17.8](https://github.com/robotnikz/Sunflow/compare/v1.17.7...v1.17.8) (2026-04-27)
+
+
+### Bug Fixes
+
+* harden efficiency chart percentages ([#163](https://github.com/robotnikz/Sunflow/issues/163)) ([3bfbe99](https://github.com/robotnikz/Sunflow/commit/3bfbe99c57fe064e85a2941484e762e72ecd36a6))
+
 ## [1.17.7](https://github.com/robotnikz/Sunflow/compare/v1.17.6...v1.17.7) (2026-04-27)
 
 
