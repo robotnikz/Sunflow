@@ -12,9 +12,24 @@ interface EfficiencyChartProps {
   timeRange: string;
 }
 
+const clampPercentage = (value: unknown): number => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(100, Math.max(0, n));
+};
+
+export const sanitizeEfficiencyHistory = (history: EfficiencyChartProps['history']) =>
+  history.map((point) => ({
+    ...point,
+    autonomy: clampPercentage(point.autonomy),
+    selfConsumption: clampPercentage(point.selfConsumption),
+  }));
+
 const EfficiencyChart: React.FC<EfficiencyChartProps> = ({ history, timeRange }) => {
   const { t, locale } = useI18n();
   if (history.length === 0) return null;
+
+  const chartHistory = sanitizeEfficiencyHistory(history);
 
   // Dynamic Tick Formatting based on selected timeRange
   const formatTick = (ts: string) => {
@@ -90,7 +105,7 @@ const EfficiencyChart: React.FC<EfficiencyChartProps> = ({ history, timeRange })
 
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={history} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+      <LineChart data={chartHistory} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
         <XAxis 
           dataKey="timestamp" 
