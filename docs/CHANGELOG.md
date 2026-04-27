@@ -1,3 +1,10 @@
+## [1.17.7](https://github.com/robotnikz/Sunflow/compare/v1.17.6...v1.17.7) (2026-04-26)
+
+
+### Bug Fixes
+
+* clamp efficiency history percentages ([#157](https://github.com/robotnikz/Sunflow/issues/157)) ([2e8e51a](https://github.com/robotnikz/Sunflow/commit/2e8e51a2e45e9556c13c11a89905a67af1a20ced)), closes [robotnikz/Sunflow#156](https://github.com/robotnikz/Sunflow/issues/156)
+
 ## [1.17.6](https://github.com/robotnikz/Sunflow/compare/v1.17.5...v1.17.6) (2026-02-22)
 
 
