@@ -213,6 +213,32 @@ const App: React.FC = () => {
               {t('Open Settings')}
             </button>
           </div>
+        ) : !data ? (
+          <div className="flex flex-col items-center justify-center min-h-[24rem] gap-4 text-center text-slate-400">
+            <AlertCircle size={48} className="text-red-400" />
+            <div>
+              <p className="text-lg font-semibold text-slate-200">{t('Realtime data unavailable')}</p>
+              <p className="mt-2 max-w-xl text-sm">
+                {error || t('SunFlow could not load inverter data yet. Check the inverter connection or try again.')}
+              </p>
+            </div>
+            <div className="flex flex-wrap justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => fetchData()}
+                className="px-4 py-2 bg-yellow-500 text-slate-900 font-bold rounded hover:bg-yellow-400 transition"
+              >
+                {t('Retry')}
+              </button>
+              <button
+                type="button"
+                onClick={() => openSettings('general')}
+                className="px-4 py-2 bg-slate-800 text-slate-200 font-semibold rounded border border-slate-700 hover:bg-slate-700 transition"
+              >
+                {t('Open Settings')}
+              </button>
+            </div>
+          </div>
         ) : (
           <Dashboard 
             data={data} 
