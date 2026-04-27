@@ -1,3 +1,10 @@
+## [1.17.7](https://github.com/robotnikz/Sunflow/compare/v1.17.6...v1.17.7) (2026-04-27)
+
+
+### Bug Fixes
+
+* build sqlite3 against runtime image libc ([#162](https://github.com/robotnikz/Sunflow/issues/162)) ([14f6df8](https://github.com/robotnikz/Sunflow/commit/14f6df894a011c94d3e9bf2ff0c3f09c1ec5c53d))
+
 ## [1.17.7](https://github.com/robotnikz/Sunflow/compare/v1.17.6...v1.17.7) (2026-04-26)
 
 
