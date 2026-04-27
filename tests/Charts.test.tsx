@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import EnergyChart from '../components/EnergyChart';
 import BatteryChart from '../components/BatteryChart';
-import EfficiencyChart from '../components/EfficiencyChart';
+import EfficiencyChart, { sanitizeEfficiencyHistory } from '../components/EfficiencyChart';
 import React from 'react';
 
 // Mock Recharts is done globally or in individual files. 
@@ -37,9 +37,19 @@ describe('Chart Components', () => {
     
     it('EfficiencyChart rendert ohne Fehler', () => {
          // Fix: EfficiencyChart expects history prop based on failure 'history.length'
-         // Assuming it takes same shape as others or likely the dataPoints array directly?
-         // Let's assume it takes 'history' prop which is the array.
          const effHistory = [{ timestamp: '2023-01-01', efficiency: 90 }];
          render(<EfficiencyChart history={effHistory as any} timeRange="day" />);
+    });
+
+    it('clamps invalid efficiency chart values defensively', () => {
+         const sanitized = sanitizeEfficiencyHistory([
+             { timestamp: '2023-01-01', autonomy: -250, selfConsumption: 130 },
+             { timestamp: '2023-01-02', autonomy: Number.NaN, selfConsumption: Number.POSITIVE_INFINITY },
+         ] as any);
+
+         expect(sanitized).toEqual([
+             { timestamp: '2023-01-01', autonomy: 0, selfConsumption: 100 },
+             { timestamp: '2023-01-02', autonomy: 0, selfConsumption: 0 },
+         ]);
     });
 });

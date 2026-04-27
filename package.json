@@ -77,7 +77,7 @@
   },
   "overrides": {
     "npm": "11.10.1",
-    "tar": "7.5.9"
+    "tar": "^7.5.13"
   },
   "release": {
     "branches": [
