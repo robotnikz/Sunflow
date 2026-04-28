@@ -7,8 +7,8 @@ updates:
       prefix: "chore"
       include: "scope"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
+      day-of-month: "1"
       time: "06:00"
       timezone: "Europe/Berlin"
     open-pull-requests-limit: 2
@@ -25,8 +25,8 @@ updates:
       prefix: "chore"
       include: "scope"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
+      day-of-month: "1"
       time: "06:00"
       timezone: "Europe/Berlin"
     open-pull-requests-limit: 2
@@ -42,8 +42,8 @@ updates:
       prefix: "chore"
       include: "scope"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
+      day-of-month: "1"
       time: "06:00"
       timezone: "Europe/Berlin"
     open-pull-requests-limit: 1
