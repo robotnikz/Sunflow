@@ -38,7 +38,7 @@
     "multer": "^2.0.2",
     "papaparse": "^5.5.3",
     "react": "^19.2.3",
-    "react-dom": "^19.2.4",
+    "react-dom": "^19.2.5",
     "recharts": "^3.7.0",
     "semver": "^7.7.4",
     "sqlite3": "^5.1.7"
