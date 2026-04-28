@@ -59,4 +59,20 @@ describe('SunFlow App Integration', () => {
     // Prüfen, ob der Settings-Button gerendert wurde (Teil des Dashboards)
     expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument();
   });
+
+  it('zeigt einen Fehlerzustand statt leerem Dashboard wenn Realtime-Daten nicht geladen werden können', async () => {
+    (api.getConfig as any).mockResolvedValue({
+      inverterIp: '192.168.0.50',
+      currency: 'EUR',
+      systemStartDate: '2023-01-01'
+    });
+    (api.getSystemInfo as any).mockResolvedValue({ version: '1.0.0', updateAvailable: false });
+    (api.getRealtimeData as any).mockRejectedValue(new Error('backend offline'));
+
+    render(<App />);
+
+    expect(await screen.findByText(/Failed to connect to backend or inverter/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Retry connection/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Open Settings/i })).toBeInTheDocument();
+  });
 });

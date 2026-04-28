@@ -213,6 +213,31 @@ const App: React.FC = () => {
               {t('Open Settings')}
             </button>
           </div>
+        ) : !data ? (
+          <div className="flex flex-col items-center justify-center h-96 gap-4 text-slate-400 text-center">
+            <AlertCircle size={48} className="text-red-400" />
+            <div className="space-y-1">
+              <p className="text-lg text-slate-200">{error || t('Failed to connect to backend or inverter.')}</p>
+              <p className="text-sm text-slate-500">{t('Check inverter reachability and your saved connection settings.')}</p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={() => {
+                  setLoading(true);
+                  fetchData();
+                }}
+                className="px-4 py-2 bg-slate-800 text-slate-100 font-semibold rounded border border-slate-700 hover:bg-slate-700 transition"
+              >
+                {t('Retry connection')}
+              </button>
+              <button
+                onClick={() => openSettings('general')}
+                className="px-4 py-2 bg-yellow-500 text-slate-900 font-bold rounded hover:bg-yellow-400 transition"
+              >
+                {t('Open Settings')}
+              </button>
+            </div>
+          </div>
         ) : (
           <Dashboard 
             data={data} 

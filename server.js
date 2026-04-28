@@ -1852,9 +1852,7 @@ app.get('/api/battery-health', (req, res) => {
 
             let efficiency = 0;
             if (chargedKwh > 0.5) { // Filter out low usage days
-                efficiency = (dischargedKwh / chargedKwh) * 100;
-                // Cap efficiency at 99% to hide measurement noise
-                if (efficiency > 99) efficiency = 99;
+                efficiency = clampPercentage(dischargedKwh, chargedKwh, 99);
                 
                 weightedEffSum += efficiency;
                 totalEffSamples++;
@@ -1914,6 +1912,17 @@ const clampNumber = (value, min, max, fallback) => {
     if (num < min) return min;
     if (num > max) return max;
     return num;
+};
+
+const clampPercentage = (numerator, denominator, max = 100) => {
+    const den = Number(denominator);
+    if (!Number.isFinite(den) || den <= 0) return 0;
+
+    const raw = (Number(numerator) / den) * 100;
+    if (!Number.isFinite(raw)) return 0;
+    if (raw < 0) return 0;
+    if (raw > max) return max;
+    return raw;
 };
 
 const formatHourKey = (dateOrMs) => {
@@ -2678,8 +2687,8 @@ app.get('/api/history', (req, res) => {
             });
 
             const totalSelfPowered = Math.max(0, stats.consumption - stats.imported);
-            stats.autonomy = stats.consumption > 0 ? (totalSelfPowered / stats.consumption) * 100 : 0;
-            stats.selfConsumption = stats.production > 0 ? (totalSelfPowered / stats.production) * 100 : 0;
+            stats.autonomy = clampPercentage(totalSelfPowered, stats.consumption);
+            stats.selfConsumption = clampPercentage(totalSelfPowered, stats.production);
 
             const chartData = [];
             
@@ -2757,8 +2766,8 @@ app.get('/api/history', (req, res) => {
                         battery: Math.round((g.b_d - g.b_c) / 10) / 100,
                         soc: Math.round(g.socTotal / n),
                         batteryTemp: g.tempCount > 0 ? Math.round((g.tempTotal / g.tempCount) * 10) / 10 : null,
-                        autonomy: g.c > 0 ? Math.round(Math.max(0, g.c - g.g_in) / g.c * 100) : 0,
-                        selfConsumption: g.p > 0 ? Math.round(Math.max(0, g.p - g.g_out) / g.p * 100) : 0,
+                        autonomy: Math.round(clampPercentage(Math.max(0, g.c - g.g_in), g.c)),
+                        selfConsumption: Math.round(clampPercentage(Math.max(0, g.p - g.g_out), g.p)),
                         is_aggregated: true // Flag for frontend
                     });
                 });
@@ -2794,12 +2803,10 @@ app.get('/api/history', (req, res) => {
                             chunkBatteryTempCount++;
                         }
 
-                        let pImp = pGrid > 0 ? pGrid : 0;
-                        let pExp = pGrid < 0 ? Math.abs(pGrid) : 0;
-                        
-                        let ptAuto = (pLoad > 0) ? ((pLoad - pImp) / pLoad) * 100 : 0;
-                        if (ptAuto < 0) ptAuto = 0;
-                        let ptSelf = (pPv > 0) ? ((pPv - pExp) / pPv) * 100 : 0;
+                        const pImp = pGrid > 0 ? pGrid : 0;
+                        const pExp = pGrid < 0 ? Math.abs(pGrid) : 0;
+                        const ptAuto = clampPercentage(pLoad - pImp, pLoad);
+                        const ptSelf = clampPercentage(pPv - pExp, pPv);
                         
                         chunkAutonomy += ptAuto;
                         chunkSelfCon += ptSelf;

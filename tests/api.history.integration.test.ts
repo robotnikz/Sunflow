@@ -307,6 +307,21 @@ describe('Backend API (history integration)', () => {
     expect(res.body.stats.imported).toBeCloseTo(0.0, 5);
   });
 
+  it('clamps high-res self-consumption to 0 when export exceeds PV in a sample', async () => {
+    await dbRun(
+      dbPath,
+      'INSERT INTO energy_log (timestamp, power_pv, power_load, power_grid, power_battery, soc, status_code) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ['2026-01-01 00:03:00', 1000, 500, -2000, 0, 50, 1],
+    );
+
+    const res = await request(app).get('/api/history?range=custom&start=2026-01-01&end=2026-01-01');
+    expect(res.status).toBe(200);
+
+    expect(res.body.chart).toHaveLength(1);
+    expect(res.body.chart[0].timestamp).toBe('2026-01-01 00:03:00');
+    expect(res.body.chart[0].selfConsumption).toBe(0);
+  });
+
   it('aggregates week range into daily bars (energy_data)', async () => {
     vi.useFakeTimers();
     try {

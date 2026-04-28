@@ -25,6 +25,9 @@ const DE: Record<string, string> = {
   'System Operational': 'System betriebsbereit',
   'Connecting to Fronius Inverter...': 'Verbinde mit dem Fronius-Wechselrichter...',
   'Please configure your Inverter IP in settings.': 'Bitte die Wechselrichter-IP in den Einstellungen konfigurieren.',
+  'Failed to connect to backend or inverter.': 'Verbindung zum Backend oder Wechselrichter fehlgeschlagen.',
+  'Check inverter reachability and your saved connection settings.': 'Bitte Erreichbarkeit des Wechselrichters und die gespeicherten Verbindungseinstellungen prüfen.',
+  'Retry connection': 'Verbindung erneut versuchen',
 
   'Invalid export cap': 'Ungültiges Einspeiselimit',
   'Please enter a positive export cap in watts, or switch to “Off (100%)” / “Estimated”.': 'Bitte ein positives Einspeiselimit in Watt eingeben oder auf „Aus (100%)“ / „Geschätzt“ umstellen.',
