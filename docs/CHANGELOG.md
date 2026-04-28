@@ -1,3 +1,10 @@
+## [1.17.7](https://github.com/robotnikz/Sunflow/compare/v1.17.6...v1.17.7) (2026-04-28)
+
+
+### Bug Fixes
+
+* **dashboard:** clamp invalid efficiency history and show startup recovery ([9e2e120](https://github.com/robotnikz/Sunflow/commit/9e2e12053e2f5b486204dde976550417a2ac187d))
+
 ## [1.17.6](https://github.com/robotnikz/Sunflow/compare/v1.17.5...v1.17.6) (2026-02-22)
 
 
