@@ -3,9 +3,12 @@ updates:
   # JavaScript/TypeScript dependencies
   - package-ecosystem: "npm"
     directory: "/"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
     schedule:
-      interval: "monthly"
-      day-of-month: "1"
+      interval: "weekly"
+      day: "monday"
       time: "06:00"
       timezone: "Europe/Berlin"
     open-pull-requests-limit: 2
@@ -18,9 +21,12 @@ updates:
   # GitHub Actions (workflows)
   - package-ecosystem: "github-actions"
     directory: "/"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
     schedule:
-      interval: "monthly"
-      day-of-month: "1"
+      interval: "weekly"
+      day: "monday"
       time: "06:00"
       timezone: "Europe/Berlin"
     open-pull-requests-limit: 2
@@ -32,9 +38,12 @@ updates:
   # Docker base images (Dockerfile)
   - package-ecosystem: "docker"
     directory: "/docker"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
     schedule:
-      interval: "monthly"
-      day-of-month: "1"
+      interval: "weekly"
+      day: "monday"
       time: "06:00"
       timezone: "Europe/Berlin"
     open-pull-requests-limit: 1
