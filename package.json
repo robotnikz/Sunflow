@@ -35,7 +35,7 @@
     "express-rate-limit": "^8.5.2",
     "helmet": "^8.2.0",
     "lucide-react": "^1.21.0",
-    "multer": "^2.2.0",
+    "multer": "^2.3.0",
     "papaparse": "^5.5.4",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
